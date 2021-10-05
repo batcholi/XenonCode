@@ -1,0 +1,5 @@
+var a:number = 5
+
+init
+	output 0 "Hello"
+
