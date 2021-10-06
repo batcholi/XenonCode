@@ -1,17 +1,36 @@
-var a:number
-var b 0
 
+; IOs
 const altitudeSensor 1
 const console 2
+const clock 3
 
-init
+; Global variables
+var a:number
+var currentTimeSeconds 0
+array 16 stuff:text
+
+init ; executed only once, when computer is powered on
 	set a 5
-	set b 6
-	increment b
-	if b is 7
-		output console "Hello"
+	if a is 5
+		output console "Hello, World!"
+	else
+		output console "There must be a bug somewhere..."
 
-input altitudeSensor altitude:number
+input altitudeSensor altitude:number ; executed when receiving data from the sensor
 	math round altitude 2
 	var outputText "My altitude is " altitude:text " meters"
 	output console outputText
+
+timer 1 Hz ; executed one time per second
+	increment currentTimeSeconds
+	var minutes math divide currentTimeSeconds 60
+	math floor minutes
+	var hours math divide minutes 60
+	math floor hours
+	math mod minutes 60
+	exec showTotalTime hours minutes
+
+function showTotalTime hours:number minutes:number
+	var clockText hours:text ":" minutes:text
+	output clock clockText
+
