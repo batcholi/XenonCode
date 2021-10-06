@@ -1,36 +1,36 @@
 
 // IOs
-const altitudeSensor 1
-const console 2
-const clock 3
+const $altitudeSensor 1
+const $console 2
+const $clock 3
 
 // Global variables
-var a:number
-var currentTimeSeconds 0
+var $a:number
+var $currentTimeSeconds 0
 array 16 stuff:text
 
 init // executed only once, when computer is powered on
-	set a 5
-	if a is 5
+	$a = 5
+	if $a == 5
 		output console "Hello, World!"
 	else
 		output console "There must be a bug somewhere..."
 
-input altitudeSensor altitude:number // executed when receiving data from the sensor
-	math round altitude 2
-	var outputText "My altitude is " altitude:text " meters"
-	output console outputText
+input $altitudeSensor $altitude:number // executed when receiving data from the sensor
+	$altitude round
+	$outputText = "My altitude is " $altitude:text " meters"
+	output $console $outputText
 
-timer 1 Hz // executed one time per second
-	increment currentTimeSeconds
-	var minutes  currentTimeSeconds / 60
-	var hours    minutes / 60
-	math floor minutes
-	math floor hours
-	math mod minutes 60
-	exec showTotalTime hours minutes
+timer frequency 1 // executed one time per second
+	$currentTimeSeconds increment
+	$minutes = currentTimeSeconds / 60
+	$hours = minutes / 60
+	$minutes floor
+	$hours floor
+	$minutes mod 60
+	@showTotalTime $hours $minutes
 
-function showTotalTime hours:number minutes:number
-	var clockText hours:text ":" minutes:text
-	output clock clockText
+function @showTotalTime $hours:number $minutes:number
+	$clockText = $hours:text ":" $minutes:text
+	output $clock $clockText
 
