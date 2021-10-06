@@ -1,7 +1,7 @@
 var a:number
 
-const altitudeSensor:number 1
-const console:number 2
+const altitudeSensor 1
+const console 2
 
 init
 	set a to 5

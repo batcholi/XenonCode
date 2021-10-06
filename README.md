@@ -80,7 +80,8 @@ XenonCode is also designed to be very easy to parse.
 - `input` `1 var1:number var2:text` define an input, its arguments and its body
 - `var` `numberVar1:number 4` define a global number variable with an (optional) initial value
 - `var` `textVar1:text "hello"` define a global text variable with an (optional) initial value
-- `const` `numberConstant1:number 4` define a global number constant with an initial value
+- `const` `numberConstant1 4` define a global number constant with its value
+- `const` `textConstant1 "Hello"` define a global text constant with its value
 - `array` `10 numberArray1:number 0` define an array of 10 numbers initialized to 0
 - `function` `testFunc var1:text` define a function and its body
 
@@ -336,10 +337,15 @@ The following must be executed for each line:
             * Increment stackIndex
             * push "funcName n t" to functionStack (@funcName would be the function name read above, 'n' and 't' are exemples of function argument types for number and text)
             * push argument names to argStack
-        * `var` or `const`
+        * `var`
             * Read "varName:varType", or syntax error
-            * If EOL: set the initial value of the variable to 0 or "" (or syntax error if it's a `const`)
+            * If EOL: set the initial value of the variable to 0 or ""
                 * otherwise: Read a literal value, then set that as the initial value
+            * append the variable to either `numberValues` or `stringValues` if the type is `number` or `text` respectively
+        * `const`
+            * Read constName, or syntax error
+            * If EOL: syntax error
+                * otherwise: Read a literal value, then set that as the initial value, and determine its type from that value
             * append the variable to either `numberValues` or `stringValues` if the type is `number` or `text` respectively
         * `array`
             * Read one integral value as the number of elements in this array
