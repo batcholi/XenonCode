@@ -23,9 +23,9 @@ input altitudeSensor altitude:number ; executed when receiving data from the sen
 
 timer 1 Hz ; executed one time per second
 	increment currentTimeSeconds
-	var minutes math divide currentTimeSeconds 60
+	var minutes math div currentTimeSeconds 60
 	math floor minutes
-	var hours math divide minutes 60
+	var hours math div minutes 60
 	math floor hours
 	math mod minutes 60
 	exec showTotalTime hours minutes
