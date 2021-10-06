@@ -1,5 +1,12 @@
-var a:number = 5
+var a:number
+
+const altitudeSensor:number 1
+const console:number 2
 
 init
-	output 0 "Hello"
+	set a to 5
+	output console "Hello"
+
+input altitudeSensor altitude:number
+	output console ( "My altitude is " ( round altitude 2 ):text )
 

@@ -3,5 +3,6 @@
         "iosfwd": "cpp",
         "iostream": "cpp",
         "fstream": "cpp"
-    }
+    },
+    "diffEditor.wordWrap": "off"
 }
