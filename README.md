@@ -4,43 +4,49 @@
 
 # Capabilities
 
-* Number and Text variables
-* Fixed size Arrays defined in the global scope
-* All standard arithmetic operations on numeric values
-* String concatenation operators
-* User-defined functions with overloadable arguments
-* Device-defined functions
-* Synchronized interval functions/timers (timer functions)
-* Built-in IO operations for inter-device data transfer
-* Built-in standard math functions
-* `if`/`elseif`/`else` conditionals
-* `foreach` loops for arrays
-* `repeat n` loops (similar to a `for (i=0;i<n;i++)` in other languages)
+- Number and Text variables and constants
+- Fixed size Arrays defined in the global scope
+- All standard arithmetic operations on numeric values
+- Easy string concatenation
+- User-defined functions with overloadable arguments
+- Device-defined functions
+- Synchronized interval functions (timers)
+- Built-in IO operations for inter-virtual-device data transfer
+- Built-in standard math functions
+- `if`/`elseif`/`else` conditionals
+- `foreach` loops for arrays
+- `repeat n` loops (akin to `for (i=0;i<n;i++)` in most other languages)
 
 # Syntax
 
-- XenonCode is designed with a very basic syntax in mind.
-- Each statement is to be very short and easy to read.
+XenonCode is designed with a very basic syntax in mind, with a very precise structure like a version of assembler made especially for humans. 
+
+- Each statement has to be very short and easy to read
 - Very little special characters needed
 - No semicolon at the end of each statement
 - Indentations define the scope (tabs)
 - Forced to have spaces between expressions and operators
-- A single statement per line
+- A single statement or instruction per line
+- Each line must start with one of few allowed words that define the type of statements
+- No need to care about the order of operations, since all instructions are executed on separate lines
+- Array indexing is 1-based, NOT 0-based, and uses a `arr#1` notation instead of `arr[0]` to make it easier to adopt for experienced coders
 - 100% Case-insensitive
 
 ### Types
 
-XenonCode is a typed procedural language with overload resolution, but only includes two generic types, as well as arrays or either, and special opaque data types.  
+XenonCode is a typed procedural language with overload resolution, but only includes two generic types, as well as arrays of either, and special opaque data types.  
 
-Generic data types that the user can declare: 
-* Number
-* Text
+Generic data types the user can declare a variable of: 
+* `number`
+* `text`
 
 A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false).  
 
 `text` variables contain pure arbitrary text, altough they may have a limited size depending on the implementation.  
 
-Special `data` types are for use by the implementation and are opaque to the user, meaning they cannot directly be decomposed by the program, their structure is not specifically defined, and cannot be declared by a user. They can only be passed around from one function call to another. They may also support member functions. 
+Special `data` types are for use by the implementation and are opaque to the user, meaning their structure is not specifically defined, and cannot be declared by a user. They can only be passed around from one function call to another. They may also support member functions.  
+
+Even though this is a typed language, specifying the type is not needed when it can be automatically deduced by the compiler.  
 
 ### Comments
 
@@ -49,36 +55,40 @@ A code statement may also have a trailing comment
 
 # Limitations
 
-- No infinite loops, no while loops,... only fixed loops that are fully unrolled upon code compilation
-- No pointer nor reference types
+- No infinite loops, no while loops, only fixed loops that are fully unrolled upon code compilation
+- No pointer nor reference types (although function arguments are passed by reference)
 - Arrays are fixed size and must be declared in the global scope
-- No recursive call of the same function
+- Recursive calls of the same function is NOT allowed, it is a compile error
+- No enclosed expressions. Every operation must be on separate lines, creating temporary variables if we need to, or modifying the existing one
 
-### Per-Chip limitations
+### Per-Virtual-Computer limitations
+These are defined per implementation and may include multiple variants
 - ROM (max program size in compiled word count)
 - RAM (max number of arrays, multiplied by their size)
 - Timers (max number of timer functions)
 - Frequency (max frequency for timer functions and input read)
-- Number of ports (max input/output number)
+- Ports (max number of inputs/outputs)
+- IPC (max instructions per cycle, one instruction is one line of code)
 
 ### Operation on data
 - All functions, including timers, are executed atomically, preventing any data-race situation.
-- Function arguments are always passed by reference (exception below)
-- Arguments going from an `output` to an `input` function transfers data by copy
-- Variable assignations are always by copy
-- Math functions do not modify their given arguments, they will instead return a new value
+- Function arguments are passed by copy
+- Variable assignations always copy the value
+- Math functions do NOT modify the value of the variable arguments if called via a `var` or a `set` statement, it will instead return the new value to the variable it was set to
+- Math functions DO modify the value of the FIRST variable argument if called directly (leading the line with a `math` word)
 
 # Valid usage
 
-XenonCode is also designed to be very easy to parse. 
+XenonCode is also designed to be very easy to parse by the host game at runtime. 
 
-## Each line must begin with one of the following first word (with examples) :
+## Each line must begin with one of the following first word (with examples):
 
 ### Global scope
 - `init` the body of this function will execute once, when the device is powered on
 - `timer` `10 Hz` the body of these functions will execute repeatedly at a specific frequency in Hz
 - `input` `1 var1:number var2:text` define an input, its arguments and its body
-- `var` `numberVar1:number 4` define a global number variable with an (optional) initial value
+- `var` `numberVar1:number` define a global number variable
+- `var` `numberVar1 4` define a global number variable with an initial value, type is automatically deduced
 - `var` `textVar1:text "hello"` define a global text variable with an (optional) initial value
 - `const` `numberConstant1 4` define a global number constant with its value
 - `const` `textConstant1 "Hello"` define a global text constant with its value
@@ -86,13 +96,11 @@ XenonCode is also designed to be very easy to parse.
 - `function` `testFunc var1:text` define a function and its body
 
 ### Function body
-- `set` `textVar1 = "hello"`
-- `set` `numberVar1 = 4`
-- `set` `numberVar1 to 4`
-- `set` `numberVar1 multiplied 2`
-- `set` `numberVar1 / 3`
-- `set` `numberArray1:4 = 0`
-- `var` `numberVar1:number = 4` define a local number variable
+- `set` `textVar1 "hello"`
+- `set` `numberVar1 4`
+- `set` `numberArray1#4 0` set the value of the 4th item of the array to 0 (yes, arrays are 1-based)
+- `var` `numberVar2 math round numberVar1` define a local/temporary number variable with a math expression as its value
+- `math` `multiply numberVar1 2` calling a math function directly to modify the value of its first argument
 - `output` `2 "test"`
 - `exec` `func1 arg1` calls a user-defined function
 - `device` `"nativeCodeFunc1" arg1 arg2` calls a device-defined native function
@@ -117,51 +125,44 @@ The following keywords must NOT be used to define a variable or a function
 - `math`
 - Any of the operators below
 
-# Operators
-- `=` or `to` variable assignation (must follow a `set variableName`)
-- `+` or `plus` number addition
-- `-` or `minus` number subtraction
-- `*` or `multiplied` number multiplication
-- `/` or `divided` number division
-- `%` or `modulo` number modulo
-- `==` or `is` equal to
-- `!=` or `not` not equal to
+# Conditional Operators
+- `=` or `is` equal to
+- `<>` or `not` not equal to
 - `>` or `moreThan` greater than
 - `<` or `lessThan` lesser than
 - `<=` or `atMost` lesser or equal to
 - `>=` or `atLeast` greater or equal to
-- `&&` or `and` conditional AND
-- `||` or `or` conditional AND
-- `(` begin an enclosed expression
-- `)` end an enclosed expression
+- `&` or `and` conditional AND
+- `|` or `or` conditional AND
+- `xor` conditional exclusive or
 
 ## Casting (parse variables as another type)
 
 To parse an existing variable as another type, simply add a colon and the type, like so: 
-```set someTextValue = someNumberValue:text```
-or
-```set someTextValue = ( numberValue1 + numberValue2 ):text```
-This only works with simple variable types `number` and `text`, and enclosed expressions
+```set someTextValue someNumberValue:text```
+This only works with simple variable types `number` and `text`, not arrays or special data
 
 ## String concatenation
 
-To concatenate texts, simply compound all text values/variables in the same expression (don't forget to cast to text).  
-
-Example concatenating a text as a single argument of an output function call:
-```output 1 ( "Hello, my name is " someTextVar " and my age is " someNumberVar:text )`
-
-Example concatenating a text while assigning to a variable
-```set someTextVar to "Hello, " myName "!"```
+To concatenate texts, simply compound all text values/variables in the same `set` or `var` statement (don't forget to cast to text if you need to).  
+```set someTextVar "Hello, " someName "!"```
 
 # Built-in functions
 
-These functions should be used directly within expressions, prefixed by the `math` keyword. They take one or more arguments and return one value.
+### Device functions
+
+Device functions are defined per implementation. In other words, the games that implement this language into their gameplay may define their own functions here.  
+
+These functions may also be different between two distinct device types in the same game.  
 
 ### Math
+These functions are defined in the base language and must be prefixed by the `math` keyword. They take one or more arguments.  
+If the statement starts with `set` or `var`, the function following the `math` word will return the result to the variable on its left, and will NOT modify the value of any of its arguments.  
+If the statement starts with the `math` word, the following math function will modify the value of its first argument.  
 - `round` number
 - `floor` number
 - `ceil` number
-- `round` number
+- `round` number (takes an optional second argument to specify the number of decimals, otherwise rounding to integer)
 - `sin` number
 - `cos` number
 - `tan` number
@@ -179,13 +180,18 @@ These functions should be used directly within expressions, prefixed by the `mat
 - `step` number number number
 - `lerp` number number number
 - `slerp` number number number
-- `min` number number
-- `max` number number
-- `avg` number number
+- `mod` number number (the modulo operator)
+Math functions below may take two numeric arguments or more. It may also take one array, only if we are in a `set` or `var` statement.
+- `min` number number ...
+- `max` number number ...
+- `avg` number number ...
+- `med` number number ...
+- `add` number number ...
+- `sub` number number ...
+- `mul` number number ...
+- `div` number number ...
 
-`min`, `max` and `avg` may take two numeric arguments OR an array of numbers.  
-
-`round` takes an optional second argument to specify the number of decimals (otherwise round to integer)  
+An implementation may add additional math functions for more advanced fonctionality, or even exclude some of them from this list. It is however discouraged to modify the standard behaviour of a base math function.  
 
 # User-Defined Functions
 
@@ -195,7 +201,7 @@ The operations to run in a function appear within its body.
 
 Functions may have arguments that can be used within the body so that the operations may have a variation depending on the value of some variables. 
 
-Function arguments are defined after the function name and they can be of type `number`, `text`, an array of either, or a special `data` type. 
+Function arguments are defined after the function name and they can be of type `number`, `text`, or a special `data` type. 
 
 ### Declaration
 
@@ -216,16 +222,13 @@ This function takes a number argument and a text argument:
 This function takes a special data argument:
 ```function func1 var1:data```
 
-This function takes an array of numbers argument:
-```function func1 var1:array:number```
-
 ### Body
 The body of a function (the operations to be executed when calling it) must be on the following lines after the declaration, indented with one tab.
 Empty lines within a body are allowed and ignored by the compiler.
 
 ```
 function func1 var1:number var2:number
-    set globalVar1 = var1 + var2
+    set globalVar1 math add var1 var2
     return globalVar1
 ```
 
@@ -241,9 +244,7 @@ It is of course also possible to use variables instead of literal numbers as the
 
 Functions may return a value using the `return` keyword.  
 This returned value may be assigned to a variable like so : 
-```set value = exec funcName 4 6```
-Or passed as one of another function call arguments by surrounding it with parenthesis like so:
-```exec someOtherFunction arg1 ( exec funcName 4 6 ) arg3```
+```set value exec funcName 4 6```
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game
@@ -251,11 +252,10 @@ This section is intented for game developers who want to use this in their game
 ## Editor
 It is encouraged that the code editor runs the following parse on the current line on each keystroke: 
 - Replace leading sequences of 2-5 spaces to one tab
-- Add a space before and after a non-leading `;` or `//` that were not already within comments or within literal strings
-- Add a space before and after operators that are not within comments or literal strings
+- Add a space before and after a non-leading `;` or `//` that were not already within comments or within string literals
+- Add a space before and after operators that are not within comments or string literals
 - Add a space before the starting quote and after the ending quote of a literal string expression ` "..." `
-- Add a space before and after the enclosed expression parenthesis `(` `)`
-- Remove spaces before and after a `:` character that is not within comments or within literal strings
+- Remove spaces before and after `:` and `.` characters that are not within comments or within string literals
 - Trim trailing white spaces
 - Trim all duplicate spaces that are not within comments or string literals
 - Autocomplete words upon pressing the space bar if that word is not an existing symbol
@@ -366,6 +366,7 @@ The following must be executed for each line:
             * `decrement`
             * `set`
             * `var`
+            * `math`
             * `output`
             * `exec`
             * `device`
@@ -387,8 +388,10 @@ The following must be executed for each line:
             * `return`
 
 ## Run
-* Execute the body of the Init() function (only once per power cycle)
-* Execute all timer functions sequentially if their time is due
-* Execute all input functions that have received some data
-* Sleep for Elapsed-1/Frequency Seconds
+Upon powering up the virtual computer:
+- Execute the body of the Init() function
+One clock cycle, executed 'frequency' times per second:
+- Execute all timer functions sequentially if their time is due
+- Execute all input functions that have received some data since the last cycle
+- Sleep for Elapsed-1/Frequency Seconds
 

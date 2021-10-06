@@ -1,12 +1,17 @@
 var a:number
+var b 0
 
 const altitudeSensor 1
 const console 2
 
 init
-	set a to 5
-	output console "Hello"
+	set a 5
+	set b 6
+	increment b
+	if b is 7
+		output console "Hello"
 
 input altitudeSensor altitude:number
-	output console ( "My altitude is " ( round altitude 2 ):text )
-
+	math round altitude 2
+	var outputText "My altitude is " altitude:text " meters"
+	output console outputText
