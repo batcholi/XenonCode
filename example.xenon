@@ -7,7 +7,7 @@ const $clock 3
 // Global variables
 var $a:number
 var $currentTimeSeconds 0
-array 16 stuff:text
+array 16 $stuff:text
 
 init // executed only once, when computer is powered on
 	$a = 5
@@ -23,8 +23,8 @@ input $altitudeSensor $altitude:number // executed when receiving data from the 
 
 timer frequency 1 // executed one time per second
 	$currentTimeSeconds increment
-	$minutes = currentTimeSeconds / 60
-	$hours = minutes / 60
+	$minutes = $currentTimeSeconds / 60
+	$hours = $minutes / 60
 	$minutes floor
 	$hours floor
 	$minutes mod 60
