@@ -79,11 +79,13 @@ class Assembly {
 	const uint32_t parserVersion = 0;
 	
 public:
+	uint32_t initSize = 0; // number of words in the init code (uint32_t)
 	uint32_t programSize = 0; // number of words in the program code (uint32_t)
 	vector<string> storageRefs {}; // storage references (line)
 	unordered_map<string, uint32_t> functionRefs {}; // function references (line)
 	
 	// ROM
+	vector<Word> rom_init {}; // the bytecode of this computer's init function
 	vector<Word> rom_program {}; // the actual bytecode of this program
 	vector<double> rom_numericConstants {}; // the actual numeric constant values
 	vector<string> rom_textConstants {}; // the actual text constant values
@@ -104,7 +106,7 @@ public:
 			s << parserFiletype << ' ' << parserVersion << '\n';
 			
 			// Write some sizes
-			s << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << '\n';
+			s << initSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << '\n';
 			s << rom_numericConstants.size() << ' ';
 			s << rom_textConstants.size() << '\n';
 			s << ram_numericVariables << ' ';
@@ -132,6 +134,9 @@ public:
 			}
 		}
 		
+		// Write init bytecode
+		s.write((char*)rom_init.data(), initSize * sizeof(uint32_t));
+		
 		// Write program bytecode
 		s.write((char*)rom_program.data(), programSize * sizeof(uint32_t));
 	}
@@ -153,7 +158,7 @@ private:
 			if (version > parserVersion) throw std::runtime_error("XenonCode file version is more recent than this parser");
 			
 			// Read some sizes
-			s >> programSize >> storageRefsSize >> functionRefsSize;
+			s >> initSize >> programSize >> storageRefsSize >> functionRefsSize;
 			s >> rom_numericConstantsSize;
 			s >> rom_textConstantsSize;
 			s >> ram_numericVariables;
@@ -163,6 +168,7 @@ private:
 			s >> ram_textArrays;
 
 			// Prepare data
+			rom_init.resize(initSize);
 			rom_program.resize(programSize);
 			rom_numericConstants.reserve(rom_numericConstantsSize);
 			rom_textConstants.reserve(rom_textConstantsSize);
@@ -196,6 +202,9 @@ private:
 				rom_textConstants.push_back(value);
 			}
 		}
+
+		// Read init bytecode
+		s.read((char*)rom_init.data(), initSize * sizeof(uint32_t));
 
 		// Read program bytecode
 		s.read((char*)rom_program.data(), programSize * sizeof(uint32_t));

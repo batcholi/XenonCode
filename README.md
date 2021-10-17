@@ -103,6 +103,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `array` declare a global array
 - `storage` declare a storage variable or array, which will be persistent across power cycles
 - `init` Define the body of the init function, which will execute once when the device is powered on
+- `tick` declare the body of the tick function that will execute at each clock cycle
 - `function` declare a user-defined function
 - `timer` Define the body of a function that will execute repeatedly at a specific frequency in Hz
 - `input` Define an input function
@@ -188,6 +189,7 @@ Text variables work in a very similar with to arrays. We can use the trail opera
 
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
+The init function cannot be called by the user. If can only be defined.  
 ```
 init
     $stuff = 5
@@ -195,9 +197,18 @@ init
     //...
 ```
 
+## Tick function
+The tick function is executed at the beginning of every clock cycle of this virtual computer.  
+The tick function cannot be called by the user. If can only be defined.  
+```
+tick
+    // This body is executed once per clock cycle at the virtual computer's frequency
+```
+
 ## Timer functions
 Timer functions are executed at a specified interval or frequency, but at most Once per clock cycle.  
 We can either specify an `interval` as in every N seconds or a `frequency` as in N times per second.  
+Timer functions cannot be called by the user. They can only be defined.  
 ```
 timer frequency 4
     // stuff here runs 4 times per second
@@ -215,6 +226,7 @@ Input functions are like a user-defined function, containing arguments, but no r
 The 1-based port index must be specified after the input keyword and a trail operator `.`  
 The port index may be specified via a constant as well.  
 Function arguments must be surrounded with parenthesis and their types must be specified. We may define multiple input functions using the same port as long as their argument types/count are not the same.  
+Input functions cannot be called directly by the user. They can only be defined.  
 ```
 input.1 ($arg1:number, $arg2:text)
     $stuff = $arg1
@@ -486,6 +498,7 @@ TODO
 Upon powering up the virtual computer:
 - Execute the body of the Init() function
 One clock cycle, executed 'frequency' times per second:
+- Execute the tick function
 - Execute all timer functions sequentially if their time is due
 - Execute all input functions that have received some data since the last cycle
 - Sleep for Elapsed-1/Frequency Seconds
