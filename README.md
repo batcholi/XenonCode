@@ -127,49 +127,150 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 Since all user-defined words must start with either `$` or `@`, there is no need for reserved words.
 
 ## Declaring a constant
-TODO
+Constants are named values that should never change throughout the execution of a program. They are fixed values defined at compile-time.  
+Their assigned values must be explicitely given and must be expressions which the result can be determined at compile-time.  
+
+`const $stuff = 5` // declares a constant named $stuff with the number 5 as its value
+`const $stuff = "hello"` // declares a constant named $stuff with the text "hello" as its value
 
 ## Declaring a variable
-TODO
+Variables are named values that can change throughout the execution of a program.  
+We may or may not assign them an initial value.  
+If we do not assign an initial value, we must provide a type.  
+A different behaviour will occur depending on whether we assign it an initial value:  
+- If we assign an initial value, this value is automatically used when the program starts
+- If we do NOT assign an initial value in its declaration, the default generic value is used whenever the program is compiled, but if it is modified throughout the execution, the modified value persists for the following power cycles.  
+A variable is only accessible within the scope it has been declared in. For instance, if we declare a variable at the biginning of a function, it is available throughout the entire function. If we declare a variable within a if block, it is only available within that block, until an Else, Elseif or going back to the parent scope.  
+A variable declared in the global scope is accessible from everywhere.  
+For variables declared in the global scope, when we assign it an initial value, the given expression must be determined at compile-time.  
 
-## Assigning a variable
-TODO
+`var $stuff = 5` // declares a number variable with an initial value set to 5 whenever the program starts
+`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" whenever the program starts
+`var $stuff:number` // declares a number variable with an initial value set to 0 when the program is compiled, but any modification of the value will persist for the following power cycles, until the program is recompiled
+`var $stuff:text` // declares a text variable with an initial value set to "" when the program is compiled, but any modification of the value will persist for the following power cycles, until the program is recompiled
+
+## Assigning a new value to a variable
+To assign a new value to a variable, we can simply start a statement with the variable name followed by a `=` and an expression the result of which will be the new value.  
+We may also use a trailing function which will inherently modify the value of said variable.  
+
+`$stuff = 5` // assign the value 5 to the variable named $stuff
+`$stuff = $other + 5` // assign the result of the expression ($other + 5) to the variable named $stuff
+`$stuff.round()` // call a trailing function that rounds the value of the variable
 
 ## Declaring an array
-TODO
+An array is a dynamic list of values of a certain type. We can append or erase values, we can access a specific value from the list, or loop through all its values.  
+When declaring an array, we cannot specify an initial value, and we must provide a type.  
+Arrays are initialized with zero size when the program is compiled, values may be added/erased/modified throughout the execution of the program, and their size and all values persist for the following power cycles, until the program is recompiled  
 
-## Accessing/Assigning an item within an array
-TODO
+`array $stuff:number` // declare an array of numbers
+`array $stuff:text` // declare an array of texts
+
+## Accessing/Assigning the nth item within an array
+To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 1-based index of the item, a variable containing that index, or an expression surrounded with parenthesis resulting in that index  
+`$stuff.1 = 5` // Assign the value 5 to the first item of the array
+`$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index
+`$stuff.($thing + 3) = 5` // Assign the value 5 to the item with an index defined by the given expression
+`$value = $stuff.2` // Assign the value of the second item of the array to the variable $value
+
+## Accessing/Assigning the nth character within a text variable
+Text variables work in a very similar with to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
+`$myText.1 = "a"` // Set "a" as the first character of $myText
 
 ## The Init function
-TODO
+The Init function's body will be executed first everytime the virtual computer is powered on.  
+```
+init
+    $stuff = 5
+    @func1()
+    //...
+```
 
 ## Timer functions
-TODO
+Timer functions are executed at a specified interval or frequency, but at most Once per clock cycle.  
+We can either specify an `interval` as in every N seconds or a `frequency` as in N times per second.  
+```
+timer frequency 4
+    // stuff here runs 4 times per second
+timer interval 2
+    // stuff here runs once every 2 seconds
+```
+Note: If the clock speed of the virtual computer is slower than the given interval or frequency, that timer function will not correctly run at the specified interval or frequency, and may be executed at every clock cycle instead.  
 
 ## Input functions
-TODO
+Input functions are a way of accessing the information that we have received from another device.  
+They may be executed any number of times per clock cycle, depending on how much data it has received since the previous clock cycle.  
+Devices may have an upper limit in the receiving buffer which defines the maximum number of times the input function may be called per clock cycle.  
+If that limit has been reached, only the last N values will be kept in the buffer.  
+Input functions are like a user-defined function, containing arguments, but no return value, and also we must specify a port index.  
+The 1-based port index must be specified after the input keyword and a trail operator `.`  
+The port index may be specified via a constant as well.  
+Function arguments must be surrounded with parenthesis and their types must be specified. We may define multiple input functions using the same port as long as their argument types/count are not the same.  
+```
+input.1 ($arg1:number, $arg2:text)
+    $stuff = $arg1
+input.$myPortIndex ($arg1:number, $arg2:text)
+    $stuff = $arg1
+```
 
 ## Output
-TODO
+The output function is how we send data to another device. This function is meant to be called in a statement, and cannot be defined in the global scope like the input functions are.  
+We must also pass in the port index as we do with the input function, and it can also be specified via a constant.  
+We must pass a list of arguments surrounded with parenthesis (or an empty set of parenthesis) and the matching input function on the other device will be executed.  
+`output.1 ($stuff, $moreStuff)`
 
 ## If Elseif Else
-TODO
+Like most programming languages, we can use conditionals.  
+```
+if $stuff == 5
+    // then run this
+elseif $stuff == 6
+    // then run that instead
+else
+    // all previous conditions evaluate to false, then run this instead
+```
 
 ## Foreach loops
-TODO
+This loops through all items of an array.  
+The block of code under that loop statement will be executed for every item in the array, one by one.  
+```
+foreach $stuff ($item)
+    // we loop through the array $stuff, and we define $item and its value is the current item's
+foreach $stuff ($item, $i)
+    // here we also define $i which contains the 1-based index of this item within the array $stuff
+```
 
 ## Repeat loops
-TODO
+This loop will repeat the execution of the following block a given number of times.  
+```
+repeat 5 ($i)
+    // this block will be repeated 5 times, and $i is the 1-based index of this iteration (first time will be 1, last will be 5)
+```
+The number of times (above specified as 5) may also be specified via a variable or expression
 
 ## While loops
-TODO
+This loop will run the following block as long as the given condition evaluates to true.  
+```
+while $stuff < 5
+    $stuff++
+```
 
 ## Break
-TODO
+This keyword is used to stop a loop as if it completed all its iterations.  
+```
+while $stuff < 5
+    $stuff++
+    if $stuff == 5
+        break
+```
 
 ## Next
-TODO
+This keyword is used to stop this iteration of a loop here and run the next iteration immediately
+```
+while $stuff < 5
+    $stuff++
+    if $stuff == 2
+        next
+```
 
 ## Math Operators
 - `+` addition
@@ -183,6 +284,7 @@ TODO
 - `--` decrement the variable's value
 
 ## Assignation operators
+These operators will to the math operation and assign the result to the leading variable.  
 - `+=`
 - `-=`
 - `*=`
@@ -272,12 +374,13 @@ Functions may return a value using the `return` keyword.
 This returned value may be assigned to a variable like so : 
 ```$value = @func1(4, 6)```
 
-## Trailing functions
+# Trailing functions
 Any function may be called as a trailing function, even user-defined functions.  
 The way this works is that it uses the leading variable as the first argument, and assigns the returning value to that leading variable.  
 When calling a trailing function, we must ommit the first argument as it already uses the leading variable as its first argument.  
 If the function definition does not have any arguments, this is still valid, although we simply don't care about the current value of the leading variable, but we'll assign a new value to it.  
 If the function definition does not have a return type, the value of the leading variable may be assigned the default generic value of 0 or "".  
+Since we cannot pass Arrays as function arguments, arrays can only take their own specifically defined trailing functions.  
 ```$myVariable.round()```
 ```$myVariable.@func1(6)```
 
@@ -290,47 +393,63 @@ These functions may also be different between two distinct device types in the s
 ### Math
 These functions are defined in the base language and they take one or more arguments.  
 Trailing math functions will use the leading variable as its first argument and modify that variable with the return value.  
-- `floor` number
-- `ceil` number
-- `round` number (takes an optional second argument to specify the number of decimals, otherwise rounding to integer)
-- `sin` number
-- `cos` number
-- `tan` number
-- `asin` number
-- `acos` number
-- `atan` number
-- `abs` number
-- `fract` number
-- `log` number
-- `log10` number
-- `sqrt` number
-- `sign` number
-- `pow` number number
-- `clamp` number number number
-- `step` number number number
-- `lerp` number number number
-- `slerp` number number number
-- `mod` number number (the modulo operator)  
-Math functions below may take two numeric arguments or more. It may also take one array except if it's a trailing function call.
-- `min` number number ...
-- `max` number number ...
-- `avg` number number ...
-- `med` number number ...
-- `add` number number ...
-- `sub` number number ...
-- `mul` number number ...
-- `div` number number ...
+- `floor`(number)
+- `ceil`(number)
+- `round`(number) // takes an optional second argument to specify the number of decimals, otherwise rounding to integer
+- `sin`(number)
+- `cos`(number)
+- `tan`(number)
+- `asin`(number)
+- `acos`(number)
+- `atan`(number)
+- `abs`(number)
+- `fract`(number)
+- `log`(number)
+- `log10`(number)
+- `sqrt`(number)
+- `sign`(number)
+- `pow`(number, exponent)
+- `clamp`(number, minimum, maximum)
+- `step`(t1, t2, number)
+- `smoothstep`(t1, t2, number)
+- `lerp`(number, number, t)
+- `slerp`(number, number, t)
+- `mod`(number, divisor) // the modulo operator  
+Math functions below may take two numeric arguments or more.  
+- `min`(number, number ...)
+- `max`(number, number ...)
+- `avg`(number, number ...)
+- `med`(number, number ...)
+- `add`(number, number ...)
+- `sub`(number, number ...)
+- `mul`(number, number ...)
+- `div`(number, number ...)
 
 An implementation may add additional math functions for more advanced fonctionality, or even exclude some of them from this list. It is however discouraged to modify the standard behaviour of a base math function.  
 
-### System
-- `clear` array (Empty an array, should only be called as a trailing function)
-- `substring` text number number (first number is the start characted where 1 is the first, second number is the number of characters to take)
+### Array functions
+These functions MUST be called as trailing functions, and they do not return anything
+- $myArray.`clear`() // Empty an array
+- $myArray.`append`(value) // Append a new value to an array
+- $myArray.`pop`(value) // Erase the last value in an array, reducing its size by one
+- $myArray.`insert`(index, value) // Insert a new value to an array at a specific position, pushing back all following values by one
+- $myArray.`erase`(index) // Erase an element from an array at a specific index, pulling back all following values by one
+- $myArray.`fill`(qty, value) // Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
+
+### Text functions
+- `substring`(inputText, start, length) // returns a new string
 
 ### Built-in trailing members
-Using the trail operator `.`, we can refer to a specific information of certain types of variables.  
-- `$myArray.size` returns the number of elements in $myArray
-- `$myText.size` returns the number of characters in $myText
+Using the trail operator `.`, we can also refer to a specific information about certain types of variables.  
+- $myArray.`size` // returns the number of elements in $myArray
+- $myText.`size` // returns the number of characters in $myText
+- $myArray.`min` // returns the minimum value within a number array
+- $myArray.`max` // returns the maximum value within a number array
+- $myArray.`avg` // returns the average value within a number array
+- $myArray.`med` // returns the median value within a number array
+- $myArray.`sum` // returns the sum of all values within a number array
+- $myArray.`last` // returns the value of the last item within an array, this also allows to modify that value by assigning an expression
+- $myText.`last` // returns the last character of a text variable, this also allows to modify that last character by assigning an expression
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game
