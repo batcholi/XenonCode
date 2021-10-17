@@ -138,6 +138,9 @@ TODO
 ## Declaring an array
 TODO
 
+## Accessing/Assigning an item within an array
+TODO
+
 ## The Init function
 TODO
 
@@ -307,7 +310,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `step` number number number
 - `lerp` number number number
 - `slerp` number number number
-- `mod` number number (the modulo operator)
+- `mod` number number (the modulo operator)  
 Math functions below may take two numeric arguments or more. It may also take one array except if it's a trailing function call.
 - `min` number number ...
 - `max` number number ...
@@ -346,7 +349,10 @@ It is encouraged that the code editor runs the following parse on the current li
             - Built-in functions
             - Operators
 
-## Run
+## Compiling to byte-code
+TODO
+
+## Runtime
 Upon powering up the virtual computer:
 - Execute the body of the Init() function
 One clock cycle, executed 'frequency' times per second:
