@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/test",
-            "args": ["../example.xenon"],
+            "args": ["../test/main.xenon"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],

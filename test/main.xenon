@@ -1,0 +1,43 @@
+
+// IOs
+const $altitudeSensor = 1
+const $console = 2
+const $screen = 3
+const $camera = 4
+
+include "functions"
+
+// Global variables
+var $a:number
+var $currentTimeSeconds = 0
+array $stuff:text
+
+init // executed only once, when computer is powered on
+	$a = 5
+	if $a == 5
+		output.2 ("Hello, World!")
+	else
+		output.$console ("There must be a bug somewhere...")
+
+input.$altitudeSensor ($altitude:number) // executed when receiving data from the sensor
+	$outputText = "My altitude is " round($altitude, 2):format(1.2) " meters"
+	output.$console($outputText)
+
+timer frequency 1 // executed one time per second
+	$currentTimeSeconds++
+    var $minutes = $currentTimeSeconds / 60
+	var $hours = $minutes / 60
+	$minutes.floor()
+	$hours.floor()
+	$minutes %= 60
+	@showTotalTime ($hours, $minutes)
+
+input.$screen($x:number, $y:number)
+    //void
+    
+input.$screen($btn:text)
+    if $btn == "StartThruster"
+        output.$console("PSHHHHHHH!!!!")
+    
+input.$camera($data:data)
+    output.$screen($data)
