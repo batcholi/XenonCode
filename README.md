@@ -65,8 +65,9 @@ This language is designed to potentially be executed on Server-side in a multipl
 ### Per-Virtual-Computer limitations
 These are defined per implementation and may include multiple variants or be customizable by the user
 
-- ROM (max compiled program size)
-- RAM (max number of variables plus all arrays multiplied by their size)
+- ROM (max compiled program size as a number of 32-bit words)
+- RAM (max number of local, global and tmp variables plus all local and global arrays multiplied by their size)
+- STORAGE (max number of storage variables plus all storage arrays multiplied by their size)
 - Timers (max number of timer functions)
 - Frequency (max frequency for timer functions and input read)
 - Ports (max number of inputs/outputs)
@@ -100,6 +101,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `const` declare a global constant
 - `var` declare a global variable
 - `array` declare a global array
+- `storage` declare a storage variable or array, which will be persistent across power cycles
 - `init` Define the body of the init function, which will execute once when the device is powered on
 - `function` declare a user-defined function
 - `timer` Define the body of a function that will execute repeatedly at a specific frequency in Hz
@@ -136,18 +138,15 @@ Their assigned values must be explicitely given and must be expressions which th
 ## Declaring a variable
 Variables are named values that can change throughout the execution of a program.  
 We may or may not assign them an initial value.  
-If we do not assign an initial value, we must provide a type.  
-A different behaviour will occur depending on whether we assign it an initial value:  
-- If we assign an initial value, this value is automatically used when the program starts
-- If we do NOT assign an initial value in its declaration, the default generic value is used whenever the program is compiled, but if it is modified throughout the execution, the modified value persists for the following power cycles.  
+If we do not assign an initial value, the default generic value is used, and we must provide a type.  
 A variable is only accessible within the scope it has been declared in. For instance, if we declare a variable at the biginning of a function, it is available throughout the entire function. If we declare a variable within a if block, it is only available within that block, until an Else, Elseif or going back to the parent scope.  
 A variable declared in the global scope is accessible from everywhere.  
 For variables declared in the global scope, when we assign it an initial value, the given expression must be determined at compile-time.  
 
-`var $stuff = 5` // declares a number variable with an initial value set to 5 whenever the program starts
-`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" whenever the program starts
-`var $stuff:number` // declares a number variable with an initial value set to 0 when the program is compiled, but any modification of the value will persist for the following power cycles, until the program is recompiled
-`var $stuff:text` // declares a text variable with an initial value set to "" when the program is compiled, but any modification of the value will persist for the following power cycles, until the program is recompiled
+`var $stuff = 5` // declares a number variable with an initial value set to 5 when the program starts
+`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" when the program starts
+`var $stuff:number` // declares a number variable with an initial value set to 0 when the program starts
+`var $stuff:text` // declares a text variable with an initial value set to "" when the program starts
 
 ## Assigning a new value to a variable
 To assign a new value to a variable, we can simply start a statement with the variable name followed by a `=` and an expression the result of which will be the new value.  
@@ -160,10 +159,21 @@ We may also use a trailing function which will inherently modify the value of sa
 ## Declaring an array
 An array is a dynamic list of values of a certain type. We can append or erase values, we can access a specific value from the list, or loop through all its values.  
 When declaring an array, we cannot specify an initial value, and we must provide a type.  
-Arrays are initialized with zero size when the program is compiled, values may be added/erased/modified throughout the execution of the program, and their size and all values persist for the following power cycles, until the program is recompiled  
+Arrays are initialized with zero size when the program starts, values may be added/erased/modified throughout the execution of the program  
 
 `array $stuff:number` // declare an array of numbers
 `array $stuff:text` // declare an array of texts
+
+## Declaring storage
+Storage is used to keep some data persistent across power cycles and even through a re-compile.  
+We can declare storage variables and arrays of either number or text.  
+Storage must be declared in the global scope.  
+We may assign initial values to a storage.  
+```
+storage var $stuff = 5
+storage var $stuff:text
+storage array $stuff:numeric
+```
 
 ## Accessing/Assigning the nth item within an array
 To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 1-based index of the item, a variable containing that index, or an expression surrounded with parenthesis resulting in that index  
@@ -284,7 +294,7 @@ while $stuff < 5
 - `--` decrement the variable's value
 
 ## Assignation operators
-These operators will to the math operation and assign the result to the leading variable.  
+These operators will compute the appropriate math operation and assign the result to the leading variable.  
 - `+=`
 - `-=`
 - `*=`
@@ -414,16 +424,14 @@ Trailing math functions will use the leading variable as its first argument and 
 - `smoothstep`(t1, t2, number)
 - `lerp`(number, number, t)
 - `slerp`(number, number, t)
-- `mod`(number, divisor) // the modulo operator  
-Math functions below may take two numeric arguments or more.  
-- `min`(number, number ...)
-- `max`(number, number ...)
-- `avg`(number, number ...)
-- `med`(number, number ...)
-- `add`(number, number ...)
-- `sub`(number, number ...)
-- `mul`(number, number ...)
-- `div`(number, number ...)
+- `mod`(number, divisor) // the modulo operator
+- `min`(number, number)
+- `max`(number, number)
+- `avg`(number, number)
+- `add`(number, number)
+- `sub`(number, number)
+- `mul`(number, number)
+- `div`(number, number)
 
 An implementation may add additional math functions for more advanced fonctionality, or even exclude some of them from this list. It is however discouraged to modify the standard behaviour of a base math function.  
 
@@ -469,6 +477,9 @@ It is encouraged that the code editor runs the following parse on the current li
             - Operators
 
 ## Compiling to byte-code
+TODO
+
+## Parsing the byte-code
 TODO
 
 ## Runtime

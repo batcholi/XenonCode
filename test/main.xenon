@@ -8,9 +8,9 @@ const $camera = 4
 include "functions"
 
 // Global variables
-var $a:number
 var $currentTimeSeconds = 0
-array $stuff:text
+storage var $a:number
+storage array $stuff:text
 
 init // executed only once, when computer is powered on
 	$a = 5
