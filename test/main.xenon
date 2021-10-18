@@ -25,7 +25,7 @@ input.$altitudeSensor ($altitude:number) // executed when receiving data from th
 
 timer frequency 1 // executed one time per second
 	$currentTimeSeconds++
-    var $minutes = $currentTimeSeconds / 60
+	var $minutes = $currentTimeSeconds / 60
 	var $hours = $minutes / 60
 	$minutes.floor()
 	$hours.floor()
@@ -33,11 +33,11 @@ timer frequency 1 // executed one time per second
 	@showTotalTime ($hours, $minutes)
 
 input.$screen($x:number, $y:number)
-    //void
-    
+	//void
+
 input.$screen($btn:text)
-    if $btn == "StartThruster"
-        output.$console("PSHHHHHHH!!!!")
-    
+	if $btn == "StartThruster"
+		output.$console("PSHHHHHHH!!!!")
+
 input.$camera($data:data)
-    output.$screen($data)
+	output.$screen($data)

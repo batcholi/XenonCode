@@ -299,6 +299,7 @@ while $stuff < 5
 - `-` subtraction
 - `*` multiplication
 - `/` division
+- `%` modulo
 - `^` power
 
 ## Trailing Operators
