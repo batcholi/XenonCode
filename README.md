@@ -143,6 +143,7 @@ If we do not assign an initial value, the default generic value is used, and we 
 A variable is only accessible within the scope it has been declared in. For instance, if we declare a variable at the biginning of a function, it is available throughout the entire function. If we declare a variable within a if block, it is only available within that block, until an Else, Elseif or going back to the parent scope.  
 A variable declared in the global scope is accessible from everywhere.  
 For variables declared in the global scope, when we assign it an initial value, the given expression must be determined at compile-time.  
+Variable names must start with a letter or underscore (`a`-`z` or `_`) then must contain only alphanumeric characters and underscores.  
 
 `var $stuff = 5` // declares a number variable with an initial value set to 5 when the program starts
 `var $stuff = "hello"` // declares a text variable with an initial value set to "hello" when the program starts
@@ -352,6 +353,8 @@ The operations to run in a function appear within its body.
 Functions may have arguments that can be used within the body so that the operations may have a variation depending on the value of some variables. 
 
 Function arguments are defined after the function name, within parenthesis and they can be of type `number`, `text`, or a special `data` type. 
+
+Function names have the same rules as variable names.  
 
 ### Declaration
 
