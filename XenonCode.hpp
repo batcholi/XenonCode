@@ -480,6 +480,10 @@ struct ParsedLine {
 	int scope = 0;
 	vector<Word> words {};
 	
+	operator bool () const {
+		return words.size() > 0;
+	}
+	
 	ParsedLine(const string& str) {
 		ParseWords(str, words, scope);
 		if (words.size() > 0) {
@@ -513,9 +517,6 @@ struct SourceFile {
 					throw ParseError("Too many leading tabs");
 				}
 				scope = line.scope;
-				if (line.words.size() == 0) {
-					lines.pop_back();
-				}
 			} catch (ParseError& e) {
 				cout << e.what() << " at line " << lineNumber << endl;
 				return;
@@ -524,52 +525,56 @@ struct SourceFile {
 	}
 	
 	void DebugParsedLines() {
+		int lineNumber = 1;
 		for (auto& line : lines) {
+			if (line) {
 			
-			cout << "Scope{" << line.scope << "} ";
-			
-			for (auto& word : line.words) {
-				switch (word.type) {
-					
-					case Word::Numeric:
-						cout << "Numeric{" << word << "} ";
-						break;
-					case Word::Text:
-						cout << "Text{" << word << "} ";
-						break;
-					case Word::Varname:
-						cout << "Varname{" << word << "} ";
-						break;
-					case Word::Funcname:
-						cout << "Funcname{" << word << "} ";
-						break;
-					case Word::Operator:
-						cout << "Operator{" << word << "} ";
-						break;
-					case Word::ExpressionBegin:
-						cout << "Expression{ ";
-						break;
-					case Word::ExpressionEnd:
-						cout << "} ";
-						break;
-					case Word::Comma:
-						cout << "Comma{" << word << "} ";
-						break;
-					case Word::Trail:
-						cout << "Trail{" << word << "} ";
-						break;
-					case Word::Cast:
-						cout << "Cast{" << word << "} ";
-						break;
-					case Word::Name:
-						cout << "Name{" << word << "} ";
-						break;
+				cout << lineNumber << ": Scope{" << line.scope << "} ";
+				
+				for (auto& word : line.words) {
+					switch (word.type) {
 						
-					default: assert(!"Not supposed to happen");
+						case Word::Numeric:
+							cout << "Numeric{" << word << "} ";
+							break;
+						case Word::Text:
+							cout << "Text{" << word << "} ";
+							break;
+						case Word::Varname:
+							cout << "Varname{" << word << "} ";
+							break;
+						case Word::Funcname:
+							cout << "Funcname{" << word << "} ";
+							break;
+						case Word::Operator:
+							cout << "Operator{" << word << "} ";
+							break;
+						case Word::ExpressionBegin:
+							cout << "Expression{ ";
+							break;
+						case Word::ExpressionEnd:
+							cout << "} ";
+							break;
+						case Word::Comma:
+							cout << "Comma{" << word << "} ";
+							break;
+						case Word::Trail:
+							cout << "Trail{" << word << "} ";
+							break;
+						case Word::Cast:
+							cout << "Cast{" << word << "} ";
+							break;
+						case Word::Name:
+							cout << "Name{" << word << "} ";
+							break;
+							
+						default: assert(!"Not supposed to happen");
+					}
 				}
+				
+				cout << '\n';
 			}
-			
-			cout << '\n';
+			++lineNumber;
 		}
 	}
 };
