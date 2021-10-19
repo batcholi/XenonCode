@@ -7,6 +7,8 @@
 #include <map>
 #include <unordered_map>
 #include <stack>
+#include <cassert>
+#include <algorithm>
 
 using namespace std;
 
@@ -17,8 +19,11 @@ const size_t MAX_TEXT_LENGTH = 256;
 enum class WORD_TYPE : uint8_t {
 	VOID = 0,
 
+	FILE,
 	LINE,
 	GOTO,
+	GOTO_IF,
+	GOTO_IF_NOT,
 	RETURN,
 	NUMBER_OPERATION,
 	TEXT_OPERATION,
@@ -29,28 +34,20 @@ enum class WORD_TYPE : uint8_t {
 	DEVICE_FUNCTION,
 	MATH_FUNCTION,
 	USER_FUNCTION,
-
+	
 	STORAGE_VAR_NUMERIC,
 	STORAGE_VAR_TEXT,
 	STORAGE_ARRAY_NUMERIC,
 	STORAGE_ARRAY_TEXT,
-	GLOBAL_CONST_NUMERIC,
-	GLOBAL_CONST_TEXT,
-	GLOBAL_VAR_NUMERIC,
-	GLOBAL_VAR_TEXT,
-	GLOBAL_ARRAY_NUMERIC,
-	GLOBAL_ARRAY_TEXT,
-	LOCAL_VAR_NUMERIC,
-	LOCAL_VAR_TEXT,
-	LOCAL_VAR_DATA,
-	LOCAL_ARRAY_NUMERIC,
-	LOCAL_ARRAY_TEXT,
-	TMP_VAR_NUMERIC,
-	TMP_VAR_TEXT,
-	TMP_DATA,
-	ARG_NUMERIC,
-	ARG_TEXT,
-	ARG_DATA,
+	
+	ROM_CONST_NUMERIC,
+	ROM_CONST_TEXT,
+	
+	RAM_VAR_NUMERIC,
+	RAM_VAR_TEXT,
+	RAM_ARRAY_NUMERIC,
+	RAM_ARRAY_TEXT,
+	RAM_DATA,
 	
 };
 
@@ -240,25 +237,33 @@ bool isalnum_(int c) {
 
 struct Word {
 	string word = "";
+	
 	enum Type {
+		// Intermediate types
 		Empty, // nothing or comment or \n
+		Tab, // \t
+		Expression, // ( )
 		Invalid,
+		
+		// Final types
 		Numeric, // 0.0
 		Text, // ""
 		Varname, // $
 		Funcname, // @
 		Operator, // +
-		Expression, // ( )
+		ExpressionBegin, // (
+		ExpressionEnd, // )
 		Comma, // ,
 		Trail, // .
 		Cast, // :
-		Tab, // \t
 		Name, // any other alphanumeric word that starts with alpha
 	} type = Empty;
+	
 	void Clear() {
 		word = "";
 		type = Empty;
 	}
+	
 	operator bool() const {
 		return type != Empty && type != Invalid;
 	}
@@ -270,15 +275,25 @@ struct Word {
 	operator const string&() const {
 		return word;
 	}
+	
 	bool operator == (Type t) const {
 		return type == t;
 	}
-	bool operator == (const std::string& str) const {
+	bool operator == (const string& str) const {
 		return word == str;
 	}
 	bool operator == (const char* str) const {
 		return word == str;
 	}
+	bool operator != (Type t) const {return !(*this == t);}
+	bool operator != (const string& str) const {return !(*this == str);}
+	bool operator != (const char* str) const {return !(*this == str);}
+	
+	Word(Type type, string word = "") : word(word), type(type) {}
+	
+	Word(const Word& other) = default;
+	Word(Word&& other) = default;
+	
 	Word(istringstream& s) {
 		for (int c; (c = s.get()) != -1; ) if (c != ' ') {
 			switch (c) {
@@ -410,49 +425,150 @@ ostream& operator << (ostream& s, const Word& w) {
 	return s << string(w);
 }
 
-class SourceFile {
-	istream& stream;
-public:
-	explicit SourceFile(istream& stream) : stream(stream) {}
-	void Parse() {
+class ParseError : public runtime_error {
+	using runtime_error::runtime_error;
+};
+
+void ParseWords(const string& str, vector<Word>& words, int& scope) {
+	istringstream line(str);
+	while (Word word {line}) {
+		if (word == Word::Tab) {
+			if (words.size() == 0) {
+				++scope;
+			}
+		} else if (word == Word::Expression) {
+			words.push_back(Word::ExpressionBegin);
+			ParseWords(word, words, scope);
+			words.push_back(Word::ExpressionEnd);
+		} else if (word == Word::Invalid) {
+			throw ParseError("Invalid character '" + string(word) + "'");
+		} else {
+			words.push_back(word);
+		}
+	}
+}
+
+const vector<string> globalScopeFirstWords {
+	"include",
+	"const",
+	"var",
+	"array",
+	"storage",
+	"init",
+	"tick",
+	"function",
+	"timer",
+	"input",
+};
+
+const vector<string> functionScopeFirstWords {
+	"var",
+	"array",
+	"output",
+	"foreach",
+	"repeat",
+	"while",
+	"break",
+	"next",
+	"if",
+	"elseif",
+	"else",
+	"return",
+};
+
+struct ParsedLine {
+	int scope = 0;
+	vector<Word> words {};
+	
+	ParsedLine(const string& str) {
+		ParseWords(str, words, scope);
+		if (words.size() > 0) {
+			// Global Scope?
+			if (scope == 0) {
+				if (words[0] != Word::Name || find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords)) {
+					throw ParseError("Invalid first word '" + string(words[0]) + "' in the global scope");
+				}
+			} else {
+				if (words[0] != Word::Varname && words[0] != Word::Funcname && (words[0] != Word::Name || find(begin(functionScopeFirstWords), end(functionScopeFirstWords), words[0]) == end(functionScopeFirstWords))) {
+					throw ParseError("Invalid first word '" + string(words[0]) + "' in a function scope");
+				}
+			}
+			//TODO validate the line and add expressions around math operations
+		}
+	}
+};
+
+struct SourceFile {
+	vector<ParsedLine> lines;
+
+	SourceFile(istream& stream) {
 		int lineNumber = 1;
 		int scope = 0;
 		
-		function<void(const string&)> print = [&](const string& str) {
-			istringstream line(str);
-			while (Word word {line}) {
-				string prefix = "?";
-				switch (word.type) {
-					case Word::Empty: prefix = "Empty"; break;
-					case Word::Invalid: prefix = "Invalid"; break;
-					case Word::Numeric: prefix = "Numeric"; break;
-					case Word::Text: prefix = "Text"; break;
-					case Word::Varname: prefix = "Varname"; break;
-					case Word::Funcname: prefix = "Funcname"; break;
-					case Word::Operator: prefix = "Operator"; break;
-					case Word::Expression: prefix = "Expression"; break;
-					case Word::Comma: prefix = "Comma"; break;
-					case Word::Trail: prefix = "Trail"; break;
-					case Word::Cast: prefix = "Cast"; break;
-					case Word::Tab: prefix = "Tab"; break;
-					case Word::Name: prefix = "Name"; break;
+		// Parse all lines
+		for (string lineStr; getline(stream, lineStr); lineNumber++) {
+			try {
+				auto& line = lines.emplace_back(lineStr);
+				if (line.scope > scope + 1) {
+					throw ParseError("Too many leading tabs");
 				}
-				if (word == Word::Expression) {
-					cout << prefix << "{ ";
-					print(word);
-					cout << "} ";
-				} else if (word == Word::Tab) {
-					cout << '\t';
-				} else if (word == Word::Invalid) {
-					throw runtime_error("Invalid");
-				} else {
-					cout << prefix << "{" << word << "} ";
+				scope = line.scope;
+				if (line.words.size() == 0) {
+					lines.pop_back();
+				}
+			} catch (ParseError& e) {
+				cout << e.what() << " at line " << lineNumber;
+				return;
+			}
+		}
+	}
+	
+	void DebugParsedLines() {
+		for (auto& line : lines) {
+			
+			cout << "Scope{" << line.scope << "} ";
+			
+			for (auto& word : line.words) {
+				switch (word.type) {
+					
+					case Word::Numeric:
+						cout << "Numeric{" << word << "} ";
+						break;
+					case Word::Text:
+						cout << "Text{" << word << "} ";
+						break;
+					case Word::Varname:
+						cout << "Varname{" << word << "} ";
+						break;
+					case Word::Funcname:
+						cout << "Funcname{" << word << "} ";
+						break;
+					case Word::Operator:
+						cout << "Operator{" << word << "} ";
+						break;
+					case Word::ExpressionBegin:
+						cout << "Expression{ ";
+						break;
+					case Word::ExpressionEnd:
+						cout << "} ";
+						break;
+					case Word::Comma:
+						cout << "Comma{" << word << "} ";
+						break;
+					case Word::Trail:
+						cout << "Trail{" << word << "} ";
+						break;
+					case Word::Cast:
+						cout << "Cast{" << word << "} ";
+						break;
+					case Word::Name:
+						cout << "Name{" << word << "} ";
+						break;
+						
+					default: assert(!"Not supposed to happen");
 				}
 			}
-		};
-		
-		for (string lineStr; getline(stream, lineStr); lineNumber++) {
-			print(lineStr);
+			
 			cout << '\n';
 		}
 	}
