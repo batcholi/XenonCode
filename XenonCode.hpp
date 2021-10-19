@@ -483,17 +483,17 @@ struct ParsedLine {
 	ParsedLine(const string& str) {
 		ParseWords(str, words, scope);
 		if (words.size() > 0) {
-			// Global Scope?
-			if (scope == 0) {
+			// Check first word validity for this Scope
+			if (scope == 0) { // Global scope
 				if (words[0] != Word::Name || find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords)) {
 					throw ParseError("Invalid first word '" + string(words[0]) + "' in the global scope");
 				}
-			} else {
+			} else { // Function scope
 				if (words[0] != Word::Varname && words[0] != Word::Funcname && (words[0] != Word::Name || find(begin(functionScopeFirstWords), end(functionScopeFirstWords), words[0]) == end(functionScopeFirstWords))) {
 					throw ParseError("Invalid first word '" + string(words[0]) + "' in a function scope");
 				}
 			}
-			//TODO validate the line and add expressions around math operations
+			//TODO validate the statement and add expressions around math operations
 		}
 	}
 };
@@ -517,7 +517,7 @@ struct SourceFile {
 					lines.pop_back();
 				}
 			} catch (ParseError& e) {
-				cout << e.what() << " at line " << lineNumber;
+				cout << e.what() << " at line " << lineNumber << endl;
 				return;
 			}
 		}
