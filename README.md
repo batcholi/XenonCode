@@ -317,15 +317,14 @@ These operators will compute the appropriate math operation and assign the resul
 - `^=`
 
 ## Conditional Operators
-- `==` or `is` equal to
-- `<>` or `!=` or `not` not equal to
+- `==` equal to
+- `<>` or `!=` not equal to
 - `>` greater than
 - `<` lesser than
 - `<=` lesser or equal to
 - `>=` greater or equal to
 - `&&` or `and` conditional AND
 - `||` or `or` conditional OR
-- `xor` conditional exclusive or
 
 ## Other operators
 - `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable

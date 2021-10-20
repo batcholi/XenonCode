@@ -16,7 +16,7 @@ namespace XenonCode {
 
 const size_t MAX_TEXT_LENGTH = 256;
 
-enum class WORD_TYPE : uint8_t {
+enum class CODE_TYPE : uint8_t {
 	VOID = 0,
 
 	FILE,
@@ -63,8 +63,8 @@ public:
 	ByteCode(uint32_t rawValue = 0) : rawValue(rawValue) {}
 	ByteCode(uint8_t type, uint32_t value) : value(value), type(type) {}
 	
-	WORD_TYPE GetType() const {
-		return WORD_TYPE(type);
+	CODE_TYPE GetType() const {
+		return CODE_TYPE(type);
 	}
 	uint32_t GetValue() const {
 		return value;
@@ -224,6 +224,9 @@ bool isoperator(int c) {
 		case '!':
 		case '~':
 		case '?':
+		case '.':
+		case ':':
+		case ',':
 			return true;
 		default: return false;
 	}
@@ -235,28 +238,44 @@ bool isalnum_(int c) {
 	return isalnum(c) || c == '_';
 }
 
+class ParseError : public runtime_error {
+	using runtime_error::runtime_error;
+};
+
+#define THROW_PARSE_ERROR(pre,word,...) throw ParseError(pre " '" + string(word) + "' " __VA_ARGS__);
+
 struct Word {
 	string word = "";
 	
-	enum Type {
+	enum Type : int {
 		// Intermediate types
-		Empty, // nothing or comment or \n
+		Empty = 0, // nothing or comment or \n
+		Invalid,
 		Tab, // \t
 		Expression, // ( )
-		Invalid,
+		Operator, // + - * / ++ -- ....
 		
 		// Final types
-		Numeric, // 0.0
+		Numeric = 11, // 0.0
 		Text, // ""
 		Varname, // $
 		Funcname, // @
-		Operator, // +
+		Name, // any other alphanumeric word that starts with alpha
 		ExpressionBegin, // (
 		ExpressionEnd, // )
-		Comma, // ,
-		Trail, // .
-		Cast, // :
-		Name, // any other alphanumeric word that starts with alpha
+		// Operators
+		TrailOperator = 101, // .
+		CastOperator, // :
+		SuffixOperatorGroup, // ++ --
+		NotOperator, // !
+		MulOperatorGroup, // * / ^ %
+		AddOperatorGroup, // + -
+		CompareOperatorGroup, // < <= > >=
+		EqualityOperatorGroup, // == != <>
+		AndOperator, // && and
+		OrOperator, // || or
+		AssignmentOperatorGroup, // = += -= *= /= ^= %=
+		CommaOperator // ,
 	} type = Empty;
 	
 	void Clear() {
@@ -297,18 +316,6 @@ struct Word {
 	Word(istringstream& s) {
 		for (int c; (c = s.get()) != -1; ) if (c != ' ') {
 			switch (c) {
-				case ',':{
-					word = c;
-					type = Comma;
-				}return;
-				case '.':{
-					word = c;
-					type = Trail;
-				}return;
-				case ':':{
-					word = c;
-					type = Cast;
-				}return;
 				case '\t':{
 					word = c;
 					type = Tab;
@@ -320,7 +327,7 @@ struct Word {
 							word += tolower(s.get());
 						} while (!s.eof() && isalnum_(s.peek()));
 						type = Varname;
-					}
+					} else throw ParseError("Invalid var/const name");
 				}return;
 				// User-defined Functions
 				case '@':{
@@ -329,7 +336,7 @@ struct Word {
 							word += tolower(s.get());
 						} while (!s.eof() && isalnum_(s.peek()));
 						type = Funcname;
-					}
+					} else throw ParseError("Invalid function name");
 				}return;
 				// Text literals
 				case '"':{
@@ -425,10 +432,6 @@ ostream& operator << (ostream& s, const Word& w) {
 	return s << string(w);
 }
 
-class ParseError : public runtime_error {
-	using runtime_error::runtime_error;
-};
-
 void ParseWords(const string& str, vector<Word>& words, int& scope) {
 	istringstream line(str);
 	while (Word word {line}) {
@@ -441,11 +444,60 @@ void ParseWords(const string& str, vector<Word>& words, int& scope) {
 			ParseWords(word, words, scope);
 			words.push_back(Word::ExpressionEnd);
 		} else if (word == Word::Invalid) {
-			throw ParseError("Invalid character '" + string(word) + "'");
+			THROW_PARSE_ERROR("Invalid character", word)
 		} else {
+			if (word == Word::Operator) {
+				if (word == ".")
+					word.type = Word::TrailOperator;
+				else if (word == ":")
+					word.type = Word::CastOperator;
+				else if (word == "++" || word == "--")
+					word.type = Word::SuffixOperatorGroup;
+				else if (word == "!")
+					word.type = Word::NotOperator;
+				else if (word == "*" || word == "/" || word == "^" || word == "%")
+					word.type = Word::MulOperatorGroup;
+				else if (word == "+" || word == "-")
+					word.type = Word::AddOperatorGroup;
+				else if (word == "<" || word == ">" || word == "<=" || word == ">=")
+					word.type = Word::CompareOperatorGroup;
+				else if (word == "==" || word == "!=" || word == "<>")
+					word.type = Word::EqualityOperatorGroup;
+				else if (word == "&&")
+					word.type = Word::AndOperator;
+				else if (word == "||")
+					word.type = Word::OrOperator;
+				else if (word == "=" || word == "+=" || word == "-=" || word == "*=" || word == "/=" || word == "^=" || word == "%=")
+					word.type = Word::AssignmentOperatorGroup;
+				else if (word == ",")
+					word.type = Word::CommaOperator;
+				else THROW_PARSE_ERROR("Invalid Operator", word)
+			} else if (word == Word::Name) {
+				if (word == "and")
+					word.type = Word::AndOperator;
+				else if (word == "or")
+					word.type = Word::OrOperator;
+			}
 			words.push_back(word);
 		}
 	}
+}
+
+// Returns the position to continue, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
+int ParseExpression(vector<Word>& words, int startAt) {
+	if (words.size() == startAt+1 && (words[startAt] == Word::Numeric || words[startAt] == Word::Text)) {
+		// Literal expression, Nothing more to do here
+		return -1;
+	} else {
+		//TODO Validate and Encapsulate operations within expressions, recursively
+		return -1;
+	}
+}
+
+// Returns the position to continue, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
+int ParseDeclarationArgs(vector<Word>& words, int startAt) {
+	//TODO
+	return -1;
 }
 
 const vector<string> globalScopeFirstWords {
@@ -486,18 +538,231 @@ struct ParsedLine {
 	
 	ParsedLine(const string& str) {
 		ParseWords(str, words, scope);
+		
 		if (words.size() > 0) {
+			
 			// Check first word validity for this Scope
 			if (scope == 0) { // Global scope
 				if (words[0] != Word::Name || find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords)) {
-					throw ParseError("Invalid first word '" + string(words[0]) + "' in the global scope");
+					THROW_PARSE_ERROR("Invalid first word", words[0], "in the global scope")
 				}
 			} else { // Function scope
 				if (words[0] != Word::Varname && words[0] != Word::Funcname && (words[0] != Word::Name || find(begin(functionScopeFirstWords), end(functionScopeFirstWords), words[0]) == end(functionScopeFirstWords))) {
-					throw ParseError("Invalid first word '" + string(words[0]) + "' in a function scope");
+					THROW_PARSE_ERROR("Invalid first word", words[0], "in a function scope")
 				}
 			}
-			//TODO validate the statement and add expressions around math operations
+			
+			// Validate statement (and insert/modify words to standarize it)
+			if (words[0] == Word::Name) {
+				
+				// Only in Global Scope
+				
+				// include
+					if (words[0] == "include") {
+						if (words.size() > 1) {
+							if (words[1] == Word::Text) {
+								// Valid
+							} else if (words[1] == Word::Name) {
+								words[1].type = Word::Text;
+							} else {
+								THROW_PARSE_ERROR("Invalid file name", words[1])
+							}
+							if (words.size() > 2) {
+								throw ParseError("Too many words");
+							}
+						} else throw ParseError("Too few words");
+					} else
+					
+				// init
+					if (words[0] == "init") {
+						if (words.size() != 1) throw ParseError("Too many words");
+					} else
+					
+				// tick
+					if (words[0] == "tick") {
+						if (words.size() != 1) throw ParseError("Too many words");
+					} else
+					
+				// timer
+					if (words[0] == "timer") {
+						if (words.size() > 1 && words[1] != "frequency" && words[1] != "interval") {
+							throw ParseError("Second word must be either 'frequency' or 'interval'");
+						}
+						if (words.size() > 2 && words[2] != Word::Numeric && words[2] != Word::Varname) {
+							throw ParseError("Third word must be either a literal number or a constant name");
+						}
+						if (words.size() > 3) throw ParseError("Too many words");
+						if (words.size() < 3) throw ParseError("Too few words");
+					} else
+					
+				// function
+					if (words[0] == "function") {
+						if (words.size() > 1 && words[1] != Word::Funcname) {
+							throw ParseError("Second word must be a valid function name starting with @");
+						}
+						if (words.size() > 2 && words[2] != Word::ExpressionBegin) {
+							throw ParseError("Function name must be followed by a set of parenthesis, optionally containing an argument list");
+						}
+						if (words.size() < 4) throw ParseError("Too few words");
+						int next = ParseDeclarationArgs(words, 2);
+						if (next != -1) {
+							if (words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
+								// Valid
+							} else {
+								throw ParseError("The only thing that can follow a function's argument list is a colon and its return type, which must be either 'number' or 'text'");
+							}
+						}
+					} else
+					
+				// input
+					if (words[0] == "input") {
+						if (words.size() > 1 && words[1] != Word::TrailOperator) {
+							throw ParseError("The input word must be followed by a dot and the input number");
+						}
+						if (words.size() > 2 && words[2] != Word::Numeric && words[2] != Word::Varname) {
+							throw ParseError("The input number after the dot must be either a literal number or a constant name");
+						}
+						if (words.size() > 3 && words[3] != Word::ExpressionBegin) {
+							throw ParseError("Input number must be followed by a set of parenthesis, optionally containing an argument list");
+						}
+						if (words.size() < 5) throw ParseError("Too few words");
+						if (ParseDeclarationArgs(words, 3) != -1) {
+							throw ParseError("Too many words");
+						}
+					} else
+					
+				// const
+					if (words[0] == "const") {
+						if (words.size() >= 4) {
+							if (words[1] != Word::Varname) throw ParseError("Invalid constant name (must start with $)");
+							if (words[2] != "=") throw ParseError("Invalid const assignation");
+							if (ParseExpression(words, 3) != -1) throw ParseError("Invalid expression in const assignation");
+						} else throw ParseError("Too few words");
+					} else
+					
+				// storage
+					if (words[0] == "storage") {
+						if (words.size() > 1 && words[1] != "var" && words[1] != "array") {
+							throw ParseError("Second word must be either 'var' or 'array'");
+						}
+						if (words.size() > 2 && words[2] != Word::Varname
+						|| words.size() > 3 && words[3] != Word::CastOperator
+						) {
+							throw ParseError("Third word must be a variable name (starting with $) followed by a colon and the storage type (number or text)");
+						}
+						if (words.size() > 4 && words[4] != "number" && words[4] != "text") {
+							THROW_PARSE_ERROR("Invalid storage type", words[4], "it must be either 'number' or 'text'")
+						}
+						if (words.size() > 5 && words[5] == "=") {
+							throw ParseError("Cannot initialize storage values here");
+						}
+						if (words.size() > 5) throw ParseError("Too many words");
+						if (words.size() < 5) throw ParseError("Too few words");
+					} else
+					
+				// In both Global and Function scopes
+				
+				// var
+					if (words[0] == "var") {
+						if (words.size() > 1 && words[1] != Word::Varname
+						 || words.size() < 4
+						 || words[2] != "=" && words[2] != Word::CastOperator
+						 || words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text"
+						 || words[2] == Word::CastOperator && words.size() > 4
+						) {
+							throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
+						}
+						if (words[2] == "=") {
+							if (ParseExpression(words, 3) != -1) throw ParseError("Invalid expression in var assignation");
+						}
+					} else
+					
+				// array
+					if (words[0] == "array") {
+						if (words.size() > 1 && words[1] != Word::Varname
+						|| words.size() > 2 && words[2] != Word::CastOperator
+						) {
+							throw ParseError("Second word must be a variable name (starting with $) followed by a colon and the array type (number or text)");
+						}
+						if (words.size() > 3 && words[3] != "number" && words[3] != "text") {
+							THROW_PARSE_ERROR("Invalid array type", words[3], "it must be either 'number' or 'text'")
+						}
+						if (words.size() > 4 && words[4] == "=") {
+							throw ParseError("Cannot initialize array values here");
+						}
+						if (words.size() > 4) throw ParseError("Too many words");
+						if (words.size() < 4) throw ParseError("Too few words");
+					} else
+					
+				// Only in Function scope
+				
+				// output
+					if (words[0] == "output") {
+						
+					} else
+					
+				// foreach
+					if (words[0] == "foreach") {
+						
+					} else
+					
+				// repeat
+					if (words[0] == "repeat") {
+						
+					} else
+					
+				// while
+					if (words[0] == "while") {
+						
+					} else
+					
+				// break
+					if (words[0] == "break") {
+						
+					} else
+					
+				// next
+					if (words[0] == "next") {
+						
+					} else
+					
+				// if
+					if (words[0] == "if") {
+						
+					} else
+					
+				// elseif
+					if (words[0] == "elseif") {
+						
+					} else
+					
+				// else
+					if (words[0] == "else") {
+						
+					} else
+					
+				// return
+					if (words[0] == "return") {
+						
+					} else
+					
+				THROW_PARSE_ERROR("Invalid word", words[0])
+			} else
+			
+			// Only in Function scope
+			
+			// Varname
+				if (words[0] == Word::Varname) {
+					
+				} else
+				
+			// Funcname
+				if (words[0] == Word::Funcname) {
+					
+				} else
+				
+			THROW_PARSE_ERROR("Invalid word", words[0])
+			
 		}
 	}
 };
@@ -546,29 +811,53 @@ struct SourceFile {
 						case Word::Funcname:
 							cout << "Funcname{" << word << "} ";
 							break;
-						case Word::Operator:
-							cout << "Operator{" << word << "} ";
-							break;
 						case Word::ExpressionBegin:
 							cout << "Expression{ ";
 							break;
 						case Word::ExpressionEnd:
 							cout << "} ";
 							break;
-						case Word::Comma:
-							cout << "Comma{" << word << "} ";
-							break;
-						case Word::Trail:
-							cout << "Trail{" << word << "} ";
-							break;
-						case Word::Cast:
-							cout << "Cast{" << word << "} ";
-							break;
 						case Word::Name:
 							cout << "Name{" << word << "} ";
 							break;
+						case Word::TrailOperator:
+							cout << "TrailOperator{" << word << "} ";
+							break;
+						case Word::CastOperator:
+							cout << "CastOperator{" << word << "} ";
+							break;
+						case Word::SuffixOperatorGroup:
+							cout << "SuffixOperatorGroup{" << word << "} ";
+							break;
+						case Word::NotOperator:
+							cout << "NotOperator{" << word << "} ";
+							break;
+						case Word::MulOperatorGroup:
+							cout << "MulOperatorGroup{" << word << "} ";
+							break;
+						case Word::AddOperatorGroup:
+							cout << "AddOperatorGroup{" << word << "} ";
+							break;
+						case Word::CompareOperatorGroup:
+							cout << "CompareOperatorGroup{" << word << "} ";
+							break;
+						case Word::EqualityOperatorGroup:
+							cout << "EqualityOperatorGroup{" << word << "} ";
+							break;
+						case Word::AndOperator:
+							cout << "AndOperator{" << word << "} ";
+							break;
+						case Word::OrOperator:
+							cout << "OrOperator{" << word << "} ";
+							break;
+						case Word::AssignmentOperatorGroup:
+							cout << "AssignmentOperatorGroup{" << word << "} ";
+							break;
+						case Word::CommaOperator:
+							cout << "CommaOperator{" << word << "} ";
+							break;
 							
-						default: assert(!"Not supposed to happen");
+						default: assert(!"Parse Error");
 					}
 				}
 				
@@ -580,3 +869,5 @@ struct SourceFile {
 };
 
 }
+
+#undef THROW_PARSE_ERROR
