@@ -410,10 +410,6 @@ Since we cannot pass Arrays as function arguments, arrays can only take their ow
 
 # Built-in functions
 
-### Device functions
-Device functions are defined per implementation. In other words, the games that implement this language into their gameplay may define their own functions here.  
-These functions may also be different between two distinct device types in the same game.  
-
 ### Math
 These functions are defined in the base language and they take one or more arguments.  
 Trailing math functions will use the leading variable as its first argument and modify that variable with the return value.  
