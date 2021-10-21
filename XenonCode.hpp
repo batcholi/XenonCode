@@ -496,6 +496,14 @@ int ParseExpression(vector<Word>& words, int startAt) {
 
 // Returns the position to continue, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
 int ParseDeclarationArgs(vector<Word>& words, int startAt) {
+	// Args MUST be surrounded by parenthesis
+	//TODO
+	return -1;
+}
+
+// Returns the position to continue, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
+int ParseArgs(vector<Word>& words, int startAt) {
+	// Args MUST be surrounded by parenthesis
 	//TODO
 	return -1;
 }
@@ -635,8 +643,8 @@ struct ParsedLine {
 					if (words[0] == "const") {
 						if (words.size() >= 4) {
 							if (words[1] != Word::Varname) throw ParseError("Invalid constant name (must start with $)");
-							if (words[2] != "=") throw ParseError("Invalid const assignation");
-							if (ParseExpression(words, 3) != -1) throw ParseError("Invalid expression in const assignation");
+							if (words[2] != "=") throw ParseError("Invalid const assignment");
+							if (ParseExpression(words, 3) != -1) throw ParseError("Invalid expression after const assignment");
 						} else throw ParseError("Too few words");
 					} else
 					
@@ -673,7 +681,9 @@ struct ParsedLine {
 							throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
 						}
 						if (words[2] == "=") {
-							if (ParseExpression(words, 3) != -1) throw ParseError("Invalid expression in var assignation");
+							if (ParseExpression(words, 3) != -1) {
+								throw ParseError("Invalid expression after var assignment");
+							}
 						}
 					} else
 					
@@ -698,52 +708,104 @@ struct ParsedLine {
 				
 				// output
 					if (words[0] == "output") {
-						
+						if (words.size() > 1 && words[1] != Word::TrailOperator) {
+							throw ParseError("Output must be followed by a dot and the output number");
+						}
+						if (words.size() > 2 && words[2] != Word::Numeric && words[2] != Word::Varname) {
+							throw ParseError("Output number must be either a literal number or a constant name starting with $");
+						}
+						if (words.size() > 3 && words[3] != Word::ExpressionBegin) {
+							throw ParseError("Output number must be followed by a set of parenthesis, optionally containing arguments");
+						}
+						if (words.size() < 5) {
+							throw ParseError("Too few words");
+						}
+						if (ParseArgs(words, 3) != -1) {
+							throw ParseError("Invalid argument list after output call");
+						}
 					} else
 					
 				// foreach
 					if (words[0] == "foreach") {
-						
+						if (words.size() > 1 && words[1] != Word::Varname) {
+							throw ParseError("Foreach must be followed by an array variable name starting with $");
+						}
+						if (words.size() > 2 && words[2] != Word::ExpressionBegin
+						 || words.size() > 3 && words[3] != Word::Varname
+						 || words.size() > 4 && words[4] != Word::ExpressionEnd && words[4] != Word::CommaOperator
+						 || words.size() > 5 && words[5] != Word::Varname
+						 || words.size() > 6 && words[6] != Word::ExpressionEnd
+						) {
+							throw ParseError("Foreach must be followed by an array name and a set of parenthesis containing one or two parameters (the item and optionally the index)");
+						}
+						if (words.size() < 5) {
+							throw ParseError("Too few words");
+						}
+						if (words.size() > 7) {
+							throw ParseError("Too many words");
+						}
 					} else
 					
 				// repeat
 					if (words[0] == "repeat") {
-						
+						if (words.size() > 1 && words[1] != Word::Numeric && words[1] != Word::Varname) {
+							throw ParseError("Repeat must be followed by either a literal number or a variable name starting with $");
+						}
+						if (words.size() > 2 && words[2] != Word::ExpressionBegin
+						 || words.size() > 3 && words[3] != Word::Varname
+						 || words.size() > 4 && words[4] != Word::ExpressionEnd
+						) {
+							throw ParseError("Repeat must be followed by a number and a set of parenthesis containing one parameter (the index)");
+						}
+						if (words.size() < 5) {
+							throw ParseError("Too few words");
+						}
+						if (words.size() > 5) {
+							throw ParseError("Too many words");
+						}
 					} else
 					
 				// while
 					if (words[0] == "while") {
-						
+						if (words.size() == 1 || ParseExpression(words, 1) != -1) {
+							throw ParseError("While must be followed by a boolean expression");
+						}
 					} else
 					
 				// break
 					if (words[0] == "break") {
-						
+						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
 				// next
 					if (words[0] == "next") {
-						
+						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
 				// if
 					if (words[0] == "if") {
-						
+						if (words.size() == 1 || ParseExpression(words, 1) != -1) {
+							throw ParseError("If must be followed by a boolean expression");
+						}
 					} else
 					
 				// elseif
 					if (words[0] == "elseif") {
-						
+						if (words.size() == 1 || ParseExpression(words, 1) != -1) {
+							throw ParseError("Elseif must be followed by a boolean expression");
+						}
 					} else
 					
 				// else
 					if (words[0] == "else") {
-						
+						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
 				// return
 					if (words[0] == "return") {
-						
+						if (words.size() > 1 && ParseExpression(words, 1) != -1) {
+							throw ParseError("Return must be followed by nothing, an expression, a variable name or a literal value");
+						}
 					} else
 					
 				THROW_PARSE_ERROR("Invalid word", words[0])
@@ -753,12 +815,62 @@ struct ParsedLine {
 			
 			// Varname
 				if (words[0] == Word::Varname) {
-					
+					if (words.size() < 2 || words[1] != Word::TrailOperator && words[1] != Word::AssignmentOperatorGroup && words[1] != Word::SuffixOperatorGroup) {
+						throw ParseError("A leading variable name must be followed either by a trailing function, an assignment or a suffix operator");
+					}
+					if (words[1] == Word::AssignmentOperatorGroup) {
+						if (words.size() < 3) {
+							throw ParseError("Too few words");
+						}
+						if (ParseExpression(words, 2) != -1) {
+							throw ParseError("Invalid expression after var assignment");
+						}
+					} else if (words[1] == Word::SuffixOperatorGroup) {
+						if (words.size() > 2) {
+							throw ParseError("Too many words");
+						}
+					} else if (words[1] == Word::TrailOperator) {
+						if (words.size() < 5) {
+							throw ParseError("Too few words");
+						}
+						// Array accessor
+						if (words[2] == Word::Numeric || words[2] == Word::Varname) {
+							if (words[3] == Word::AssignmentOperatorGroup) {
+								if (ParseExpression(words, 4) != -1) {
+									throw ParseError("Invalid expression after var assignment");
+								}
+							} else {
+								throw ParseError("Invalid expression after var assignment");
+							}
+						} else
+						// Trailing function
+						if (words[2] == Word::Name || words[2] == Word::Funcname) {
+							if (words[3] == Word::ExpressionBegin) {
+								if (ParseArgs(words, 3) != -1) {
+									throw ParseError("Invalid argument list after trailing function on var");
+								}
+							} else {
+								throw ParseError("Invalid expression after trailing function on var");
+							}
+						} else {
+							throw ParseError("Invalid expression after var assignment");
+						}
+					} else {
+						throw ParseError("Invalid expression after var assignment");
+					}
 				} else
 				
 			// Funcname
 				if (words[0] == Word::Funcname) {
-					
+					if (words.size() > 1 && words[1] != Word::ExpressionBegin) {
+						throw ParseError("A function call must be followed by a set of parenthesis, optionally containing arguments");
+					}
+					if (words.size() < 3) {
+						throw ParseError("Too few words");
+					}
+					if (ParseArgs(words, 1) != -1) {
+						throw ParseError("Invalid argument list after function call");
+					}
 				} else
 				
 			THROW_PARSE_ERROR("Invalid word", words[0])

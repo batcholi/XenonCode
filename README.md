@@ -178,10 +178,9 @@ storage array $stuff:numeric
 ```
 
 ## Accessing/Assigning the nth item within an array
-To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 1-based index of the item, a variable containing that index, or an expression surrounded with parenthesis resulting in that index  
+To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 1-based index of the item or a variable containing that index
 `$stuff.1 = 5` // Assign the value 5 to the first item of the array
 `$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index
-`$stuff.($thing + 3) = 5` // Assign the value 5 to the item with an index defined by the given expression
 `$value = $stuff.2` // Assign the value of the second item of the array to the variable $value
 
 ## Accessing/Assigning the nth character within a text variable
@@ -268,7 +267,7 @@ This loop will repeat the execution of the following block a given number of tim
 repeat 5 ($i)
     // this block will be repeated 5 times, and $i is the 1-based index of this iteration (first time will be 1, last will be 5)
 ```
-The number of times (above specified as 5) may also be specified via a variable or expression
+The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
 
 ## While loops
 This loop will run the following block as long as the given condition evaluates to true.  
