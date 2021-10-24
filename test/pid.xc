@@ -8,14 +8,14 @@ var $max = 1
 var $integral:number
 var $pre_error:number
 
-input 0 ($_p:number, $_i:number, $_d:number, $_min:number, $_max:number)
+input.0 ($_p:number, $_i:number, $_d:number, $_min:number, $_max:number)
 	$p = $_p
 	$i = $_i
 	$d = $_d
 	$min = $_min
 	$max = $_max
 
-input 0 ($error:number) // $error is setpoint - pv
+input.0 ($error:number) // $error is setpoint - pv
 
 	// Proportional term
 	var $Pout = $p * $error
@@ -40,5 +40,5 @@ input 0 ($error:number) // $error is setpoint - pv
 	// Save error to previous error
 	$pre_error = $error
 
-	output 0 ($output)
+	output.0 ($output)
 

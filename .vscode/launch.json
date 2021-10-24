@@ -5,11 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "g++ - Build and debug active file",
+            "name": "Build and Run XenonCode",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/test",
-            "args": ["--parse-debug", "../test/main.xc"],
+            "program": "${workspaceFolder}/build/xenoncode",
+            // "args": ["-verbose", "-parse-file", "../test/main.xc"],
+            "args": ["-verbose", "-compile", "../test"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],
@@ -22,7 +23,7 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "C/C++: g++ build active file",
+            "preLaunchTask": "Build XenonCode",
             "miDebuggerPath": "/usr/bin/gdb"
         }
     ]

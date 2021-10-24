@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <sstream>
+#include <fstream>
 #include <regex>
 #include <vector>
 #include <map>
@@ -60,12 +61,12 @@ bool isalnum_(int c) {
 	return isalnum(c) || c == '_';
 }
 
+static inline const int WORD_ENUM_FINAL_TYPE_START = 11;
+static inline const int WORD_ENUM_OPERATOR_START = 101;
+
 struct Word {
 	string word = "";
 	
-	static inline const int ENUM_FINAL_TYPE_START = 11;
-	static inline const int ENUM_OPERATOR_START = 101;
-
 	enum Type : int {
 		// Intermediate types
 		Empty = 0, // nothing or comment or \n
@@ -74,8 +75,10 @@ struct Word {
 		Expression, // ( )
 		Operator, // + - * / ++ -- ....
 		
+		FileInfo, // will contain the name of the current file, for error handling purposes
+		
 		// Final types starting here
-		Numeric = ENUM_FINAL_TYPE_START, // 0.0
+		Numeric = WORD_ENUM_FINAL_TYPE_START, // 0.0
 		Text, // ""
 		Varname, // $
 		Funcname, // @
@@ -84,7 +87,7 @@ struct Word {
 		ExpressionEnd, // )
 		
 		// Operators (by order of precedence)
-		TrailOperator = ENUM_OPERATOR_START, // .
+		TrailOperator = WORD_ENUM_OPERATOR_START, // .
 		CastOperator, // :
 		SuffixOperatorGroup, // ++ --
 		NotOperator, // !
@@ -479,6 +482,10 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 					cout << "CommaOperator{" << word << "} ";
 					break;
 					
+				case Word::FileInfo:
+					cout << "FileInfo{" << word << "} ";
+					break;
+					
 				default: assert(!"Parse Error");
 			}
 		} else {
@@ -523,6 +530,10 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 					cout << "|| ";
 					break;
 					
+				case Word::FileInfo:
+					cout << "// <" << word << "> ";
+					break;
+					
 				default: assert(!"Parse Error");
 			}
 		}
@@ -537,8 +548,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 	
 	// Handle single-word literal expressions (also includes single variable name)
 	if (startIndex == lastWord() && (words[startIndex] == Word::Numeric || words[startIndex] == Word::Text || words[startIndex] == Word::Varname)) {
-		// Literal expression, Nothing more to do here, return to caller
-		return -1;
+		return true;
 	}
 	
 	// Any other type of single-word expression should be invalid
@@ -547,16 +557,17 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 	}
 	
 	// Encapsulate operations within expressions, based on operator precedence
-	for (Word::Type op = Word::Type(Word::ENUM_OPERATOR_START); op < Word::CommaOperator; op = Word::Type(+op+1)) {
+	for (Word::Type op = Word::Type(WORD_ENUM_OPERATOR_START); op < Word::CommaOperator; op = Word::Type(+op+1)) {
 		for (int opIndex = startIndex; opIndex <= lastWord(); ++opIndex) {
 			if (words[opIndex] == op) {
+				auto word = words[opIndex];
 				int prevPos = opIndex-1;
 				int nextPos = opIndex+1;
 				Word prev = prevPos >= startIndex? words[prevPos] : Word::Empty;
 				Word next = nextPos <= lastWord()? words[nextPos] : Word::Empty;
 				
 				// Suffix operators (INVALID IN EXPRESSIONS, for now at least...)
-				if (words[opIndex] == Word::SuffixOperatorGroup) {
+				if (word == Word::SuffixOperatorGroup) {
 					
 					throw ParseError("Cannot use a suffix operator within an expression");
 						// if (!prev || prev != Word::Varname) {
@@ -575,39 +586,48 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 					}
 					if (next == Word::ExpressionBegin) {
 						nextPos = GetExpressionEnd(words, nextPos);
-						if (nextPos == -1 || nextPos > lastWord()) return false;
+						if (nextPos == -1 || nextPos > lastWord()) {
+							return false;
+						}
 					}
 					if (prev == Word::ExpressionEnd) {
 						prevPos = GetExpressionBegin(words, prevPos);
-						if (prevPos < startIndex) return false;
+						if (prevPos < startIndex) {
+							return false;
+						}
+					}
+					// Handle function calls (and cast) within expressions
+					if (next == Word::Name || next == Word::Funcname) {
+						Word after = nextPos+1 <= lastWord()? words[nextPos+1] : Word::Empty;
+						if (word != Word::CastOperator && after != Word::ExpressionBegin) {
+							return false;
+						}
+						if (after == Word::ExpressionBegin) {
+							nextPos = GetExpressionEnd(words, nextPos+1);
+							if (nextPos == -1 || nextPos > lastWord()) {
+								return false;
+							}
+						}
 					}
 					// Middle operators
-					if (prev && next && prev != Word::ExpressionBegin && next != Word::ExpressionEnd && prev.type < Word::ENUM_OPERATOR_START && next.type < Word::ENUM_OPERATOR_START) {
+					if (prev && next && prev != Word::ExpressionBegin && next != Word::ExpressionEnd && prev.type < WORD_ENUM_OPERATOR_START && next.type < WORD_ENUM_OPERATOR_START) {
 						Word before = prevPos >= startIndex && prevPos > 0? words[prevPos-1] : Word::Empty;
 						Word after = nextPos+1 <= lastWord()? words[nextPos+1] : Word::Empty;
-						if ((next == Word::Name || next == Word::Funcname) && after == Word::ExpressionBegin) { // this block prevents adding additional set of parenthesis around expressions like ($something:format(1.2))
-							int afterIndex = GetExpressionEnd(words, nextPos+1);
-							if (afterIndex == -1 || afterIndex > lastWord()) return false;
-							after = afterIndex+1 <= lastWord()? words[afterIndex+1] : Word::Empty;
-						}
-						if (before != Word::ExpressionBegin || after != Word::ExpressionEnd) {// Check if not already between parenthesis
-							if (words[opIndex] == Word::TrailOperator) {
+						// Check if not already between parenthesis
+						if (before != Word::ExpressionBegin || after != Word::ExpressionEnd) {
+							if (word == Word::TrailOperator) {
 								if (prev != Word::Varname) {
 									throw ParseError("A trail operator (.) is not allowed after", prev);
 								}
 								if (next != Word::Numeric && next != Word::Varname) {
 									throw ParseError("A trail operator (.) cannot be followed by", next, "within an expression");
 								}
-							} else if (words[opIndex] == Word::CastOperator) {
+							} else if (word == Word::CastOperator) {
 								if (prev != Word::Varname && prev != Word::ExpressionEnd) {
 									throw ParseError("A cast operator (:) is not allowed after", prev);
 								}
 								if (next != Word::Name) {
 									throw ParseError("A cast operator (:) cannot be followed by", next);
-								}
-								if (after == Word::ExpressionBegin) {
-									nextPos = GetExpressionEnd(words, nextPos+1);
-									if (nextPos == -1 || nextPos > lastWord()) return false;
 								}
 							}
 							words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
@@ -617,18 +637,18 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 						}
 					} else {
 						// Prefix operators
-						if (next && next != Word::ExpressionEnd && (words[opIndex] == Word::AddOperatorGroup || words[opIndex] == Word::NotOperator)) {
-							if (words[opIndex] == "-") {
+						if (next && next != Word::ExpressionEnd && (word == Word::AddOperatorGroup || word == Word::NotOperator)) {
+							if (word == "-") {
 								words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
 								words.insert(words.begin() + opIndex, Word::Numeric);
 								words.insert(words.begin() + opIndex, Word::ExpressionBegin);
 								opIndex += 2;
 								if (endIndex != -1) endIndex += 3;
-							} else if (words[opIndex] == "+") {
+							} else if (word == "+") {
 								words.erase(words.begin() + opIndex);
 								opIndex--;
 								if (endIndex != -1) --endIndex;
-							} else if (words[opIndex] == "!") {
+							} else if (word == "!") {
 								words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
 								words.insert(words.begin() + opIndex, Word::ExpressionBegin);
 								++opIndex;
@@ -694,6 +714,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 			Word::Funcname,
 			Word::Name,
 			Word::ExpressionBegin,
+			Word::ExpressionEnd,
 			Word::NotOperator,
 		}},
 		{Word::ExpressionEnd, {
@@ -939,13 +960,14 @@ const vector<string> functionScopeFirstWords {
 // Upon construction, it will parse the entire line from the given string, including expressions, and may throw ParseError
 struct ParsedLine {
 	int scope = 0;
+	int line = 0;
 	vector<Word> words {};
 	
 	operator bool () const {
 		return words.size() > 0;
 	}
 	
-	ParsedLine(const string& str) {
+	ParsedLine(const string& str, int line = 0) : line(line) {
 		ParseWords(str, words, scope);
 		
 		if (words.size() > 0) {
@@ -1278,39 +1300,51 @@ struct ParsedLine {
 			
 		}
 	}
+	
+	ParsedLine(const vector<Word>& words) : words(words) {}
+	ParsedLine(const Word& word) {
+		words.emplace_back(word);
+	}
 };
 
 // Upon construction, it will parse all lines from the given stream, and may throw ParseError
 struct SourceFile {
+	string filepath;
 	vector<ParsedLine> lines;
 
-	SourceFile(istream& stream) {
+	SourceFile(const string& filepath) : filepath(filepath) {
+		ifstream stream{filepath};
+		
+		if (stream.fail()) {
+			throw ParseError("File not found '" + filepath + "'");
+		}
+		
+		lines.emplace_back(Word{Word::FileInfo, filepath});
+		
 		int lineNumber = 1;
 		int scope = 0;
 		
 		// Parse all lines
 		for (string lineStr; getline(stream, lineStr); lineNumber++) {
 			try {
-				auto& line = lines.emplace_back(lineStr);
+				auto& line = lines.emplace_back(lineStr, lineNumber);
 				if (line.scope > scope + 1) {
 					throw ParseError("Too many leading tabs");
 				}
 				scope = line.scope;
 			} catch (ParseError& e) {
 				stringstream err {};
-				err << e.what() << " at line " << lineNumber;
+				err << e.what() << " at line " << lineNumber << " in " << filepath;
 				throw ParseError(err.str());
 			}
 		}
 	}
 	
 	void DebugParsedLines() {
-		int lineNumber = 0;
 		for (auto& line : lines) {
-			++lineNumber;
 			if (line) {
-				cout << setw(8) << lineNumber << ": " << string(line.scope,'\t');
-				DebugWords(line.words, 0);
+				cout << setw(8) << line.line << ": " << string(line.scope,'\t');
+				DebugWords(line.words);
 				cout << endl;
 			}
 		}
@@ -1398,8 +1432,13 @@ public:
 	uint32_t ram_numericArrays = 0;
 	uint32_t ram_textArrays = 0;
 
-	Assembly() {}
+	// From ByteCode stream
 	explicit Assembly(istream& s) {Read(s);}
+	
+	// From Parsed lines of code
+	explicit Assembly(const vector<ParsedLine>& lines) {
+		//TODO
+	}
 
 	void Write(ostream& s) {
 		{// Write Header
