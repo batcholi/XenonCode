@@ -1,11 +1,10 @@
-
 // IOs
 const $altitudeSensor = 1
 const $console = 2
 const $screen = 3
 const $camera = 4
 
-include "functions"
+include "pid.xc"
 
 // Global variables
 var $currentTimeSeconds = 0
@@ -13,7 +12,7 @@ storage var $a:number
 storage array $stuff:text
 
 init // executed only once, when computer is powered on
-	$a = 2 + (1+1) * 2 - (5 - (1+3 - 8*0)) // Should result in 5
+	$a = 2 + (1+1) * +2 - (5.0 - (1+3 + -8*0)) // Should result in 5
 	if $a == 5
 		output.2 ("Hello, World!")
 		@test()
@@ -30,8 +29,13 @@ init // executed only once, when computer is powered on
 		output.$console ($item)
 
 input.$altitudeSensor ($altitude:number) // executed when receiving data from the sensor
-	$outputText = "My altitude is " round($altitude, 2):format(1.2) " meters"
+	$outputText = "My altitude is " round($altitude, 2, 0):format(1.2) " meters"
 	output.$console($outputText)
+	
+function @showTotalTime($hours:number, $minutes:number):text
+	output.$screen("state", "fillColor #ffffff fontSize 0.06")
+	output.$screen("state", "left 0.01 top 0.01")
+	output.$screen("text StartThruster", $hours:format(2.0) ":" $minutes:format(2.0))
 
 timer frequency 1 // executed one time per second
 	$currentTimeSeconds++
@@ -50,4 +54,4 @@ input.$screen($btn:text)
 		output.$console("PSHHHHHHH!!!!")
 
 input.$camera($data:data)
-	output.$screen($data)
+	output.$screen($data, 5, "test")

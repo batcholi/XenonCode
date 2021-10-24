@@ -1,5 +1,0 @@
-function @showTotalTime($hours:number, $minutes:number):text
-    output.$screen("state", "fillColor #ffffff fontSize 0.06")
-    output.$screen("state", "left 0.01 top 0.01")
-	output.$screen("text StartThruster", $hours:format(2.0) ":" $minutes:format(2.0))
-  
