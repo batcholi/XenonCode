@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/test",
-            "args": ["../test/main.xc"],
+            "args": ["--parse-debug", "../test/main.xc"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],

@@ -16,6 +16,10 @@ using namespace std;
 
 namespace XenonCode {
 
+const int VERSION_MAJOR = 0;
+const int VERSION_MINOR = 0;
+const int VERSION_PATCH = 0;
+
 const size_t MAX_TEXT_LENGTH = 256;
 
 #pragma region Parser
@@ -1372,8 +1376,8 @@ public:
 };
 
 class Assembly {
-	const string parserFiletype = "XenonCode!";
-	const uint32_t parserVersion = 0;
+	static inline const string parserFiletype = "XenonCode!";
+	static inline const uint32_t parserVersion = VERSION_MINOR;
 	
 public:
 	uint32_t initSize = 0; // number of byte codes in the init code (uint32_t)
