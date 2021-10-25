@@ -444,20 +444,21 @@ Trailing math functions will use the leading variable as its first argument and 
 
 An implementation may add additional math functions for more advanced fonctionality, or even exclude some of them from this list. It is however discouraged to modify the standard behaviour of a base math function.  
 
-### Array functions
-These functions MUST be called as trailing functions, and they do not return anything
+### Text functions
+- `substring`(inputText, start, length) // returns a new string
+
+### Trailing functions for Arrays
+These functions MUST be called as trailing functions, and they do not return anything, instead they modify the array
 - $myArray.`clear`() // Empty an array
+- $myArray.`sort`() // Sort an array
 - $myArray.`append`(value) // Append a new value to an array
-- $myArray.`pop`(value) // Erase the last value in an array, reducing its size by one
+- $myArray.`pop`() // Erase the last value in an array, reducing its size by one
 - $myArray.`insert`(index, value) // Insert a new value to an array at a specific position, pushing back all following values by one
 - $myArray.`erase`(index) // Erase an element from an array at a specific index, pulling back all following values by one
 - $myArray.`fill`(qty, value) // Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
 
-### Text functions
-- `substring`(inputText, start, length) // returns a new string
-
-### Built-in trailing members
-Using the trail operator `.`, we can also refer to a specific information about certain types of variables.  
+### Trailing members for Arrays and Texts
+Using the trail operator `.`, we can also return a specific information about certain types of variables.  
 - $myArray.`size` // returns the number of elements in $myArray
 - $myText.`size` // returns the number of characters in $myText
 - $myArray.`min` // returns the minimum value within a number array
@@ -467,6 +468,9 @@ Using the trail operator `.`, we can also refer to a specific information about 
 - $myArray.`sum` // returns the sum of all values within a number array
 - $myArray.`last` // returns the value of the last item within an array, this also allows to modify that value by assigning an expression
 - $myText.`last` // returns the last character of a text variable, this also allows to modify that last character by assigning an expression
+
+### Device functions
+- `delta`() // returns the time difference in seconds from the last execution of this function
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game

@@ -1383,21 +1383,85 @@ struct SourceFile {
 
 #pragma region Compiler
 
+constexpr uint32_t Interpret3CharsAsInt(const char* str) {
+	return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (32 << 24);
+}
+#define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
+
+DEF_OP( SET ) // Assign
+DEF_OP( ADD ) // +
+DEF_OP( SUB ) // -
+DEF_OP( MUL ) // *
+DEF_OP( DIV ) // /
+DEF_OP( MOD ) // %
+DEF_OP( POW ) // ^
+DEF_OP( CCT ) // & (concat)
+DEF_OP( AND ) // &&
+DEF_OP( ORR ) // ||
+DEF_OP( EQQ ) // ==
+DEF_OP( NEQ ) // !=
+DEF_OP( LST ) // <
+DEF_OP( GRT ) // >
+DEF_OP( LTE ) // >=
+DEF_OP( GTE ) // <=
+DEF_OP( INC ) // ++
+DEF_OP( DEC ) // --
+DEF_OP( NOT ) // !
+DEF_OP( ABS ) // abs(number)
+DEF_OP( FLR ) // floor(number)
+DEF_OP( CIL ) // ceil(number)
+DEF_OP( RND ) // round(number)
+DEF_OP( SIN ) // sin(number)
+DEF_OP( COS ) // cos(number)
+DEF_OP( TAN ) // tan(number)
+DEF_OP( ASI ) // sin(number)
+DEF_OP( ACO ) // cos(number)
+DEF_OP( ATA ) // tan(number)
+DEF_OP( FRA ) // fract(number)
+DEF_OP( LOG ) // log(number, base)
+DEF_OP( SQR ) // sqrt(number)
+DEF_OP( SIG ) // sign(number)
+DEF_OP( CLP ) // clamp(number, min, max)
+DEF_OP( STP ) // step(t1, t2, number)
+DEF_OP( SMT ) // smoothstep(t1, t2, number)
+DEF_OP( LRP ) // lerp(number, number, t)
+DEF_OP( SLP ) // slerp(number, number, t)
+DEF_OP( NUM ) // cast numeric
+DEF_OP( TXT ) // cast text
+DEF_OP( FMT ) // format cast text
+DEF_OP( DEV ) // device function
+DEF_OP( OUT ) // output
+DEF_OP( JMP ) // jump to addr / goto
+DEF_OP( CLR ) // array.clear()
+DEF_OP( APP ) // array.append(value)
+DEF_OP( POP ) // array.pop()
+DEF_OP( INS ) // array.insert(index, value)
+DEF_OP( DEL ) // array.erase(index)
+DEF_OP( FLL ) // array.fill(qty, value)
+DEF_OP( ASC ) // array.sort(asc)
+DEF_OP( DSC ) // array.sort(desc)
+DEF_OP( SIZ ) // array.size  text.size
+DEF_OP( LAS ) // array.last  text.last
+DEF_OP( SUM ) // array.sum
+DEF_OP( MIN ) // array.min  min(number)
+DEF_OP( MAX ) // array.max  max(number)
+DEF_OP( AVG ) // array.avg  avg(number)
+DEF_OP( MED ) // array.med
+DEF_OP( SBS ) // substring(text, start, length)
+DEF_OP( DLT ) // delta()
+DEF_OP( CND ) // conditional jump (gotoAddrIfFalse, boolExpression)
+
 enum CODE_TYPE : uint8_t {
 	//TODO assign literal fixed values (0-255) to all items here, with reasonable strides between types, before publishing this for the first time
 	
 	// Statements
-	RETURN = 0, // 
+	RETURN = 0,
+	END = 10, // Must add this after each statement, helps validate validity and also makes the bytecode kind of human readable
+	OP = 32, // OP <DST> [<REFVALUE> ...] END
 
-	// GOTO,
-	// GOTO_IF,
+	// GOTO = 62,
+	// GOTO_IF = 63,
 	// GOTO_IF_NOT,
-	// NUMBER_OPERATION,
-	// TEXT_OPERATION,
-	// COMPARE,
-	// OUTPUT_FUNCTION,
-	// SYSTEM_FUNCTION,
-	// USER_FUNCTION,
 	
 	// Reference Values
 	ROM_CONST_NUMERIC,
@@ -1411,10 +1475,12 @@ enum CODE_TYPE : uint8_t {
 	RAM_DATA,
 	RAM_ARRAY_NUMERIC,
 	RAM_ARRAY_TEXT,
+	// Extra reference
+	ARRAY_INDEX,
+	OUTPUT_INDEX,
 };
 
 /*
-
 
 
 
@@ -1820,9 +1886,58 @@ public:
 									Word value = readWord();
 									validate(value);
 									// Determine Type
-									//TODO
-									assert(!"Not implemented yet");
-									
+									if (value == Word::Numeric) {
+										declareVar(name, RAM_VAR_NUMERIC);
+										if (double(value) != 0.0) {
+											//TODO add initialization code to rom_vars_init
+											assert(!"Not implemented yet");
+										}
+									} else if (value == Word::Text) {
+										declareVar(name, RAM_VAR_TEXT);
+										if (string(value) != "") {
+											//TODO add initialization code to rom_vars_init
+											assert(!"Not implemented yet");
+										}
+									} else if (value == Word::Varname) {
+										
+										auto ref = getVar(value);
+										
+										switch (ref.GetType()) {
+											case RAM_VAR_NUMERIC:
+											case ROM_CONST_NUMERIC:
+											case STORAGE_VAR_NUMERIC:
+												declareVar(name, RAM_VAR_NUMERIC);
+												break;
+											case RAM_VAR_TEXT:
+											case ROM_CONST_TEXT:
+											case STORAGE_VAR_TEXT:
+												declareVar(name, RAM_VAR_TEXT);
+												break;
+											default: throw ParseError("Invalid assignment");
+										}
+										
+										//TODO add initialization code to rom_vars_init
+										assert(!"Not implemented yet");
+										
+									} else if (value == Word::ExpressionBegin) {
+										
+										int closingIndex = GetExpressionEnd(line.words, nextWordIndex-1);
+										validate(closingIndex != -1);
+										value = computeConstExpression(line.words, nextWordIndex, closingIndex-1);
+										if (value == Word::Numeric) {
+											declareVar(name, RAM_VAR_NUMERIC);
+										} else if (value == Word::Text) {
+											declareVar(name, RAM_VAR_TEXT);
+										} else {
+											validate(false);
+										}
+										
+										//TODO add initialization code to rom_vars_init
+										assert(!"Not implemented yet");
+										
+									} else {
+										validate(false);
+									}
 								} else if (op == ":") {
 									Word type = readWord();
 									if (type == "number") {
@@ -1837,11 +1952,47 @@ public:
 							}
 							// array
 							else if (firstWord == "array") {
-								
+								string name = readWord();
+								validate(name != "");
+								validate(readWord() == ":");
+								Word type = readWord();
+								if (type == "number") {
+									declareVar(name, RAM_ARRAY_NUMERIC);
+								} else if (type == "text") {
+									declareVar(name, RAM_ARRAY_TEXT);
+								} else {
+									throw ParseError("Array declaration in global scope can only be of type 'number' or 'text'");
+								}
+								validate(!readWord());
 							}
 							// storage
 							else if (firstWord == "storage") {
-								
+								string what = readWord();
+								validate(what == "var" || what == "array");
+								string name = readWord();
+								validate(name != "");
+								validate(readWord() == ":");
+								Word type = readWord();
+								if (type == "number") {
+									if (what == "var") {
+										declareVar(name, STORAGE_VAR_NUMERIC);
+									} else if (what == "array") {
+										declareVar(name, STORAGE_ARRAY_NUMERIC);
+									} else {
+										validate(false);
+									}
+								} else if (type == "text") {
+									if (what == "var") {
+										declareVar(name, STORAGE_VAR_TEXT);
+									} else if (what == "array") {
+										declareVar(name, STORAGE_ARRAY_TEXT);
+									} else {
+										validate(false);
+									}
+								} else {
+									throw ParseError("Storage declaration in global scope can only be of type 'number' or 'text'");
+								}
+								validate(!readWord());
 							}
 							// init
 							else if (firstWord == "init") {
