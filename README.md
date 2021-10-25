@@ -329,6 +329,7 @@ These operators will compute the appropriate math operation and assign the resul
 - `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable
 - `:` (typecast operator) cast as another type / format or convert value
 - `&` (concat operator) concatenate texts
+- `!` (not operator) reverses a boolean value or expression (non-zero numbers become 0, and 0 becomes 1)
 
 ## Casting (parse variables as another type)
 
