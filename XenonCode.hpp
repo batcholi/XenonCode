@@ -1431,7 +1431,6 @@ DEF_OP( TXT ) // cast text
 DEF_OP( FMT ) // format cast text
 DEF_OP( DEV ) // device function
 DEF_OP( OUT ) // output
-DEF_OP( JMP ) // jump to addr / goto
 DEF_OP( CLR ) // array.clear()
 DEF_OP( APP ) // array.append(value)
 DEF_OP( POP ) // array.pop()
@@ -1449,42 +1448,33 @@ DEF_OP( AVG ) // array.avg  avg(number)
 DEF_OP( MED ) // array.med
 DEF_OP( SBS ) // substring(text, start, length)
 DEF_OP( DLT ) // delta()
+DEF_OP( JMP ) // jump to addr / goto
 DEF_OP( CND ) // conditional jump (gotoAddrIfFalse, boolExpression)
 
 enum CODE_TYPE : uint8_t {
-	//TODO assign literal fixed values (0-255) to all items here, with reasonable strides between types, before publishing this for the first time
-	
 	// Statements
 	RETURN = 0,
 	END = 10, // Must add this after each statement, helps validate validity and also makes the bytecode kind of human readable
 	OP = 32, // OP <DST> [<REFVALUE> ...] END
 
-	// GOTO = 62,
-	// GOTO_IF = 63,
-	// GOTO_IF_NOT,
-	
 	// Reference Values
-	ROM_CONST_NUMERIC,
-	ROM_CONST_TEXT,
-	STORAGE_VAR_NUMERIC,
-	STORAGE_VAR_TEXT,
-	STORAGE_ARRAY_NUMERIC,
-	STORAGE_ARRAY_TEXT,
-	RAM_VAR_NUMERIC,
-	RAM_VAR_TEXT,
-	RAM_DATA,
-	RAM_ARRAY_NUMERIC,
-	RAM_ARRAY_TEXT,
+	ROM_CONST_NUMERIC = 128,
+	ROM_CONST_TEXT = 129,
+	STORAGE_VAR_NUMERIC = 140,
+	STORAGE_VAR_TEXT = 141,
+	STORAGE_ARRAY_NUMERIC = 142,
+	STORAGE_ARRAY_TEXT = 143,
+	RAM_VAR_NUMERIC = 150,
+	RAM_VAR_TEXT = 151,
+	RAM_DATA = 155,
+	RAM_ARRAY_NUMERIC = 160,
+	RAM_ARRAY_TEXT = 161,
 	// Extra reference
-	ARRAY_INDEX,
-	OUTPUT_INDEX,
+	ARRAY_INDEX = 201,
+	OUTPUT_INDEX = 202,
+	
+	// Maximum value is 255
 };
-
-/*
-
-
-
-*/
 
 class ByteCode {
 	union {
