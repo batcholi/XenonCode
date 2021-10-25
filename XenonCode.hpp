@@ -12,6 +12,7 @@
 #include <stack>
 #include <cassert>
 #include <algorithm>
+#include <cmath>
 
 using namespace std;
 
@@ -85,13 +86,15 @@ struct Word {
 		Name, // any other alphanumeric word that starts with alpha
 		ExpressionBegin, // (
 		ExpressionEnd, // )
+		Void, // placeholder for operators with only two parameters
 		
 		// Operators (by order of precedence)
 		TrailOperator = WORD_ENUM_OPERATOR_START, // .
 		CastOperator, // :
+		ConcatOperator, // & (text concatenation operator)
 		SuffixOperatorGroup, // ++ --
 		NotOperator, // !
-		MulOperatorGroup, // * / ^ %
+		MulOperatorGroup, // ^ % * /
 		AddOperatorGroup, // + -
 		CompareOperatorGroup, // < <= > >=
 		EqualityOperatorGroup, // == != <>
@@ -168,6 +171,9 @@ struct Word {
 				case OrOperator:{
 					this->word = "||";
 					}break;
+				case ConcatOperator:{
+					this->word = "&";
+					}break;
 				case CommaOperator:{
 					this->word = ",";
 					}break;
@@ -206,11 +212,22 @@ struct Word {
 			}
 		}
 	}
-	
+	explicit Word(const string& value) : word(value), type(Text) {}
+	explicit Word(double value) : word(to_string(value)), type(Numeric) {}
 	Word(const Word& other) = default;
 	Word(Word&& other) = default;
 	Word& operator= (const Word& other) = default;
 	Word& operator= (Word&& other) = default;
+	Word& operator= (const string& value) {
+		word = value;
+		type = Text;
+		return *this;
+	}
+	Word& operator= (double value) {
+		word = to_string(value);
+		type = Numeric;
+		return *this;
+	}
 	
 	Word(istringstream& s) {
 		for (int c; (c = s.get()) != -1; ) if (c != ' ') {
@@ -349,6 +366,8 @@ void ParseWords(const string& str, vector<Word>& words, int& scope) {
 					word.type = Word::CastOperator;
 				else if (word == "++" || word == "--")
 					word.type = Word::SuffixOperatorGroup;
+				else if (word == "&")
+					word.type = Word::ConcatOperator;
 				else if (word == "!")
 					word.type = Word::NotOperator;
 				else if (word == "*" || word == "/" || word == "^" || word == "%")
@@ -386,9 +405,10 @@ void ParseWords(const string& str, vector<Word>& words, int& scope) {
 }
 
 // From a given index of an opening parenthesis, returns the index of the corresponsing closing parenthesis, or -1 if not found. 
-int GetExpressionEnd(vector<Word>& words, int begin) {
+int GetExpressionEnd(const vector<Word>& words, int begin, int end = -1) {
 	int stack = 0;
-	while(++begin < words.size()) {
+	if (end == -1) end = words.size()-1;
+	while(++begin <= end) {
 		if (words[begin] == Word::ExpressionEnd) {
 			if (stack == 0) return begin;
 			--stack;
@@ -400,7 +420,7 @@ int GetExpressionEnd(vector<Word>& words, int begin) {
 }
 
 // From a given index of a closing parenthesis, returns the index of the corresponsing opening parenthesis, or -1 if not found. This function will include a leading Name if there is one (for a function call)
-int GetExpressionBegin(vector<Word>& words, int end) {
+int GetExpressionBegin(const vector<Word>& words, int end) {
 	int stack = 0;
 	while(--end >= 0) {
 		if (words[end] == Word::ExpressionBegin) {
@@ -454,6 +474,9 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 				case Word::SuffixOperatorGroup:
 					cout << "SuffixOperatorGroup{" << word << "} ";
 					break;
+				case Word::ConcatOperator:
+					cout << "ConcatOperator{" << word << "} ";
+					break;
 				case Word::NotOperator:
 					cout << "NotOperator{" << word << "} ";
 					break;
@@ -480,6 +503,9 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 					break;
 				case Word::CommaOperator:
 					cout << "CommaOperator{" << word << "} ";
+					break;
+				case Word::Void:
+					cout << "void ";
 					break;
 					
 				case Word::FileInfo:
@@ -514,6 +540,7 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 				case Word::TrailOperator:
 				case Word::CastOperator:
 				case Word::SuffixOperatorGroup:
+				case Word::ConcatOperator:
 				case Word::NotOperator:
 				case Word::MulOperatorGroup:
 				case Word::AddOperatorGroup:
@@ -528,6 +555,8 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 					break;
 				case Word::OrOperator:
 					cout << "|| ";
+					break;
+				case Word::Void:
 					break;
 					
 				case Word::FileInfo:
@@ -646,13 +675,14 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 								if (endIndex != -1) endIndex += 3;
 							} else if (word == "+") {
 								words.erase(words.begin() + opIndex);
-								opIndex--;
+								--opIndex;
 								if (endIndex != -1) --endIndex;
 							} else if (word == "!") {
 								words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
+								words.insert(words.begin() + opIndex, Word::Void);
 								words.insert(words.begin() + opIndex, Word::ExpressionBegin);
-								++opIndex;
-								if (endIndex != -1) endIndex += 2;
+								opIndex += 2;
+								if (endIndex != -1) endIndex += 3;
 							} else {
 								assert(!"Operator not implement"); // Not supposed to happen
 							}
@@ -678,18 +708,11 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 		}},
 		{Word::Text, {
 			Word::Text,
-			Word::Varname,
-			Word::Funcname,
-			Word::Name,
-			Word::ExpressionBegin,
 			Word::ExpressionEnd,
+			Word::ConcatOperator,
 			Word::CommaOperator,
 		}},
 		{Word::Varname, {
-			Word::Text,
-			Word::Varname,
-			Word::Funcname,
-			Word::Name,
 			Word::ExpressionEnd,
 			Word::TrailOperator,
 			Word::CastOperator,
@@ -699,6 +722,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 			Word::EqualityOperatorGroup,
 			Word::AndOperator,
 			Word::OrOperator,
+			Word::ConcatOperator,
 			Word::CommaOperator,
 		}},
 		{Word::Funcname, {
@@ -714,15 +738,10 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 			Word::Funcname,
 			Word::Name,
 			Word::ExpressionBegin,
-			Word::ExpressionEnd,
-			Word::NotOperator,
+			Word::Void,
 		}},
 		{Word::ExpressionEnd, {
-			Word::Text,
-			Word::Varname,
-			Word::Funcname,
-			Word::Name,
-			Word::ExpressionBegin,
+			Word::ConcatOperator,
 			Word::ExpressionEnd,
 			Word::CastOperator,
 			Word::MulOperatorGroup,
@@ -742,7 +761,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 		{Word::CastOperator, {
 			Word::Name,
 		}},
-		// {Word::SuffixOperatorGroup, {}}, // Not allowed within expression
+		// {Word::SuffixOperatorGroup, {}}, // Not allowed within expressions
 		{Word::NotOperator, {
 			Word::Numeric,
 			Word::Varname,
@@ -793,9 +812,19 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 			Word::Name,
 			Word::ExpressionBegin,
 		}},
-		// {Word::AssignmentOperatorGroup, {}}, // Not allowed within expression
+		// {Word::AssignmentOperatorGroup, {}}, // Not allowed within expressions
 		{Word::CommaOperator, {
 			Word::Numeric,
+			Word::Text,
+			Word::Varname,
+			Word::Funcname,
+			Word::Name,
+			Word::ExpressionBegin,
+		}},
+		{Word::Void, {
+			Word::NotOperator,
+		}},
+		{Word::ConcatOperator, {
 			Word::Text,
 			Word::Varname,
 			Word::Funcname,
@@ -807,9 +836,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 	// Left Key can be followed by any from set if preceeded by Right key (may have multiple sets per left key with different right keys)
 	const map<Word::Type, map<Word::Type, set<Word::Type>>> authorizedSemanticsWhenPreceeded {
 		{Word::Name, {{Word::CastOperator, {
-			Word::Text,
-			Word::Varname,
-			Word::Funcname,
+			Word::ConcatOperator,
 			Word::ExpressionEnd,
 			Word::MulOperatorGroup,
 			Word::AddOperatorGroup,
@@ -1356,16 +1383,15 @@ struct SourceFile {
 
 #pragma region Compiler
 
-enum class CODE_TYPE : uint8_t {
-	VOID = 0,
-
-	FILE,
-	LINE,
+enum CODE_TYPE : uint8_t {
+	//TODO assign literal fixed values (0-255) to all items here, with reasonable strides between types, before publishing this for the first time
 	
+	// Statements
+	RETURN = 0, // 
+
 	// GOTO,
 	// GOTO_IF,
 	// GOTO_IF_NOT,
-	// RETURN,
 	// NUMBER_OPERATION,
 	// TEXT_OPERATION,
 	// COMPARE,
@@ -1373,21 +1399,26 @@ enum class CODE_TYPE : uint8_t {
 	// SYSTEM_FUNCTION,
 	// USER_FUNCTION,
 	
+	// Reference Values
+	ROM_CONST_NUMERIC,
+	ROM_CONST_TEXT,
 	STORAGE_VAR_NUMERIC,
 	STORAGE_VAR_TEXT,
 	STORAGE_ARRAY_NUMERIC,
 	STORAGE_ARRAY_TEXT,
-	
-	ROM_CONST_NUMERIC,
-	ROM_CONST_TEXT,
-	
 	RAM_VAR_NUMERIC,
 	RAM_VAR_TEXT,
+	RAM_DATA,
 	RAM_ARRAY_NUMERIC,
 	RAM_ARRAY_TEXT,
-	RAM_DATA,
-	
 };
+
+/*
+
+
+
+
+*/
 
 class ByteCode {
 	union {
@@ -1414,13 +1445,13 @@ class Assembly {
 	static inline const uint32_t parserVersion = VERSION_MINOR;
 	
 public:
-	uint32_t initSize = 0; // number of byte codes in the init code (uint32_t)
+	uint32_t varsInitSize = 0; // number of byte codes in the vars_init code (uint32_t)
 	uint32_t programSize = 0; // number of byte codes in the program code (uint32_t)
-	vector<string> storageRefs {}; // storage references (line)
-	unordered_map<string, uint32_t> functionRefs {}; // function references (line)
+	vector<string> storageRefs {}; // storage references (addr)
+	unordered_map<string, uint32_t> functionRefs {}; // function references (addr)
 	
 	// ROM
-	vector<ByteCode> rom_init {}; // the bytecode of this computer's init function
+	vector<ByteCode> rom_vars_init {}; // the bytecode of this computer's vars_init function
 	vector<ByteCode> rom_program {}; // the actual bytecode of this program
 	vector<double> rom_numericConstants {}; // the actual numeric constant values
 	vector<string> rom_textConstants {}; // the actual text constant values
@@ -1431,22 +1462,501 @@ public:
 	uint32_t ram_dataReferences = 0;
 	uint32_t ram_numericArrays = 0;
 	uint32_t ram_textArrays = 0;
+	
+	// Helpers
+	Word GetConstValue(ByteCode ref) const {
+		if (ref.GetType() == ROM_CONST_NUMERIC) {
+			return {Word::Numeric, to_string(rom_numericConstants[ref.GetValue()])};
+		} else if (ref.GetType() == ROM_CONST_TEXT) {
+			return {Word::Text, rom_textConstants[ref.GetValue()]};
+		} else {
+			throw ParseError("Not const");
+		}
+	}
+	
+	// From Parsed lines of code
+	explicit Assembly(const vector<ParsedLine>& lines) {
+		// Current context
+		string currentFile = "";
+		int currentLine = 0;
+		int currentScope = 0;
+		string currentFunctionName = "";
+		uint32_t currentFunctionAddr = 0;
+		
+		// Temporary user-defined symbol maps
+		unordered_map<string/*functionScope*/, map<int/*scope*/, unordered_map<string/*name*/, ByteCode>>> userVars {};
+		
+		// Lambda functions to Get/Add user-defined symbols
+		auto getVar = [&](const string& name) -> ByteCode {
+			int scope = currentScope;
+			string functionScope = currentFunctionName;
+			while (!userVars[functionScope][scope].contains(name)) {
+				if (--scope < 0) {
+					if (functionScope == "") {
+						throw ParseError("$" + name + " is undefined");
+					} else {
+						functionScope = "";
+						scope = 0;
+					}
+				}
+			}
+			return userVars.at(functionScope).at(scope).at(name);
+		};
+		auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
+			int scope = currentScope;
+			for (int scope = currentScope; scope >= 0; --scope) {
+				if (userVars[currentFunctionName][scope].contains(name)) {
+					throw ParseError("$" + name + " is already defined");
+				}
+			}
+			if (currentFunctionName != "") {
+				if (userVars[""][0].contains(name)) {
+					throw ParseError("$" + name + " is already defined");
+				}
+			}
+			
+			uint32_t index;
+			switch (type) {
+				case STORAGE_VAR_NUMERIC:
+				case STORAGE_VAR_TEXT:
+				case STORAGE_ARRAY_NUMERIC:
+				case STORAGE_ARRAY_TEXT:
+					index = storageRefs.size();
+					storageRefs.emplace_back(name);
+					break;
+					
+				case ROM_CONST_NUMERIC:
+					if (!initialValue) throw ParseError("Const value not provided");
+					index = rom_numericConstants.size();
+					rom_numericConstants.emplace_back(initialValue);
+					break;
+				case ROM_CONST_TEXT:
+					if (!initialValue) throw ParseError("Const value not provided");
+					index = rom_textConstants.size();
+					rom_textConstants.emplace_back(initialValue);
+					break;
+					
+				case RAM_VAR_NUMERIC:
+					index = ram_numericVariables++;
+					break;
+				case RAM_VAR_TEXT:
+					index = ram_textVariables++;
+					break;
+				case RAM_DATA:
+					index = ram_dataReferences++;
+					break;
+				case RAM_ARRAY_NUMERIC:
+					index = ram_numericArrays++;
+					break;
+				case RAM_ARRAY_TEXT:
+					index = ram_textArrays++;
+					break;
+				
+				default: assert(!"Invalid CODE_TYPE");
+			}
+			
+			ByteCode byteCode{uint8_t(type), index};
+			userVars[currentFunctionName][currentScope].emplace(name, byteCode);
+			return byteCode;
+		};
+		
+		// Function helpers
+		auto openFunction = [&](const string& name){
+			assert(currentScope == 0);
+			assert(currentFunctionName == "");
+			if (functionRefs.contains(name)) {
+				throw ParseError("Function " + name + " is already defined");
+			}
+			currentFunctionName = name;
+			currentFunctionAddr = rom_program.size();
+		};
+		auto closeCurrentFunction = [&](){
+			if (currentFunctionName != "") {
+				rom_program.emplace_back(RETURN);
+				functionRefs.emplace(currentFunctionName, currentFunctionAddr);
+				currentFunctionName = "";
+				currentFunctionAddr = 0;
+			}
+		};
+		
+		// Scope helpers
+		auto pushScope = [&](/*...???...*/) {
+			++currentScope;
+		};
+		auto popScope = [&] {
+			--currentScope;
+			assert(currentScope >= 0);
+		};
+		
+		// Validation helper
+		auto validate = [](bool condition){
+			if (!condition) throw ParseError("Invalid statement");
+		};
+		
+		// Expression helpers
+		/*computeConstExpression*/ function<Word(const vector<Word>&, int, int)> computeConstExpression = [&](const vector<Word>& words, int startIndex, int endIndex) -> Word {
+			validate(startIndex+1 < endIndex); // Need at least 3 words here
+			int opIndex = startIndex + 1;
+			
+			// Get Word 1
+			Word word1 = words[startIndex];
+			if (word1 == Word::ExpressionBegin) {
+				int closing = GetExpressionEnd(words, startIndex, endIndex);
+				validate(closing != -1);
+				word1 = computeConstExpression(words, startIndex+1, closing-1);
+				validate(closing + 1 < endIndex);
+				opIndex = closing + 1;
+			}
+			if (word1 == Word::Varname) {
+				word1 = GetConstValue(getVar(word1));
+			}
+			validate(word1 == Word::Numeric || word1 == Word::Text || word1 == Word::Void);
+			
+			// Get Operator
+			Word op = words[opIndex];
+			validate(op.type >= WORD_ENUM_OPERATOR_START);
+			
+			// Get Word 2
+			int word2Index = opIndex + 1;
+			Word word2 = words[word2Index];
+			if (word2 == Word::ExpressionBegin) {
+				int closing = GetExpressionEnd(words, word2Index, endIndex);
+				validate(closing != -1);
+				word2 = computeConstExpression(words, word2Index+1, closing-1);
+			}
+			if (word2 == Word::Varname) {
+				word2 = GetConstValue(getVar(word2));
+			}
+			validate(word2 == Word::Numeric || word2 == Word::Text || word2 == Word::Void);
+			
+			// Compute result
+			if (op == Word::CastOperator) {
+				if (word2 == "number") {
+					word1.type = Word::Numeric;
+					return word1;
+				} else if (word2 == "text") {
+					word1.type = Word::Text;
+					return word1;
+				} else {
+					throw ParseError("Const expression may only be cast to either 'number' or 'text'");
+				}
+			} else if (op == Word::NotOperator) {
+				if (word2 == Word::Numeric) {
+					double value = word2;
+					word2 = double(value == 0.0);
+					return word2;
+				} else if (word2 == Word::Text) {
+					string value = word2;
+					word2 = double(value == "");
+					return word2;
+				} else {
+					validate(false);
+				}
+			} else if (op == Word::ConcatOperator) {
+				validate(word1 == Word::Text && word2 == Word::Text);
+				word1.word += word2.word;
+				return word1;
+			} else if (op == Word::MulOperatorGroup) {
+				validate(word1 == Word::Numeric && word2 == Word::Numeric);
+				if (op == "*") {
+					return Word{double(word1) * double(word2)};
+				} else if (op == "/") {
+					if (double(word2) == 0.0) {
+						throw ParseError("Division by zero in const expression");
+					}
+					return Word{double(word1) / double(word2)};
+				} else if (op == "^") {
+					return Word{pow(double(word1), double(word2))};
+				} else if (op == "%") {
+					if (double(word2) == 0.0) {
+						throw ParseError("Division by zero in const expression");
+					}
+					return Word{double(long(round(double(word1))) % long(round(double(word2))))};
+				} else {
+					validate(false);
+				}
+			} else if (op == Word::AddOperatorGroup) {
+				validate(word1 == Word::Numeric && word2 == Word::Numeric);
+				if (op == "+") {
+					return Word{double(word1) + double(word2)};
+				} else if (op == "-") {
+					return Word{double(word1) - double(word2)};
+				} else {
+					validate(false);
+				}
+			} else if (op == Word::CompareOperatorGroup) {
+				validate(word1 == Word::Numeric && word2 == Word::Numeric);
+				if (op == "<") {
+					return Word{double(double(word1) < double(word2))};
+				} else if (op == "<=") {
+					return Word{double(double(word1) <= double(word2))};
+				} else if (op == ">") {
+					return Word{double(double(word1) > double(word2))};
+				} else if (op == ">=") {
+					return Word{double(double(word1) >= double(word2))};
+				} else {
+					validate(false);
+				}
+			} else if (op == Word::EqualityOperatorGroup) {
+				if (word1 == Word::Numeric && word2 == Word::Numeric) {
+					if (op == "==") {
+						return Word{double(double(word1) == double(word2))};
+					} else if (op == "!=" || op == "<>") {
+						return Word{double(double(word1) != double(word2))};
+					} else {
+						validate(false);
+					}
+				} else if (word1 == Word::Text && word2 == Word::Text) {
+					if (op == "==") {
+						return Word{double(string(word1) == string(word2))};
+					} else if (op == "!=" || op == "<>") {
+						return Word{double(string(word1) != string(word2))};
+					} else {
+						validate(false);
+					}
+				} else {
+					validate(false);
+				}
+			} else if (op == Word::AndOperator) {
+				validate(word1 == Word::Numeric && word2 == Word::Numeric);
+				return Word{double(double(word1) && double(word2))};
+			} else if (op == Word::OrOperator) {
+				validate(word1 == Word::Numeric && word2 == Word::Numeric);
+				return Word{double(double(word1) || double(word2))};
+			}
+			throw ParseError("Invalid operator", op, "in const expression");
+		};
+		/*compileExpression*/ function<void(const vector<Word>&, int, int)> compileExpression = [&](const vector<Word>& words, int startIndex, int endIndex) {
+			validate(startIndex <= endIndex);
+			if (words[startIndex] == Word::ExpressionBegin) {
+				int closing = GetExpressionEnd(words, startIndex, endIndex);
+				validate(closing != -1);
+				compileExpression(words, startIndex+1, closing-1);
+			} else {
+				//TODO
+			}
+		};
+		
+		// Add a Return in addr 0
+		rom_program.emplace_back(RETURN);
+		
+		// Start parsing
+		try {
+			for (const auto& line : lines) if (line) {
+				currentLine = line.line;
+				int nextWordIndex = 0;
+				auto readWord = [&line, &nextWordIndex] () -> Word {
+					if (nextWordIndex < line.words.size()) {
+						return line.words[nextWordIndex++];
+					}
+					return Word::Empty;
+				};
+				auto firstWord = readWord();
+				if (line.scope == 0) {
+					// Global Scope
+					switch (firstWord.type) {
+						case Word::FileInfo:{
+							currentFile = firstWord.word;
+						}break;
+						case Word::Name: {
+							
+							// Adjust scope
+							while (line.scope < currentScope) {
+								popScope();
+							}
+							
+							// Close current function, if any
+							closeCurrentFunction();
+							
+							// Parse declarations from global scope
+							
+							// const
+							if (firstWord == "const") {
+								string name = readWord();
+								validate(name != "");
+								validate(readWord() == "=");
+								Word value = readWord();
+								validate(value);
+								// Number literal
+								if (value == Word::Numeric) {
+									declareVar(name, ROM_CONST_NUMERIC, value);
+									validate(!readWord());
+								}
+								// Text literal
+								else if (value == Word::Text) {
+									declareVar(name, ROM_CONST_TEXT, value);
+									validate(!readWord());
+								}
+								// Varname
+								else if (value == Word::Varname) {
+									ByteCode ref = getVar(value);
+									declareVar(name, ref.GetType(), GetConstValue(ref));
+									validate(!readWord());
+								}
+								// Expression
+								else if (value == Word::ExpressionBegin) {
+									int closingIndex = GetExpressionEnd(line.words, nextWordIndex-1);
+									validate(closingIndex != -1);
+									value = computeConstExpression(line.words, nextWordIndex, closingIndex-1);
+									if (value == Word::Numeric) {
+										declareVar(name, ROM_CONST_NUMERIC, value);
+									} else if (value == Word::Text) {
+										declareVar(name, ROM_CONST_TEXT, value);
+									} else {
+										validate(false);
+									}
+								}
+								// Error
+								else {
+									throw ParseError("Cannot assign non-const expression to const value");
+								}
+							}
+							// var
+							else if (firstWord == "var") {
+								string name = readWord();
+								validate(name != "");
+								Word op = readWord();
+								if (op == "=") {
+									Word value = readWord();
+									validate(value);
+									// Determine Type
+									//TODO
+									assert(!"Not implemented yet");
+									
+								} else if (op == ":") {
+									Word type = readWord();
+									if (type == "number") {
+										declareVar(name, RAM_VAR_NUMERIC);
+									} else if (type == "text") {
+										declareVar(name, RAM_VAR_TEXT);
+									} else {
+										throw ParseError("Var declaration in global scope can only be of type 'number' or 'text'");
+									}
+									validate(!readWord());
+								}
+							}
+							// array
+							else if (firstWord == "array") {
+								
+							}
+							// storage
+							else if (firstWord == "storage") {
+								
+							}
+							// init
+							else if (firstWord == "init") {
+								
+							}
+							// tick
+							else if (firstWord == "tick") {
+								
+							}
+							// function
+							else if (firstWord == "function") {
+								
+							}
+							// timer
+							else if (firstWord == "timer") {
+								
+							}
+							// input
+							else if (firstWord == "input") {
+								
+							}
+							// ERROR
+							else {
+								throw ParseError("Invalid statement");
+							}
+						}break;
+						default: throw ParseError("Invalid statement");
+					}
+				} else {
+					// Function Scope
+					if (line.scope > currentScope) {
+						throw ParseError("Invalid scope");
+					}
+					while (line.scope < currentScope) {
+						popScope();
+					}
+					switch (firstWord.type) {
+						case Word::Name: {
+							// var
+							if (firstWord == "var") {
+								
+							}
+							// array
+							else if (firstWord == "array") {
+								
+							}
+							// output
+							else if (firstWord == "output") {
+								
+							}
+							// foreach
+							else if (firstWord == "foreach") {
+								
+							}
+							// repeat
+							else if (firstWord == "repeat") {
+								
+							}
+							// while
+							else if (firstWord == "while") {
+								
+							}
+							// break
+							else if (firstWord == "break") {
+								
+							}
+							// next
+							else if (firstWord == "next") {
+								
+							}
+							// if
+							else if (firstWord == "if") {
+								
+							}
+							// elseif
+							else if (firstWord == "elseif") {
+								
+							}
+							// else
+							else if (firstWord == "else") {
+								
+							}
+							// return
+							else if (firstWord == "return") {
+								
+							}
+							// ERROR
+							else {
+								throw ParseError("Invalid statement");
+							}
+						}break;
+						default: throw ParseError("Invalid statement");
+					}
+				}
+			}
+			closeCurrentFunction();
+		} catch (ParseError& e) {
+			stringstream err;
+			err << e.what() << " at line " << currentLine << " in " << currentFile;
+			throw ParseError(err.str());
+		}
+		varsInitSize = rom_vars_init.size();
+		programSize = rom_program.size();
+	}
 
 	// From ByteCode stream
 	explicit Assembly(istream& s) {Read(s);}
 	
-	// From Parsed lines of code
-	explicit Assembly(const vector<ParsedLine>& lines) {
-		//TODO
-	}
-
 	void Write(ostream& s) {
 		{// Write Header
 			// Write assembly file info
 			s << parserFiletype << ' ' << parserVersion << '\n';
 			
 			// Write some sizes
-			s << initSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << '\n';
+			s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << '\n';
 			s << rom_numericConstants.size() << ' ';
 			s << rom_textConstants.size() << '\n';
 			s << ram_numericVariables << ' ';
@@ -1474,10 +1984,12 @@ public:
 			}
 		}
 		
-		// Write init bytecode
-		s.write((char*)rom_init.data(), initSize * sizeof(uint32_t));
+		// Write vars_init bytecode
+		assert(rom_vars_init.size() == varsInitSize);
+		s.write((char*)rom_vars_init.data(), varsInitSize * sizeof(uint32_t));
 		
 		// Write program bytecode
+		assert(rom_program.size() == programSize);
 		s.write((char*)rom_program.data(), programSize * sizeof(uint32_t));
 	}
 
@@ -1498,7 +2010,7 @@ private:
 			if (version > parserVersion) throw runtime_error("XenonCode file version is more recent than this parser");
 			
 			// Read some sizes
-			s >> initSize >> programSize >> storageRefsSize >> functionRefsSize;
+			s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize;
 			s >> rom_numericConstantsSize;
 			s >> rom_textConstantsSize;
 			s >> ram_numericVariables;
@@ -1508,7 +2020,7 @@ private:
 			s >> ram_textArrays;
 
 			// Prepare data
-			rom_init.resize(initSize);
+			rom_vars_init.resize(varsInitSize);
 			rom_program.resize(programSize);
 			rom_numericConstants.reserve(rom_numericConstantsSize);
 			rom_textConstants.reserve(rom_textConstantsSize);
@@ -1543,8 +2055,8 @@ private:
 			}
 		}
 
-		// Read init bytecode
-		s.read((char*)rom_init.data(), initSize * sizeof(uint32_t));
+		// Read vars_init bytecode
+		s.read((char*)rom_vars_init.data(), varsInitSize * sizeof(uint32_t));
 
 		// Read program bytecode
 		s.read((char*)rom_program.data(), programSize * sizeof(uint32_t));

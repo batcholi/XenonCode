@@ -113,7 +113,8 @@
         "__bits": "cpp",
         "__errc": "cpp",
         "__node_handle": "cpp",
-        "source_location": "cpp"
+        "source_location": "cpp",
+        "__memory": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

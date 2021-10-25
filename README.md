@@ -7,7 +7,7 @@
 - Typed Variables, Constants and Dynamic Arrays
 - Standard arithmetic operations on numeric values
 - Easy string concatenation and formatting
-- User-defined functions with overloaded arguments
+- User-defined functions
 - Device-defined functions
 - Trailing functions support
 - Built-in standard math functions
@@ -31,7 +31,7 @@ XenonCode is designed with a very basic syntax in mind and a very precise struct
 
 ### Types
 
-XenonCode is a typed procedural language with overload resolution, but only includes two generic types, as well as arrays of either, and special opaque data types.  
+XenonCode is a typed language, but only includes two generic types, as well as arrays of either, and special opaque data types.  
 
 Generic data types the user can declare: 
 * `number`
@@ -77,7 +77,7 @@ These are defined per implementation and may include multiple variants or be cus
 - All functions, including timers, are executed atomically, preventing any data-race
 - Function arguments are always passed by copy, a function cannot modify the variables placed in its argument list
 - Trailing functions DO modify the value of the leading variable
-- Variable assignations always copy the value
+- Variable assignments always copy the value
 - Divisions by zero result in the value zero. It is at the responsibility of the user to make sure to account for it.
 
 ### Basic rules
@@ -306,7 +306,7 @@ while $stuff < 5
 - `++` increment the variable's value
 - `--` decrement the variable's value
 
-## Assignation operators
+## Assignment operators
 These operators will compute the appropriate math operation and assign the result to the leading variable.  
 - `+=`
 - `-=`
@@ -328,6 +328,7 @@ These operators will compute the appropriate math operation and assign the resul
 ## Other operators
 - `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable
 - `:` (typecast operator) cast as another type / format or convert value
+- `&` (concat operator) concatenate texts
 
 ## Casting (parse variables as another type)
 
@@ -339,8 +340,8 @@ It is also possible to cast as text using the `format` word and within parenthes
 
 ## String concatenation
 
-To concatenate texts, simply compound all text values/variables in the same assignation (don't forget to cast to text if you need to).  
-```$someTextVar = "Hello, " $someName "!, My age is " $age:text " and I have all my teeth"```
+To concatenate texts, simply separate all text values/variables with the concat operator `&` in the same assignment (don't forget to cast to text if you need to).  
+```$someTextVar = "Hello, " & $someName & "!, My age is " & $age:text & " and I have all my teeth"```
 
 # User-Defined Functions
 
@@ -356,22 +357,19 @@ Function names have the same rules as variable names.
 
 ### Declaration
 
-Functions may be declared multiple times with different argument types or different number of arguments.  
-This is similar to function overloading in some programming languages.  
-
 Here are some function declaration examples  
 
 This function takes in a single number argument:
-```function @func1 ($var1:number)```
+```function @func0 ($var1:number)```
 
 This function takes two number arguments:
 ```function @func1 ($var1:number, $var2:number)```
 
 This function takes a number argument and a text argument:
-```function @func1 ($var1:number, $var2:text)```
+```function @func2 ($var1:number, $var2:text)```
 
 This function takes a special data argument:
-```function @func1 ($var1:data)```
+```function @func3 ($var1:data)```
 
 ### Body
 The body of a function (the operations to be executed when calling it) must be on the following lines after the declaration, indented with one tab.  
