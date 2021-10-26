@@ -62,6 +62,12 @@ bool isalnum_(int c) {
 	return isalnum(c) || c == '_';
 }
 
+string ToString(double val) {
+	stringstream str;
+	str << val;
+	return str.str();
+}
+
 static inline const int WORD_ENUM_FINAL_TYPE_START = 11;
 static inline const int WORD_ENUM_OPERATOR_START = 101;
 
@@ -213,7 +219,7 @@ struct Word {
 		}
 	}
 	explicit Word(const string& value) : word(value), type(Text) {}
-	explicit Word(double value) : word(to_string(value)), type(Numeric) {}
+	explicit Word(double value) : word(ToString(value)), type(Numeric) {}
 	Word(const Word& other) = default;
 	Word(Word&& other) = default;
 	Word& operator= (const Word& other) = default;
@@ -224,7 +230,7 @@ struct Word {
 		return *this;
 	}
 	Word& operator= (double value) {
-		word = to_string(value);
+		word = ToString(value);
 		type = Numeric;
 		return *this;
 	}
@@ -628,7 +634,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 					// Handle function calls (and cast) within expressions
 					if (next == Word::Name || next == Word::Funcname) {
 						Word after = nextPos+1 <= lastWord()? words[nextPos+1] : Word::Empty;
-						if (word != Word::CastOperator && after != Word::ExpressionBegin) {
+						if (word != Word::CastOperator && word != Word::TrailOperator && after != Word::ExpressionBegin) {
 							return false;
 						}
 						if (after == Word::ExpressionBegin) {
@@ -648,7 +654,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 								if (prev != Word::Varname) {
 									throw ParseError("A trail operator (.) is not allowed after", prev);
 								}
-								if (next != Word::Numeric && next != Word::Varname) {
+								if (next != Word::Numeric && next != Word::Varname && next != Word::Name) {
 									throw ParseError("A trail operator (.) cannot be followed by", next, "within an expression");
 								}
 							} else if (word == Word::CastOperator) {
@@ -730,6 +736,7 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 		}},
 		{Word::Name, {
 			Word::ExpressionBegin,
+			Word::ExpressionEnd,
 		}},
 		{Word::ExpressionBegin, {
 			Word::Numeric,
@@ -1388,74 +1395,75 @@ constexpr uint32_t Interpret3CharsAsInt(const char* str) {
 }
 #define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
 
-DEF_OP( SET ) // Assign
-DEF_OP( ADD ) // +
-DEF_OP( SUB ) // -
-DEF_OP( MUL ) // *
-DEF_OP( DIV ) // /
-DEF_OP( MOD ) // %
-DEF_OP( POW ) // ^
-DEF_OP( CCT ) // & (concat)
-DEF_OP( AND ) // &&
-DEF_OP( ORR ) // ||
-DEF_OP( EQQ ) // ==
-DEF_OP( NEQ ) // !=
-DEF_OP( LST ) // <
-DEF_OP( GRT ) // >
-DEF_OP( LTE ) // >=
-DEF_OP( GTE ) // <=
-DEF_OP( INC ) // ++
-DEF_OP( DEC ) // --
-DEF_OP( NOT ) // !
-DEF_OP( ABS ) // abs(number)
-DEF_OP( FLR ) // floor(number)
-DEF_OP( CIL ) // ceil(number)
-DEF_OP( RND ) // round(number)
-DEF_OP( SIN ) // sin(number)
-DEF_OP( COS ) // cos(number)
-DEF_OP( TAN ) // tan(number)
-DEF_OP( ASI ) // sin(number)
-DEF_OP( ACO ) // cos(number)
-DEF_OP( ATA ) // tan(number)
-DEF_OP( FRA ) // fract(number)
-DEF_OP( LOG ) // log(number, base)
-DEF_OP( SQR ) // sqrt(number)
-DEF_OP( SIG ) // sign(number)
-DEF_OP( CLP ) // clamp(number, min, max)
-DEF_OP( STP ) // step(t1, t2, number)
-DEF_OP( SMT ) // smoothstep(t1, t2, number)
-DEF_OP( LRP ) // lerp(number, number, t)
-DEF_OP( SLP ) // slerp(number, number, t)
-DEF_OP( NUM ) // cast numeric
-DEF_OP( TXT ) // cast text
-DEF_OP( FMT ) // format cast text
-DEF_OP( DEV ) // device function
-DEF_OP( OUT ) // output
-DEF_OP( CLR ) // array.clear()
-DEF_OP( APP ) // array.append(value)
-DEF_OP( POP ) // array.pop()
-DEF_OP( INS ) // array.insert(index, value)
-DEF_OP( DEL ) // array.erase(index)
-DEF_OP( FLL ) // array.fill(qty, value)
-DEF_OP( ASC ) // array.sort(asc)
-DEF_OP( DSC ) // array.sort(desc)
-DEF_OP( SIZ ) // array.size  text.size
-DEF_OP( LAS ) // array.last  text.last
-DEF_OP( SUM ) // array.sum
-DEF_OP( MIN ) // array.min  min(number)
-DEF_OP( MAX ) // array.max  max(number)
-DEF_OP( AVG ) // array.avg  avg(number)
-DEF_OP( MED ) // array.med
-DEF_OP( SBS ) // substring(text, start, length)
-DEF_OP( DLT ) // delta()
-DEF_OP( JMP ) // jump to addr / goto
-DEF_OP( CND ) // conditional jump (gotoAddrIfFalse, boolExpression)
+DEF_OP( SET /* REF_DST REF_SRC */ ) // Assign
+DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
+DEF_OP( SUB /* REF_DST REF_A REF_B */ ) // -
+DEF_OP( MUL /* REF_DST REF_A REF_B */ ) // *
+DEF_OP( DIV /* REF_DST REF_A REF_B */ ) // /
+DEF_OP( MOD /* REF_DST REF_A REF_B */ ) // %
+DEF_OP( POW /* REF_DST REF_A REF_B */ ) // ^
+DEF_OP( CCT /* REF_DST REF_A REF_B */ ) // & (concat)
+DEF_OP( AND /* REF_DST REF_A REF_B */ ) // &&
+DEF_OP( ORR /* REF_DST REF_A REF_B */ ) // ||
+DEF_OP( EQQ /* REF_DST REF_A REF_B */ ) // ==
+DEF_OP( NEQ /* REF_DST REF_A REF_B */ ) // !=
+DEF_OP( LST /* REF_DST REF_A REF_B */ ) // <
+DEF_OP( GRT /* REF_DST REF_A REF_B */ ) // >
+DEF_OP( LTE /* REF_DST REF_A REF_B */ ) // >=
+DEF_OP( GTE /* REF_DST REF_A REF_B */ ) // <=
+DEF_OP( INC /* REF_NUM */ ) // ++
+DEF_OP( DEC /* REF_NUM */ ) // --
+DEF_OP( NOT /* REF_DST REF_VAL */ ) // !
+DEF_OP( ABS /* REF_DST REF_NUM */ ) // abs(number)
+DEF_OP( FLR /* REF_DST REF_NUM */ ) // floor(number)
+DEF_OP( CIL /* REF_DST REF_NUM */ ) // ceil(number)
+DEF_OP( RND /* REF_DST REF_NUM */ ) // round(number)
+DEF_OP( SIN /* REF_DST REF_NUM */ ) // sin(number)
+DEF_OP( COS /* REF_DST REF_NUM */ ) // cos(number)
+DEF_OP( TAN /* REF_DST REF_NUM */ ) // tan(number)
+DEF_OP( ASI /* REF_DST REF_NUM */ ) // sin(number)
+DEF_OP( ACO /* REF_DST REF_NUM */ ) // cos(number)
+DEF_OP( ATA /* REF_DST REF_NUM */ ) // tan(number)
+DEF_OP( FRA /* REF_DST REF_NUM */ ) // fract(number)
+DEF_OP( LOG /* REF_DST REF_NUM REF_BASE */ ) // log(number, base)
+DEF_OP( SQR /* REF_DST REF_NUM */ ) // sqrt(number)
+DEF_OP( SIG /* REF_DST REF_NUM */ ) // sign(number)
+DEF_OP( CLP /* REF_DST REF_NUM REF_MIN REF_MAX */ ) // clamp(number, min, max)
+DEF_OP( STP /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // step(t1, t2, number)
+DEF_OP( SMT /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // smoothstep(t1, t2, number)
+DEF_OP( LRP /* REF_DST REF_NUM REF_NUM REF_T */ ) // lerp(number, number, t)
+DEF_OP( SLP /* REF_DST REF_NUM REF_NUM REF_T */ ) // slerp(number, number, t)
+DEF_OP( NUM /* REF_DST REF_SRC */ ) // cast numeric
+DEF_OP( TXT /* REF_DST REF_SRC */ ) // cast text
+DEF_OP( FMT /* REF_DST REF_SRC FORMAT_FLOAT */ ) // format cast text
+DEF_OP( DEV /* DEVICE_FUNCTION_INDEX [REF_ARG ...] */ ) // device function
+DEF_OP( OUT /* OUTPUT_INDEX [REF_ARG ...] */ ) // output
+DEF_OP( CLR /* REF_ARR */ ) // array.clear()
+DEF_OP( APP /* REF_ARR REF_VALUE [REF_VALUE ...] */ ) // array.append(value, value...)
+DEF_OP( POP /* REF_ARR */ ) // array.pop()
+DEF_OP( INS /* REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...] */ ) // array.insert(index, value, value...)
+DEF_OP( DEL /* REF_ARR REF_INDEX */ ) // array.erase(index)
+DEF_OP( FLL /* REF_ARR REF_QTY REF_VAL */ ) // array.fill(qty, value)
+DEF_OP( ASC /* REF_ARR */ ) // array.sort(asc)
+DEF_OP( DSC /* REF_ARR */ ) // array.sort(desc)
+DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
+DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
+DEF_OP( SUM /* REF_DST REF_ARR */ ) // array.sum
+DEF_OP( MIN /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.min  min(number, number...)
+DEF_OP( MAX /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.max  max(number, number...)
+DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  avg(number, number...)
+DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
+DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
+DEF_OP( IDX /* REF_DST REF_ARR REF_NUM */ ) // index an array
+DEF_OP( DLT /* REF_DST */ ) // delta()
+DEF_OP( JMP /* ADDR */ ) // jump to addr / goto
+DEF_OP( CND /* ADDR REF_BOOL */ ) // conditional jump (gotoAddrIfFalse, boolExpression)
 
 enum CODE_TYPE : uint8_t {
 	// Statements
-	RETURN = 0,
-	END = 10, // Must add this after each statement, helps validate validity and also makes the bytecode kind of human readable
-	OP = 32, // OP <DST> [<REFVALUE> ...] END
+	RETURN = 0, // Must add this at the end of each function block
+	VOID = 10, // Must add this after each OP statement, helps validate validity and also makes the bytecode kind of human readable
+	OP = 32, // OP [...] VOID
 
 	// Reference Values
 	ROM_CONST_NUMERIC = 130,
@@ -1472,8 +1480,7 @@ enum CODE_TYPE : uint8_t {
 	// Extra reference
 	ARRAY_INDEX = 201,
 	OUTPUT_INDEX = 202,
-	
-	// Maximum value is 255
+	ADDR = 255,
 };
 
 class ByteCode {
@@ -1505,6 +1512,16 @@ public:
 	uint32_t programSize = 0; // number of byte codes in the program code (uint32_t)
 	vector<string> storageRefs {}; // storage references (addr)
 	unordered_map<string, uint32_t> functionRefs {}; // function references (addr)
+	/* Function names:
+		system.init
+		system.tick
+		system.input.1
+		system.timer.frequency.1
+	Varnames related to functions:
+		@funcname.1 		argument
+		@funcname:			return
+		system.input.1.1	input function argument
+	*/
 	
 	// ROM
 	vector<ByteCode> rom_vars_init {}; // the bytecode of this computer's vars_init function
@@ -1522,7 +1539,7 @@ public:
 	// Helpers
 	Word GetConstValue(ByteCode ref) const {
 		if (ref.GetType() == ROM_CONST_NUMERIC) {
-			return {Word::Numeric, to_string(rom_numericConstants[ref.GetValue()])};
+			return {Word::Numeric, ToString(rom_numericConstants[ref.GetValue()])};
 		} else if (ref.GetType() == ROM_CONST_TEXT) {
 			return {Word::Text, rom_textConstants[ref.GetValue()]};
 		} else {
@@ -1541,6 +1558,11 @@ public:
 		
 		// Temporary user-defined symbol maps
 		unordered_map<string/*functionScope*/, map<int/*scope*/, unordered_map<string/*name*/, ByteCode>>> userVars {};
+		
+		// Validation helper
+		auto validate = [](bool condition){
+			if (!condition) throw ParseError("Invalid statement");
+		};
 		
 		// Lambda functions to Get/Add user-defined symbols
 		auto getVar = [&](const string& name) -> ByteCode {
@@ -1642,11 +1664,6 @@ public:
 		auto popScope = [&] {
 			--currentScope;
 			assert(currentScope >= 0);
-		};
-		
-		// Validation helper
-		auto validate = [](bool condition){
-			if (!condition) throw ParseError("Invalid statement");
 		};
 		
 		// Expression helpers
@@ -1801,8 +1818,9 @@ public:
 			for (const auto& line : lines) if (line) {
 				currentLine = line.line;
 				int nextWordIndex = 0;
-				auto readWord = [&line, &nextWordIndex] () -> Word {
+				auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
 					if (nextWordIndex < line.words.size()) {
+						validate(type == Word::Empty || type == line.words[nextWordIndex]);
 						return line.words[nextWordIndex++];
 					}
 					return Word::Empty;
@@ -1828,8 +1846,7 @@ public:
 							
 							// const
 							if (firstWord == "const") {
-								string name = readWord();
-								validate(name != "");
+								string name = readWord(Word::Varname);
 								validate(readWord() == "=");
 								Word value = readWord();
 								validate(value);
@@ -1869,61 +1886,77 @@ public:
 							}
 							// var
 							else if (firstWord == "var") {
-								string name = readWord();
-								validate(name != "");
+								string name = readWord(Word::Varname);
 								Word op = readWord();
 								if (op == "=") {
 									Word value = readWord();
 									validate(value);
 									// Determine Type
 									if (value == Word::Numeric) {
-										declareVar(name, RAM_VAR_NUMERIC);
+										ByteCode var = declareVar(name, RAM_VAR_NUMERIC);
 										if (double(value) != 0.0) {
-											//TODO add initialization code to rom_vars_init
-											assert(!"Not implemented yet");
+											ByteCode con = declareVar(name+".init", ROM_CONST_NUMERIC, value);
+											rom_vars_init.emplace_back(SET);
+											rom_vars_init.emplace_back(var);
+											rom_vars_init.emplace_back(con);
+											rom_vars_init.emplace_back(VOID);
 										}
 									} else if (value == Word::Text) {
-										declareVar(name, RAM_VAR_TEXT);
+										ByteCode var = declareVar(name, RAM_VAR_TEXT);
 										if (string(value) != "") {
-											//TODO add initialization code to rom_vars_init
-											assert(!"Not implemented yet");
+											ByteCode con = declareVar(name+".init", ROM_CONST_TEXT, value);
+											rom_vars_init.emplace_back(SET);
+											rom_vars_init.emplace_back(var);
+											rom_vars_init.emplace_back(con);
+											rom_vars_init.emplace_back(VOID);
 										}
 									} else if (value == Word::Varname) {
 										
-										auto ref = getVar(value);
+										ByteCode var;
+										ByteCode ref = getVar(value);
 										
 										switch (ref.GetType()) {
 											case RAM_VAR_NUMERIC:
 											case ROM_CONST_NUMERIC:
 											case STORAGE_VAR_NUMERIC:
-												declareVar(name, RAM_VAR_NUMERIC);
+												var = declareVar(name, RAM_VAR_NUMERIC);
 												break;
 											case RAM_VAR_TEXT:
 											case ROM_CONST_TEXT:
 											case STORAGE_VAR_TEXT:
-												declareVar(name, RAM_VAR_TEXT);
+												var = declareVar(name, RAM_VAR_TEXT);
 												break;
 											default: throw ParseError("Invalid assignment");
 										}
 										
-										//TODO add initialization code to rom_vars_init
-										assert(!"Not implemented yet");
+										rom_vars_init.emplace_back(SET);
+										rom_vars_init.emplace_back(var);
+										rom_vars_init.emplace_back(ref);
+										rom_vars_init.emplace_back(VOID);
 										
 									} else if (value == Word::ExpressionBegin) {
 										
 										int closingIndex = GetExpressionEnd(line.words, nextWordIndex-1);
 										validate(closingIndex != -1);
 										value = computeConstExpression(line.words, nextWordIndex, closingIndex-1);
+										
+										ByteCode var;
+										ByteCode con;
+										
 										if (value == Word::Numeric) {
-											declareVar(name, RAM_VAR_NUMERIC);
+											var = declareVar(name, RAM_VAR_NUMERIC);
+											con = declareVar(name+".init", ROM_CONST_NUMERIC, value);
 										} else if (value == Word::Text) {
-											declareVar(name, RAM_VAR_TEXT);
+											var = declareVar(name, RAM_VAR_TEXT);
+											con = declareVar(name+".init", ROM_CONST_TEXT, value);
 										} else {
 											validate(false);
 										}
 										
-										//TODO add initialization code to rom_vars_init
-										assert(!"Not implemented yet");
+										rom_vars_init.emplace_back(SET);
+										rom_vars_init.emplace_back(var);
+										rom_vars_init.emplace_back(con);
+										rom_vars_init.emplace_back(VOID);
 										
 									} else {
 										validate(false);
@@ -1986,23 +2019,99 @@ public:
 							}
 							// init
 							else if (firstWord == "init") {
-								
+								openFunction("system.init");
 							}
 							// tick
 							else if (firstWord == "tick") {
-								
+								openFunction("system.tick");
 							}
 							// function
 							else if (firstWord == "function") {
-								
+								string name = readWord(Word::Funcname);
+								openFunction(name);
+								readWord(Word::ExpressionBegin);
+								// Arguments
+								int argN = 0;
+								for (;;) {
+									Word word = readWord();
+									if (!word || word == Word::ExpressionEnd) break;
+									if (word == Word::CommaOperator) {
+										validate(argN > 0);
+										word = readWord();
+									}
+									++argN;
+									validate(word == Word::Varname);
+									readWord(Word::CastOperator);
+									string type = readWord(Word::Name);
+									ByteCode arg;
+									if (type == "number") {
+										arg = declareVar(word, RAM_VAR_NUMERIC);
+									} else if (type == "text") {
+										arg = declareVar(word, RAM_VAR_TEXT);
+									} else if (type == "data") {
+										arg = declareVar(word, RAM_DATA);
+									} else {
+										throw ParseError("Invalid argument type in function declaration");
+									}
+									userVars[currentFunctionName][0].emplace("@"+name+"."+to_string(argN), arg);
+								}
+								// Return type
+								if (readWord() == Word::CastOperator) {
+									Word type = readWord(Word::Name);
+									if (type == "number") {
+										declareVar("@"+name+":", RAM_VAR_NUMERIC);
+									} else if (type == "text") {
+										declareVar("@"+name+":", RAM_VAR_TEXT);
+									} else if (type == "data") {
+										declareVar("@"+name+":", RAM_DATA);
+									} else {
+										throw ParseError("Invalid return type in function declaration");
+									}
+								}
 							}
 							// timer
 							else if (firstWord == "timer") {
-								
+								string timerType = readWord(Word::Name);
+								Word timerValue = readWord();
+								if (timerValue == Word::Varname) {
+									timerValue = GetConstValue(getVar(timerValue));
+								}
+								validate(timerValue == Word::Numeric);
+								openFunction("system.timer."+timerType+"."+string(timerValue));
 							}
 							// input
 							else if (firstWord == "input") {
-								
+								readWord(Word::TrailOperator);
+								Word inputIndex = readWord();
+								if (inputIndex == Word::Varname) {
+									inputIndex = GetConstValue(getVar(inputIndex));
+								}
+								validate(inputIndex == Word::Numeric);
+								string name = "system.input."+string(inputIndex);
+								openFunction(name);
+								readWord(Word::ExpressionBegin);
+								// Arguments
+								int argN = 0;
+								for (;;) {
+									Word word = readWord();
+									if (!word || word == Word::ExpressionEnd) break;
+									++argN;
+									validate(word == Word::Varname);
+									readWord(Word::CastOperator);
+									string type = readWord(Word::Name);
+									ByteCode arg;
+									if (type == "number") {
+										arg = declareVar(word, RAM_VAR_NUMERIC);
+									} else if (type == "text") {
+										arg = declareVar(word, RAM_VAR_TEXT);
+									} else if (type == "data") {
+										arg = declareVar(word, RAM_DATA);
+									} else {
+										throw ParseError("Invalid argument type in function declaration");
+									}
+									userVars[currentFunctionName][0].emplace(name+"."+to_string(argN), arg);
+								}
+								validate(!readWord());
 							}
 							// ERROR
 							else {
@@ -2020,6 +2129,12 @@ public:
 						popScope();
 					}
 					switch (firstWord.type) {
+						case Word::Varname: {
+							
+						}break;
+						case Word::Funcname: {
+							
+						}break;
 						case Word::Name: {
 							// var
 							if (firstWord == "var") {
