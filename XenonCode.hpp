@@ -1394,6 +1394,7 @@ constexpr uint32_t Interpret3CharsAsInt(const char* str) {
 	return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (32 << 24);
 }
 #define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
+#define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
 
 DEF_OP( SET /* REF_DST REF_SRC */ ) // Assign
 DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
@@ -2136,60 +2137,60 @@ public:
 					switch (firstWord.type) {
 						case Word::Varname: {
 							// Variable assignment
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case Word::Funcname: {
 							// Function call
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case Word::Name: {
 							// var
 							if (firstWord == "var") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// array
 							else if (firstWord == "array") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// output
 							else if (firstWord == "output") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// foreach
 							else if (firstWord == "foreach") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// repeat
 							else if (firstWord == "repeat") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// while
 							else if (firstWord == "while") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// break
 							else if (firstWord == "break") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// next
 							else if (firstWord == "next") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// if
 							else if (firstWord == "if") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// elseif
 							else if (firstWord == "elseif") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// else
 							else if (firstWord == "else") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// return
 							else if (firstWord == "return") {
-								
+								NOT_IMPLEMENTED_YET
 							}
 							// ERROR
 							else {
