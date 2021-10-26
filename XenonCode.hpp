@@ -2020,10 +2020,12 @@ public:
 							// init
 							else if (firstWord == "init") {
 								openFunction("system.init");
+								pushScope();
 							}
 							// tick
 							else if (firstWord == "tick") {
 								openFunction("system.tick");
+								pushScope();
 							}
 							// function
 							else if (firstWord == "function") {
@@ -2068,6 +2070,7 @@ public:
 										throw ParseError("Invalid return type in function declaration");
 									}
 								}
+								pushScope();
 							}
 							// timer
 							else if (firstWord == "timer") {
@@ -2078,6 +2081,7 @@ public:
 								}
 								validate(timerValue == Word::Numeric);
 								openFunction("system.timer."+timerType+"."+string(timerValue));
+								pushScope();
 							}
 							// input
 							else if (firstWord == "input") {
@@ -2112,6 +2116,7 @@ public:
 									userVars[currentFunctionName][0].emplace(name+"."+to_string(argN), arg);
 								}
 								validate(!readWord());
+								pushScope();
 							}
 							// ERROR
 							else {
@@ -2130,9 +2135,11 @@ public:
 					}
 					switch (firstWord.type) {
 						case Word::Varname: {
+							// Variable assignment
 							
 						}break;
 						case Word::Funcname: {
+							// Function call
 							
 						}break;
 						case Word::Name: {
