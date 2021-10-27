@@ -6,7 +6,11 @@ using namespace std;
 
 bool verbose = false; // Set using -verbose in the arguments
 
-string outputFileName = "xc_program.bin";
+const string outputFileName = "xc_program.bin";
+
+void Init() {
+	XenonCode::deviceFunctions.emplace_back(1, "delta () : number");
+}
 
 void PrintVersion() {
 	cout << "XenonCode parser/compiler tool version " << XenonCode::VERSION_MAJOR << "." << XenonCode::VERSION_MINOR << "." << XenonCode::VERSION_PATCH << endl;
@@ -107,6 +111,7 @@ bool Compile(const string& directory) {
 }
 
 int main(const int argc, const char** argv) {
+	Init();
 	if (argc > 1) {
 		for (int i = 1; i < argc; ++i) {
 			if (*argv[i] == '-') {

@@ -423,8 +423,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `atan`(number)
 - `abs`(number)
 - `fract`(number)
-- `log`(number)
-- `log10`(number)
+- `log`(number, base)
 - `sqrt`(number)
 - `sign`(number)
 - `pow`(number, exponent)
@@ -442,15 +441,14 @@ Trailing math functions will use the leading variable as its first argument and 
 - `mul`(number, number)
 - `div`(number, number)
 
-An implementation may add additional math functions for more advanced fonctionality, or even exclude some of them from this list. It is however discouraged to modify the standard behaviour of a base math function.  
-
 ### Text functions
 - `substring`(inputText, start, length) // returns a new string
 
 ### Trailing functions for Arrays
 These functions MUST be called as trailing functions, and they do not return anything, instead they modify the array
 - $myArray.`clear`() // Empty an array
-- $myArray.`sort`() // Sort an array
+- $myArray.`sort`() // Sort an array in Ascending order
+- $myArray.`sortd`() // Sort an array in Descending order
 - $myArray.`append`(value) // Append a new value to an array
 - $myArray.`pop`() // Erase the last value in an array, reducing its size by one
 - $myArray.`insert`(index, value) // Insert a new value to an array at a specific position, pushing back all following values by one
@@ -470,7 +468,9 @@ Using the trail operator `.`, we can also return a specific information about ce
 - $myText.`last` // returns the last character of a text variable, this also allows to modify that last character by assigning an expression
 
 ### Device functions
-- `delta`() // returns the time difference in seconds from the last execution of this function
+An implementation should define application-specific device functions.  
+Here are examples of basic device functions:  
+- `delta`() // returns the time difference in seconds from the last execution of this function  
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game

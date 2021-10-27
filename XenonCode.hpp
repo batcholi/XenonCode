@@ -1415,16 +1415,16 @@ DEF_OP( GTE /* REF_DST REF_A REF_B */ ) // <=
 DEF_OP( INC /* REF_NUM */ ) // ++
 DEF_OP( DEC /* REF_NUM */ ) // --
 DEF_OP( NOT /* REF_DST REF_VAL */ ) // !
-DEF_OP( ABS /* REF_DST REF_NUM */ ) // abs(number)
 DEF_OP( FLR /* REF_DST REF_NUM */ ) // floor(number)
 DEF_OP( CIL /* REF_DST REF_NUM */ ) // ceil(number)
 DEF_OP( RND /* REF_DST REF_NUM */ ) // round(number)
 DEF_OP( SIN /* REF_DST REF_NUM */ ) // sin(number)
 DEF_OP( COS /* REF_DST REF_NUM */ ) // cos(number)
 DEF_OP( TAN /* REF_DST REF_NUM */ ) // tan(number)
-DEF_OP( ASI /* REF_DST REF_NUM */ ) // sin(number)
-DEF_OP( ACO /* REF_DST REF_NUM */ ) // cos(number)
-DEF_OP( ATA /* REF_DST REF_NUM */ ) // tan(number)
+DEF_OP( ASI /* REF_DST REF_NUM */ ) // asin(number)
+DEF_OP( ACO /* REF_DST REF_NUM */ ) // acos(number)
+DEF_OP( ATA /* REF_DST REF_NUM */ ) // atan(number)
+DEF_OP( ABS /* REF_DST REF_NUM */ ) // abs(number)
 DEF_OP( FRA /* REF_DST REF_NUM */ ) // fract(number)
 DEF_OP( LOG /* REF_DST REF_NUM REF_BASE */ ) // log(number, base)
 DEF_OP( SQR /* REF_DST REF_NUM */ ) // sqrt(number)
@@ -1437,7 +1437,7 @@ DEF_OP( SLP /* REF_DST REF_NUM REF_NUM REF_T */ ) // slerp(number, number, t)
 DEF_OP( NUM /* REF_DST REF_SRC */ ) // cast numeric
 DEF_OP( TXT /* REF_DST REF_SRC */ ) // cast text
 DEF_OP( FMT /* REF_DST REF_SRC FORMAT_FLOAT */ ) // format cast text
-DEF_OP( DEV /* DEVICE_FUNCTION_INDEX [REF_ARG ...] */ ) // device function
+DEF_OP( DEV /* DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...] */ ) // device function
 DEF_OP( OUT /* OUTPUT_INDEX [REF_ARG ...] */ ) // output
 DEF_OP( CLR /* REF_ARR */ ) // array.clear()
 DEF_OP( APP /* REF_ARR REF_VALUE [REF_VALUE ...] */ ) // array.append(value, value...)
@@ -1445,8 +1445,8 @@ DEF_OP( POP /* REF_ARR */ ) // array.pop()
 DEF_OP( INS /* REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...] */ ) // array.insert(index, value, value...)
 DEF_OP( DEL /* REF_ARR REF_INDEX */ ) // array.erase(index)
 DEF_OP( FLL /* REF_ARR REF_QTY REF_VAL */ ) // array.fill(qty, value)
-DEF_OP( ASC /* REF_ARR */ ) // array.sort(asc)
-DEF_OP( DSC /* REF_ARR */ ) // array.sort(desc)
+DEF_OP( ASC /* REF_ARR */ ) // array.sort()
+DEF_OP( DSC /* REF_ARR */ ) // array.sortd()
 DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
 DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
 DEF_OP( SUM /* REF_DST REF_ARR */ ) // array.sum
@@ -1456,9 +1456,75 @@ DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  av
 DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
 DEF_OP( IDX /* REF_DST REF_ARR REF_NUM */ ) // index an array
-DEF_OP( DLT /* REF_DST */ ) // delta()
 DEF_OP( JMP /* ADDR */ ) // jump to addr / goto
 DEF_OP( CND /* ADDR REF_BOOL */ ) // conditional jump (gotoAddrIfFalse, boolExpression)
+
+struct DeviceFunction {
+	struct Arg {
+		string name;
+		string type;
+	};
+	
+	uint32_t id;
+	string name = "";
+	vector<Arg> args {};
+	string returnType = "";
+	
+	DeviceFunction(uint32_t id, const string& line) : id(id) {
+		vector<Word> words;
+		
+		int nextWordIndex = 0;
+		auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
+			if (nextWordIndex < words.size()) {
+				assert(type == Word::Empty || type == words[nextWordIndex]);
+				return words[nextWordIndex++];
+			}
+			return Word::Empty;
+		};
+		
+		int scope = 0;
+		ParseWords(line, words, scope);
+		
+		assert(words.size() > 0);
+		assert(scope == 0);
+		
+		name = readWord(Word::Name).word;
+		
+		if (words.size() == 1) return;
+		
+		readWord(Word::ExpressionBegin);
+		
+		// Arguments
+		int argN = 0;
+		for (;;) {
+			Word word = readWord();
+			if (!word || word == Word::ExpressionEnd) break;
+			if (word == Word::CommaOperator) {
+				assert(argN > 0);
+				word = readWord();
+			}
+			++argN;
+			assert(word == Word::Varname);
+			readWord(Word::CastOperator);
+			string type = readWord(Word::Name);
+			if (type != "number" && type != "text" && type != "data") {
+				assert(!"Invalid argument type in device function prototype");
+			}
+			args.emplace_back(string(word), type);
+		}
+		
+		// Return type
+		if (readWord() == Word::CastOperator) {
+			Word type = readWord(Word::Name);
+			if (type != "number" && type != "text" && type != "data") {
+				assert(!"Invalid return type in device function prototype");
+			}
+			returnType = string(type);
+		}
+	}
+};
+
+static vector<DeviceFunction> deviceFunctions {}; // Implementation SHOULD add functions to it
 
 enum CODE_TYPE : uint8_t {
 	// Statements
@@ -1480,11 +1546,11 @@ enum CODE_TYPE : uint8_t {
 	RAM_DATA = 180,
 	// Extra reference
 	ARRAY_INDEX = 201,
-	OUTPUT_INDEX = 202,
+	OUTPUT_INDEX = 205,
 	ADDR = 255,
 };
 
-class ByteCode {
+struct ByteCode {
 	union {
 		uint32_t rawValue;
 		struct {
@@ -1492,17 +1558,99 @@ class ByteCode {
 			uint32_t type : 8; // 256 possible types
 		};
 	};
-public:
 	ByteCode(uint32_t rawValue = 0) : rawValue(rawValue) {}
 	ByteCode(uint8_t type, uint32_t value) : value(value), type(type) {}
-	
-	CODE_TYPE GetType() const {
-		return CODE_TYPE(type);
-	}
-	uint32_t GetValue() const {
-		return value;
-	}
 };
+
+ByteCode GetOperator(string op) {
+	if (op == "=") {
+		return SET;
+	} else if (op == "+" || op == "+=") {
+		return ADD;
+	} else if (op == "-" || op == "-=") {
+		return SUB;
+	} else if (op == "*" || op == "*=") {
+		return MUL;
+	} else if (op == "/" || op == "/=") {
+		return DIV;
+	} else if (op == "^" || op == "^=") {
+		return POW;
+	} else if (op == "%" || op == "%=") {
+		return MOD;
+	} else if (op == "&" || op == "&=") {
+		return CCT;
+	} else {
+		throw ParseError("Invalid Operator", op);
+	}
+}
+
+ByteCode GetBuiltInFunctionOp(string func) {
+	if (func == "floor") return FLR;
+	if (func == "ceil") return CIL;
+	if (func == "round") return RND;
+	if (func == "sin") return SIN;
+	if (func == "cos") return COS;
+	if (func == "tan") return TAN;
+	if (func == "asin") return ASI;
+	if (func == "acos") return ACO;
+	if (func == "atan") return ATA;
+	if (func == "abs") return ABS;
+	if (func == "fract") return FRA;
+	if (func == "sqrt") return SQR;
+	if (func == "sign") return SIG;
+	if (func == "pow") return POW;
+	if (func == "log") return LOG;
+	if (func == "clamp") return CLP;
+	if (func == "step") return STP;
+	if (func == "smoothstep") return SMT;
+	if (func == "lerp") return LRP;
+	if (func == "slerp") return SLP;
+	if (func == "size") return SIZ;
+	if (func == "last") return LAS;
+	if (func == "mod") return MOD;
+	if (func == "min") return MIN;
+	if (func == "max") return MAX;
+	if (func == "avg") return AVG;
+	if (func == "med") return MED;
+	if (func == "sum") return SUM;
+	if (func == "add") return ADD;
+	if (func == "sub") return SUB;
+	if (func == "mul") return MUL;
+	if (func == "div") return DIV;
+	if (func == "clear") return CLR;
+	if (func == "append") return APP;
+	if (func == "pop") return POP;
+	if (func == "insert") return INS;
+	if (func == "erase") return DEL;
+	if (func == "fill") return FLL;
+	if (func == "substring") return SBS;
+	if (func == "sort") return ASC;
+	if (func == "sortd") return DSC;
+	return DEV;
+}
+
+// Is non-const non-array assignable var
+bool IsVar(ByteCode v) {
+	switch (v.type) {
+		case STORAGE_VAR_NUMERIC:
+		case STORAGE_VAR_TEXT:
+		case RAM_VAR_NUMERIC:
+		case RAM_VAR_TEXT:
+		return true;
+	}
+	return false;
+}
+
+bool IsArray(ByteCode v) {
+	switch (v.type) {
+		case STORAGE_ARRAY_NUMERIC:
+		case STORAGE_ARRAY_TEXT:
+		case RAM_ARRAY_NUMERIC:
+		case RAM_ARRAY_TEXT:
+		return true;
+	}
+	return false;
+}
 
 class Assembly {
 	static inline const string parserFiletype = "XenonCode!";
@@ -1539,10 +1687,10 @@ public:
 	
 	// Helpers
 	Word GetConstValue(ByteCode ref) const {
-		if (ref.GetType() == ROM_CONST_NUMERIC) {
-			return {Word::Numeric, ToString(rom_numericConstants[ref.GetValue()])};
-		} else if (ref.GetType() == ROM_CONST_TEXT) {
-			return {Word::Text, rom_textConstants[ref.GetValue()]};
+		if (ref.type == ROM_CONST_NUMERIC) {
+			return {Word::Numeric, ToString(rom_numericConstants[ref.value])};
+		} else if (ref.type == ROM_CONST_TEXT) {
+			return {Word::Text, rom_textConstants[ref.value]};
 		} else {
 			throw ParseError("Not const");
 		}
@@ -1583,14 +1731,16 @@ public:
 		};
 		auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
 			int scope = currentScope;
-			for (int scope = currentScope; scope >= 0; --scope) {
-				if (userVars[currentFunctionName][scope].contains(name)) {
-					throw ParseError("$" + name + " is already defined");
+			if (name != "") {
+				for (int scope = currentScope; scope >= 0; --scope) {
+					if (userVars[currentFunctionName][scope].contains(name)) {
+						throw ParseError("$" + name + " is already defined");
+					}
 				}
-			}
-			if (currentFunctionName != "") {
-				if (userVars[""][0].contains(name)) {
-					throw ParseError("$" + name + " is already defined");
+				if (currentFunctionName != "") {
+					if (userVars[""][0].contains(name)) {
+						throw ParseError("$" + name + " is already defined");
+					}
 				}
 			}
 			
@@ -1601,6 +1751,7 @@ public:
 				case STORAGE_ARRAY_NUMERIC:
 				case STORAGE_ARRAY_TEXT:
 					index = storageRefs.size();
+					assert(name != "");
 					storageRefs.emplace_back(name);
 					break;
 					
@@ -1635,8 +1786,31 @@ public:
 			}
 			
 			ByteCode byteCode{uint8_t(type), index};
-			userVars[currentFunctionName][currentScope].emplace(name, byteCode);
+			if (name != "") {
+				userVars[currentFunctionName][currentScope].emplace(name, byteCode);
+			}
 			return byteCode;
+		};
+		auto getReturnVar = [&](const string& funcName) -> ByteCode {
+			string retVarName = "@"+funcName+":";
+			if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(retVarName)) {
+				return userVars.at(funcName).at(0).at(retVarName);
+			} else {
+				return VOID;
+			}
+		};
+		
+		// Compile helpers
+		auto addr = [&]{
+			return rom_program.size();
+		};
+		auto write = [&](ByteCode c){
+			rom_program.emplace_back(c);
+		};
+		auto jump = [&](uint32_t jumpToAddress){
+			rom_program.emplace_back(JMP);
+			rom_program.emplace_back(ADDR, jumpToAddress);
+			rom_program.emplace_back(VOID);
 		};
 		
 		// Function helpers
@@ -1647,14 +1821,59 @@ public:
 				throw ParseError("Function " + name + " is already defined");
 			}
 			currentFunctionName = name;
-			currentFunctionAddr = rom_program.size();
+			currentFunctionAddr = addr();
 		};
 		auto closeCurrentFunction = [&](){
 			if (currentFunctionName != "") {
-				rom_program.emplace_back(RETURN);
+				write(RETURN);
 				functionRefs.emplace(currentFunctionName, currentFunctionAddr);
 				currentFunctionName = "";
 				currentFunctionAddr = 0;
+			}
+		};
+		// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
+		auto compileFunctionCall = [&](Word func, const vector<ByteCode>& args) -> ByteCode {
+			string funcName = func;
+			if (func == Word::Funcname) {
+				if (!functionRefs.contains(funcName)) {
+					throw ParseError("Function", func, "is not defined");
+				}
+				
+				// Set arguments
+				int i = 0;
+				for (auto arg : args) {
+					string argVarName = "@"+funcName+"."+to_string(++i);
+					if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(argVarName)) {
+						write(SET);
+						write(userVars.at(funcName).at(0).at(argVarName));
+						write(arg);
+						write(VOID);
+					} else break;
+				}
+				
+				// Call the function
+				jump(functionRefs.at(funcName));
+				
+				// Get the Return value
+				return getReturnVar(funcName);
+				
+			} else if (func == Word::Name) {
+				ByteCode f = GetBuiltInFunctionOp(funcName);
+				write(f);
+				if (f.value == DEV) {
+					auto function = find_if(deviceFunctions.begin(), deviceFunctions.end(), [&](auto& a){return a.name == funcName;});
+					if (function == deviceFunctions.end()) {
+						throw ParseError("Function", func, "does not exist");
+					}
+					write(function->id);
+				}
+				for (auto arg : args) {
+					write(arg);
+				}
+				write(VOID);
+				return VOID;
+			} else {
+				throw ParseError("Invalid function name");
 			}
 		};
 		
@@ -1668,7 +1887,8 @@ public:
 		};
 		
 		// Expression helpers
-		/*computeConstExpression*/ function<Word(const vector<Word>&, int, int)> computeConstExpression = [&](const vector<Word>& words, int startIndex, int endIndex) -> Word {
+		/*computeConstExpression*/ function<Word(const vector<Word>&, int, int)> computeConstExpression = [&](const vector<Word>& words, int startIndex, int endIndex = -1) -> Word {
+			if (endIndex < 0) endIndex += words.size();
 			validate(startIndex+1 < endIndex); // Need at least 3 words here
 			int opIndex = startIndex + 1;
 			
@@ -1697,11 +1917,16 @@ public:
 				int closing = GetExpressionEnd(words, word2Index, endIndex);
 				validate(closing != -1);
 				word2 = computeConstExpression(words, word2Index+1, closing-1);
+				validate(closing == endIndex); // Is there no more words remaining?
+				word2Index = closing;
 			}
 			if (word2 == Word::Varname) {
 				word2 = GetConstValue(getVar(word2));
 			}
 			validate(word2 == Word::Numeric || word2 == Word::Text || word2 == Word::Void);
+			
+			// Validate that there are no more words remaining
+			validate(word2Index == endIndex);
 			
 			// Compute result
 			if (op == Word::CastOperator) {
@@ -1800,19 +2025,165 @@ public:
 			}
 			throw ParseError("Invalid operator", op, "in const expression");
 		};
-		/*compileExpression*/ function<void(const vector<Word>&, int, int)> compileExpression = [&](const vector<Word>& words, int startIndex, int endIndex) {
+		/*compileExpression*/ function<ByteCode(const vector<Word>&, int, int)> compileExpression = [&](const vector<Word>& words, int startIndex, int endIndex = -1) -> ByteCode {
+			if (endIndex < 0) endIndex += words.size();
 			validate(startIndex <= endIndex);
-			if (words[startIndex] == Word::ExpressionBegin) {
-				int closing = GetExpressionEnd(words, startIndex, endIndex);
-				validate(closing != -1);
-				compileExpression(words, startIndex+1, closing-1);
-			} else {
-				//TODO
+			
+			int opIndex = startIndex + 1;
+			
+			// Word 1
+			Word word1 = words[startIndex];
+			ByteCode ref1;
+			switch (word1.type) {
+				case Word::ExpressionBegin:{
+					int closing = GetExpressionEnd(words, startIndex, endIndex);
+					validate(closing != -1);
+					ref1 = compileExpression(words, startIndex+1, closing-1);
+					if (closing == endIndex) return ref1;
+					opIndex = closing + 1;
+				}break;
+				case Word::Varname:{
+					ref1 = getVar(word1);
+					if (startIndex == endIndex) return ref1;
+				}break;
+				case Word::Numeric:{
+					ref1 = declareVar("", ROM_CONST_NUMERIC, word1);
+					if (startIndex == endIndex) return ref1;
+				}break;
+				case Word::Text:{
+					ref1 = declareVar("", ROM_CONST_TEXT, word1);
+					if (startIndex == endIndex) return ref1;
+				}break;
+				case Word::Funcname:{
+					vector<ByteCode> args {};//TODO fill this
+					ref1 = compileFunctionCall(word1, args);
+				}break;
+				case Word::Name:{
+					
+				}break;
+				case Word::Void: break;
+				default: validate(false);
 			}
+			
+			// Get Operator
+			Word op = words[opIndex];
+			validate(op.type >= WORD_ENUM_OPERATOR_START);
+	
+			// // Get Word 2
+			// //TODO....
+			
+			// // Validate that there are no more words remaining
+			// validate(word2Index == endIndex);
+			
+			// 		// Compute result
+			// 		if (op == Word::CastOperator) {
+			// 			if (word2 == "number") {
+			// 				word1.type = Word::Numeric;
+			// 				return word1;
+			// 			} else if (word2 == "text") {
+			// 				word1.type = Word::Text;
+			// 				return word1;
+			// 			} else {
+			// 				throw ParseError("Const expression may only be cast to either 'number' or 'text'");
+			// 			}
+			// 		} else if (op == Word::NotOperator) {
+			// 			if (word2 == Word::Numeric) {
+			// 				double value = word2;
+			// 				word2 = double(value == 0.0);
+			// 				return word2;
+			// 			} else if (word2 == Word::Text) {
+			// 				string value = word2;
+			// 				word2 = double(value == "");
+			// 				return word2;
+			// 			} else {
+			// 				validate(false);
+			// 			}
+			// 		} else if (op == Word::ConcatOperator) {
+			// 			validate(word1 == Word::Text && word2 == Word::Text);
+			// 			word1.word += word2.word;
+			// 			return word1;
+			// 		} else if (op == Word::MulOperatorGroup) {
+			// 			validate(word1 == Word::Numeric && word2 == Word::Numeric);
+			// 			if (op == "*") {
+			// 				return Word{double(word1) * double(word2)};
+			// 			} else if (op == "/") {
+			// 				if (double(word2) == 0.0) {
+			// 					throw ParseError("Division by zero in const expression");
+			// 				}
+			// 				return Word{double(word1) / double(word2)};
+			// 			} else if (op == "^") {
+			// 				return Word{pow(double(word1), double(word2))};
+			// 			} else if (op == "%") {
+			// 				if (double(word2) == 0.0) {
+			// 					throw ParseError("Division by zero in const expression");
+			// 				}
+			// 				return Word{double(long(round(double(word1))) % long(round(double(word2))))};
+			// 			} else {
+			// 				validate(false);
+			// 			}
+			// 		} else if (op == Word::AddOperatorGroup) {
+			// 			validate(word1 == Word::Numeric && word2 == Word::Numeric);
+			// 			if (op == "+") {
+			// 				return Word{double(word1) + double(word2)};
+			// 			} else if (op == "-") {
+			// 				return Word{double(word1) - double(word2)};
+			// 			} else {
+			// 				validate(false);
+			// 			}
+			// 		} else if (op == Word::CompareOperatorGroup) {
+			// 			validate(word1 == Word::Numeric && word2 == Word::Numeric);
+			// 			if (op == "<") {
+			// 				return Word{double(double(word1) < double(word2))};
+			// 			} else if (op == "<=") {
+			// 				return Word{double(double(word1) <= double(word2))};
+			// 			} else if (op == ">") {
+			// 				return Word{double(double(word1) > double(word2))};
+			// 			} else if (op == ">=") {
+			// 				return Word{double(double(word1) >= double(word2))};
+			// 			} else {
+			// 				validate(false);
+			// 			}
+			// 		} else if (op == Word::EqualityOperatorGroup) {
+			// 			if (word1 == Word::Numeric && word2 == Word::Numeric) {
+			// 				if (op == "==") {
+			// 					return Word{double(double(word1) == double(word2))};
+			// 				} else if (op == "!=" || op == "<>") {
+			// 					return Word{double(double(word1) != double(word2))};
+			// 				} else {
+			// 					validate(false);
+			// 				}
+			// 			} else if (word1 == Word::Text && word2 == Word::Text) {
+			// 				if (op == "==") {
+			// 					return Word{double(string(word1) == string(word2))};
+			// 				} else if (op == "!=" || op == "<>") {
+			// 					return Word{double(string(word1) != string(word2))};
+			// 				} else {
+			// 					validate(false);
+			// 				}
+			// 			} else {
+			// 				validate(false);
+			// 			}
+			// 		} else if (op == Word::AndOperator) {
+			// 			validate(word1 == Word::Numeric && word2 == Word::Numeric);
+			// 			return Word{double(double(word1) && double(word2))};
+			// 		} else if (op == Word::OrOperator) {
+			// 			validate(word1 == Word::Numeric && word2 == Word::Numeric);
+			// 			return Word{double(double(word1) || double(word2))};
+			// 		}
+			// 		throw ParseError("Invalid operator", op, "in const expression");
+					
+			
+			
+			
+			
+			
+			
+			
+			
 		};
 		
 		// Add a Return in addr 0
-		rom_program.emplace_back(RETURN);
+		write(RETURN);
 		
 		// Start parsing
 		try {
@@ -1864,7 +2235,7 @@ public:
 								// Varname
 								else if (value == Word::Varname) {
 									ByteCode ref = getVar(value);
-									declareVar(name, ref.GetType(), GetConstValue(ref));
+									declareVar(name, CODE_TYPE(ref.type), GetConstValue(ref));
 									validate(!readWord());
 								}
 								// Expression
@@ -1916,7 +2287,7 @@ public:
 										ByteCode var;
 										ByteCode ref = getVar(value);
 										
-										switch (ref.GetType()) {
+										switch (ref.type) {
 											case RAM_VAR_NUMERIC:
 											case ROM_CONST_NUMERIC:
 											case STORAGE_VAR_NUMERIC:
@@ -2137,7 +2508,24 @@ public:
 					switch (firstWord.type) {
 						case Word::Varname: {
 							// Variable assignment
-							NOT_IMPLEMENTED_YET
+							ByteCode dst = getVar(firstWord);
+							Word operation = readWord();
+							switch (operation.type) {
+								case Word::AssignmentOperatorGroup:{
+									validate(IsVar(dst));
+									ByteCode op = GetOperator(operation);
+									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+									write(op);
+									write(dst);
+									if (op.value != SET) write(dst);
+									write(ref);
+									write(VOID);
+								}break;
+								case Word::TrailOperator:{
+									NOT_IMPLEMENTED_YET
+								}break;
+								default: throw ParseError("Invalid operator", operation);
+							}
 						}break;
 						case Word::Funcname: {
 							// Function call

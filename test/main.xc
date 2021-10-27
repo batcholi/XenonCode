@@ -12,7 +12,7 @@ storage var $a:number
 storage array $stuff:text
 
 init // executed only once, when computer is powered on
-	// $a = 2 + (1+1) * +2 - (5.0 - (1+3 + -8*0)) // Should result in 5
+	$a = 2 + (1+1) * +2 - (5.0 - (1+3 + -8*0)) // Should result in 5
 // 	if $a == 5
 // 		output.2 ("Hello, World!")
 // 		@test()
