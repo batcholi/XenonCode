@@ -97,7 +97,7 @@ bool Compile(const string& directory) {
 			mainFile.DebugParsedLines();
 			cout << "Compiling..." << endl;
 		}
-		XenonCode::Assembly assembly {mainFile.lines};
+		XenonCode::Assembly assembly {mainFile.lines, verbose};
 		ofstream output(directory + "/" + outputFileName, ios_base::out | ios_base::trunc);
 		assembly.Write(output);
 		if (verbose) {
