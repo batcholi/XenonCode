@@ -40,5 +40,5 @@ input.2 ($error:number) // $error is setpoint - pv
 	// Save error to previous error
 	$pre_error = $error
 
-	output.0 ($output)
+	output.1 ($output)
 

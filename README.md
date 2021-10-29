@@ -120,7 +120,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `repeat` loops a block of code n times
 - `while` loops as long as a condition evaluates to true
 - `break` stops a loop here as if it completed all iterations
-- `next` stops this iteration of a loop here and run the next iteration immediately
+- `loop` stops this iteration of a loop here and run the next iteration immediately
 - `if` runs a block of code if a condition evaluates to true
 - `elseif` after a if, when the initial condition so far evaluates to false and a new condition evaluates to true
 - `else` after a if, when all conditions evaluated to false
@@ -285,13 +285,13 @@ while $stuff < 5
         break
 ```
 
-## Next
+## Loop
 This keyword is used to stop this iteration of a loop here and run the next iteration immediately
 ```
 while $stuff < 5
     $stuff++
     if $stuff == 2
-        next
+        loop
 ```
 
 ## Math Operators

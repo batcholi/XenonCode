@@ -1003,7 +1003,7 @@ const vector<string> functionScopeFirstWords {
 	"repeat",
 	"while",
 	"break",
-	"next",
+	"loop",
 	"if",
 	"elseif",
 	"else",
@@ -1254,8 +1254,8 @@ struct ParsedLine {
 						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
-				// next
-					if (words[0] == "next") {
+				// loop
+					if (words[0] == "loop") {
 						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
@@ -1416,7 +1416,7 @@ constexpr uint32_t Interpret3CharsAsInt(const char* str) {
 #define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
 #define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
 
-DEF_OP( SET /* [ARRAY_INDEX ifval0[REF_NUM]] REF_DST REF_VALUE */ ) // Assign a value
+DEF_OP( SET /* [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero */ ) // Assign a value
 DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
 DEF_OP( SUB /* REF_DST REF_A REF_B */ ) // -
 DEF_OP( MUL /* REF_DST REF_A REF_B */ ) // *
@@ -1476,8 +1476,9 @@ DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  av
 DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
 DEF_OP( IDX /* REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM] */ ) // get an indexed value from an array or text
-DEF_OP( JMP /* ADDR */ ) // jump to addr / goto
-DEF_OP( CND /* ADDR REF_BOOL */ ) // conditional jump (gotoAddrIfFalse, boolExpression)
+DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
+DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
+DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
 
 struct DeviceFunction {
 	struct Arg {
@@ -1571,6 +1572,13 @@ enum CODE_TYPE : uint8_t {
 	ADDR = 255,
 };
 
+struct Stack {
+	int id; // a unique id, at least per function
+	string type; // function, if, elseif, else, foreach, while, repeat
+	unordered_map<string, uint32_t> pointers;
+	Stack(int id, string type) : id(id), type(type), pointers() {}
+};
+
 CODE_TYPE GetRamVarType(uint32_t t) {
 	switch (t) {
 		case STORAGE_VAR_NUMERIC: return RAM_VAR_NUMERIC;
@@ -1625,6 +1633,10 @@ ByteCode GetOperator(string op) {
 		return MOD;
 	} else if (op == "&" || op == "&=") {
 		return CCT;
+	} else if (op == "++") {
+		return INC;
+	} else if (op == "--") {
+		return DEC;
 	} else {
 		throw ParseError("Invalid Operator", op);
 	}
@@ -1771,36 +1783,39 @@ public:
 		int currentScope = 0;
 		string currentFunctionName = "";
 		uint32_t currentFunctionAddr = 0;
+		int currentStackId = 0;
+		vector<Stack> stack {};
 		
 		// Temporary user-defined symbol maps
-		unordered_map<string/*functionScope*/, map<int/*scope*/, unordered_map<string/*name*/, ByteCode>>> userVars {};
+		unordered_map<string/*functionName*/, map<int/*stackId*/, unordered_map<string/*name*/, ByteCode>>> userVars {};
 		
 		// Validation helper
 		auto validate = [](bool condition){
-			if (!condition) throw ParseError("Invalid statement");
+			if (!condition) {
+				throw ParseError("Invalid statement");
+			}
 		};
 		
 		// Lambda functions to Get/Add user-defined symbols
 		auto getVar = [&](const string& name) -> ByteCode {
-			int scope = currentScope;
-			string functionScope = currentFunctionName;
-			while (!userVars[functionScope][scope].contains(name)) {
-				if (--scope < 0) {
-					if (functionScope == "") {
+			int s = stack.size()-1;
+			string functionName = currentFunctionName;
+			while (!userVars[functionName][s<0?0:stack[s].id].contains(name)) {
+				if (--s < 0) {
+					if (functionName == "") {
 						throw ParseError("$" + name + " is undefined");
 					} else {
-						functionScope = "";
-						scope = 0;
+						functionName = "";
+						s = -1;
 					}
 				}
 			}
-			return userVars.at(functionScope).at(scope).at(name);
+			return userVars.at(functionName).at(s<0?0:stack[s].id).at(name);
 		};
 		auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
-			int scope = currentScope;
 			if (name != "") {
-				for (int scope = currentScope; scope >= 0; --scope) {
-					if (userVars[currentFunctionName][scope].contains(name)) {
+				for (int s = stack.size()-1; s >= 0; --s) {
+					if (userVars[currentFunctionName][stack[s].id].contains(name)) {
 						throw ParseError("$" + name + " is already defined");
 					}
 				}
@@ -1882,7 +1897,7 @@ public:
 			
 			ByteCode byteCode{uint8_t(type), index};
 			if (name != "") {
-				userVars[currentFunctionName][currentScope].emplace(name, byteCode);
+				userVars[currentFunctionName][currentStackId].emplace(name, byteCode);
 			}
 			return byteCode;
 		};
@@ -1897,8 +1912,8 @@ public:
 			}
 		};
 		auto getVarName = [&](ByteCode code) -> string {
-			for (const auto& [fun,scopes] : userVars) {
-				for (const auto& [scope,vars] : scopes) {
+			for (const auto& [fun,stacks] : userVars) {
+				for (const auto& [s,vars] : stacks) {
 					for (const auto& [name,byteCode] : vars) {
 						if (byteCode.type == code.type && byteCode.value == code.value) {
 							return name;
@@ -1920,16 +1935,25 @@ public:
 		};
 		
 		// Compile helpers
-		auto addr = [&]{
-			return rom_program.size();
-		};
-		auto write = [&](ByteCode c){
+		auto addr = [&]{return rom_program.size();};
+		auto write = [&](ByteCode c) -> uint32_t /*ThisAddr*/ {
+			uint32_t address = addr();
 			rom_program.emplace_back(c);
+			return address;
 		};
-		auto jump = [&](uint32_t jumpToAddress){
+		auto jump = [&](uint32_t jumpToAddress) -> uint32_t /*AddrOfAddrToJumpTo*/ {
 			rom_program.emplace_back(JMP);
+			uint32_t address = addr();
 			rom_program.emplace_back(ADDR, jumpToAddress);
 			rom_program.emplace_back(VOID);
+			return address;
+		};
+		auto gotoAddr = [&](uint32_t gotoToAddress) -> uint32_t /*AddrOfAddrToGoTo*/ {
+			rom_program.emplace_back(GTO);
+			uint32_t address = addr();
+			rom_program.emplace_back(ADDR, gotoToAddress);
+			rom_program.emplace_back(VOID);
+			return address;
 		};
 		
 		// Function helpers
@@ -1949,6 +1973,7 @@ public:
 				currentFunctionName = "";
 				currentFunctionAddr = 0;
 			}
+			currentStackId = 0;
 		};
 		// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
 		auto compileFunctionCall = [&](Word func, const vector<ByteCode>& args, bool getReturn) -> ByteCode {
@@ -2019,13 +2044,49 @@ public:
 			}
 		};
 		
-		// Scope helpers
-		auto pushScope = [&](/*...???...*/) {
-			++currentScope;
+		// Stack helpers
+		auto addPointer = [&](string reg) -> uint32_t& {
+			if (reg == "") reg = to_string(stack.back().pointers.size()+1);
+			return stack.back().pointers[reg];
 		};
-		auto popScope = [&] {
-			--currentScope;
+		auto getPointer = [&](const string& reg) -> ByteCode {
+			assert(stack.size() > 0);
+			if (stack.back().pointers.contains(reg)) {
+				return rom_program[stack.back().pointers.at(reg)];
+			}
+		};
+		auto applyPointerAddr = [&](const string& reg){
+			assert(stack.size() > 0);
+			if (stack.back().pointers.contains(reg)) {
+				rom_program[stack.back().pointers.at(reg)].value = addr();
+			}
+		};
+		auto applyPointersAddresses = [&]{
+			assert(stack.size() > 0);
+			for (auto& [name, r] : stack.back().pointers) {
+				assert(r < rom_program.size());
+				if (rom_program[r].type == ADDR && rom_program[r].value == 0) {
+					rom_program[r].value = addr();
+				}
+			}
+			stack.back().pointers.clear();
+		};
+		auto pushStack = [&](const string& type) {
+			++currentScope;
+			stack.emplace_back(++currentStackId, type);
+			assert(currentScope == stack.size());
+		};
+		auto popStack = [&] {
 			assert(currentScope >= 0);
+			assert(stack.size() > 0);
+			if (stack.back().type == "loop") {
+				gotoAddr(stack.back().pointers["LoopBegin"]);
+			}
+			applyPointersAddresses();
+			--currentScope;
+			currentStackId = stack.back().id;
+			stack.pop_back();
+			assert(currentScope == stack.size());
 		};
 		
 		// Expression helpers
@@ -2468,7 +2529,7 @@ public:
 							
 							// Adjust scope
 							while (line.scope < currentScope) {
-								popScope();
+								popStack();
 							}
 							
 							// Close current function, if any
@@ -2652,12 +2713,12 @@ public:
 							// init
 							else if (firstWord == "init") {
 								openFunction("system.init");
-								pushScope();
+								pushStack("function");
 							}
 							// tick
 							else if (firstWord == "tick") {
 								openFunction("system.tick");
-								pushScope();
+								pushStack("function");
 							}
 							// function
 							else if (firstWord == "function") {
@@ -2702,7 +2763,7 @@ public:
 										throw ParseError("Invalid return type in function declaration");
 									}
 								}
-								pushScope();
+								pushStack("function");
 							}
 							// timer
 							else if (firstWord == "timer") {
@@ -2713,7 +2774,7 @@ public:
 								}
 								validate(timerValue == Word::Numeric);
 								openFunction("system.timer."+timerType+"."+string(timerValue));
-								pushScope();
+								pushStack("function");
 							}
 							// input
 							else if (firstWord == "input") {
@@ -2746,9 +2807,13 @@ public:
 										throw ParseError("Invalid argument type in function declaration");
 									}
 									userVars[currentFunctionName][0].emplace(name+"."+to_string(argN), arg);
+									Word next = readWord();
+									if (next == Word::CommaOperator) continue;
+									else if (next == Word::ExpressionEnd) break;
+									else validate(false);
 								}
 								validate(!readWord());
-								pushScope();
+								pushStack("function");
 							}
 							// ERROR
 							else {
@@ -2763,7 +2828,13 @@ public:
 						throw ParseError("Invalid scope");
 					}
 					while (line.scope < currentScope) {
-						popScope();
+						if (line.scope == currentScope - 1) {
+							if (firstWord == "elseif" || firstWord == "else") {
+								validate(stack.back().type == "if");
+								break;
+							}
+						}
+						popStack();
 					}
 					switch (firstWord.type) {
 						case Word::Varname: {
@@ -2874,6 +2945,12 @@ public:
 										}
 									} else validate(false);
 								}break;
+								case Word::SuffixOperatorGroup:{
+									validate(IsNumeric(dst));
+									write(GetOperator(operation));
+									write(dst);
+									write(VOID);
+								}break;
 								default: throw ParseError("Invalid operator", operation);
 							}
 						}break;
@@ -2961,35 +3038,195 @@ public:
 							}
 							// foreach
 							else if (firstWord == "foreach") {
-								NOT_IMPLEMENTED_YET
+								pushStack("loop");
+								ByteCode arr = getVar(readWord(Word::Varname));
+								validate(IsArray(arr));
+								readWord(Word::ExpressionBegin);
+								Word item = readWord(Word::Varname);
+								Word index = Word::Empty;
+								Word next = readWord();
+								if (next == Word::CommaOperator) {
+									index = readWord(Word::Varname);
+									validate(readWord() == Word::ExpressionEnd);
+								} else {
+									validate(next == Word::ExpressionEnd);
+								}
+								validate(nextWordIndex == line.words.size());
+								ByteCode itemRef, indexRef;
+								switch (arr.type) {
+									case STORAGE_ARRAY_NUMERIC:
+									case RAM_ARRAY_NUMERIC:
+										itemRef = declareVar(item, RAM_VAR_NUMERIC);
+										break;
+									case STORAGE_VAR_TEXT:
+									case STORAGE_ARRAY_TEXT:
+									case RAM_VAR_TEXT:
+									case RAM_ARRAY_TEXT:
+										itemRef = declareVar(item, RAM_VAR_TEXT);
+										break;
+									default: validate(false);
+								}
+								if (index) {
+									indexRef = declareVar(index, RAM_VAR_NUMERIC);
+								} else {
+									indexRef = declareTmpNumeric();
+								}
+								
+								// Set index to 0
+								write(SET);
+								write(indexRef);
+								write(VOID);
+								
+								addPointer("LoopBegin") = addr();
+								
+								// Get Array Size
+								ByteCode arrSize = declareTmpNumeric();
+								write(SIZ);
+								write(arrSize);
+								write(arr);
+								write(VOID);
+								
+								// Assign condition
+								ByteCode condition = declareTmpNumeric();
+								write(LST);
+								write(condition);
+								write(indexRef);
+								write(arrSize);
+								write(VOID);
+								
+								// Check condition to continue or break
+								write(CND);
+								addPointer("LoopContinue") = write(ADDR);
+								addPointer("LoopBreak") = write(ADDR);
+								write(condition);
+								write(VOID);
+								
+								applyPointerAddr("LoopContinue");
+								
+								// Increment index
+								write(INC);
+								write(indexRef);
+								write(VOID);
+								
+								// Set current item
+								write(IDX);
+								write(itemRef);
+								write(arr);
+								write(ARRAY_INDEX);
+								write(indexRef);
+								write(VOID);
 							}
 							// repeat
 							else if (firstWord == "repeat") {
-								NOT_IMPLEMENTED_YET
+								pushStack("loop");
+								Word n = readWord();
+								ByteCode nRef;
+								if (n == Word::Varname) {
+									nRef = getVar(n);
+								} else if (n == Word::Numeric) {
+									nRef = declareVar("", ROM_CONST_NUMERIC, n);
+								}
+								validate(IsNumeric(nRef));
+								readWord(Word::ExpressionBegin);
+								Word index = readWord(Word::Varname);
+								validate(readWord() == Word::ExpressionEnd);
+								validate(nextWordIndex == line.words.size());
+								ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
+								
+								// Set index to 0
+								write(SET);
+								write(indexRef);
+								write(VOID);
+								
+								addPointer("LoopBegin") = addr();
+								
+								// Assign condition
+								ByteCode condition = declareTmpNumeric();
+								write(LST);
+								write(condition);
+								write(indexRef);
+								write(nRef);
+								write(VOID);
+								
+								// Check condition to continue or break
+								write(CND);
+								addPointer("LoopContinue") = write(ADDR);
+								addPointer("LoopBreak") = write(ADDR);
+								write(condition);
+								write(VOID);
+								
+								applyPointerAddr("LoopContinue");
+								
+								// Increment index
+								write(INC);
+								write(indexRef);
+								write(VOID);
 							}
 							// while
 							else if (firstWord == "while") {
-								NOT_IMPLEMENTED_YET
+								pushStack("loop");
+								
+								addPointer("LoopBegin") = addr();
+								
+								// Assign condition
+								ByteCode condition = compileExpression(line.words, nextWordIndex, -1);
+								
+								// Check condition to continue or break
+								write(CND);
+								addPointer("LoopContinue") = write(ADDR);
+								addPointer("LoopBreak") = write(ADDR);
+								write(condition);
+								write(VOID);
+								
+								applyPointerAddr("LoopContinue");
 							}
 							// break
 							else if (firstWord == "break") {
-								NOT_IMPLEMENTED_YET
+								int s = stack.size();
+								while (s-- > 0) {
+									if (stack[s].type == "loop") {
+										stack[s].pointers[to_string(stack[s].pointers.size()+1)] = gotoAddr(0);
+										break;
+									}
+								}
 							}
 							// next
-							else if (firstWord == "next") {
-								NOT_IMPLEMENTED_YET
+							else if (firstWord == "loop") {
+								int s = stack.size();
+								while (s-- > 0) {
+									if (stack[s].type == "loop") {
+										gotoAddr(stack[s].pointers["LoopBegin"]);
+										break;
+									}
+								}
 							}
 							// if
 							else if (firstWord == "if") {
-								NOT_IMPLEMENTED_YET
+								pushStack("if");
+								ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+								write(CND);
+								addPointer("gotoIfTrue") = write(ADDR);
+								addPointer("gotoIfFalse") = write(ADDR);
+								write(ref);
+								write(VOID);
+								applyPointerAddr("gotoIfTrue");
 							}
 							// elseif
 							else if (firstWord == "elseif") {
-								NOT_IMPLEMENTED_YET
+								addPointer("") = gotoAddr(0); // endIf
+								applyPointerAddr("gotoIfFalse");
+								ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+								write(CND);
+								addPointer("gotoIfTrue") = write(ADDR);
+								addPointer("gotoIfFalse") = write(ADDR);
+								write(ref);
+								write(VOID);
+								applyPointerAddr("gotoIfTrue");
 							}
 							// else
 							else if (firstWord == "else") {
-								NOT_IMPLEMENTED_YET
+								addPointer("") = gotoAddr(0); // endIf
+								applyPointerAddr("gotoIfFalse");
 							}
 							// return
 							else if (firstWord == "return") {
@@ -3009,6 +3246,9 @@ public:
 						default: throw ParseError("Invalid statement");
 					}
 				}
+			}
+			while (currentScope > 0) {
+				popStack();
 			}
 			closeCurrentFunction();
 		} catch (ParseError& e) {
