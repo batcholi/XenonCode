@@ -337,7 +337,8 @@ To parse an existing variable as another type, simply add a colon and the type, 
 ```$someTextValue = $someNumberValue:text```
 This only works with simple variable types `number` and `text`, not arrays or special data  
 
-It is also possible to cast as text using the `format` word and within parenthesis we can pass in the formatting expression
+It is also possible to cast as text using the `format` word and within parenthesis we can pass in the formatting expression  
+Formatting expressions will be defined in the future
 
 ## String concatenation
 

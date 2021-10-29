@@ -11,12 +11,7 @@ var $currentTimeSeconds = 0
 storage var $a:number
 storage array $stuff:text
 
-function @test($arg:number):number
-	
-
 init // executed only once, when computer is powered on
-	$a = @test(4) + @test(6,7)
-	
 	// $a = 2 + (1+1) * +2 - (5.0 - (1+3 + -8*0)) // Should result in 5
 // 	if $a == 5
 // 		output.2 ("Hello, World!")
