@@ -18,12 +18,19 @@ using namespace std;
 
 namespace XenonCode {
 
+// Version
 const int VERSION_MAJOR = 0;
 const int VERSION_MINOR = 0;
 const int VERSION_PATCH = 0;
 
-// Limitations
-static size_t MAX_TEXT_LENGTH = 256;
+// Limitations/Settings (may be changed by the implementation)
+static size_t MAX_TEXT_LENGTH = 1000; // number of chars
+static size_t MAX_ROM_SIZE = 65535; // number of 32-bit words (theoretical maximum of 16M)
+static string PROGRAM_EXECUTABLE = "xc_program.bin";
+
+#define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
+
+///////////////////////////////////////////////////////////////
 
 #pragma region Parser
 
@@ -1410,15 +1417,59 @@ struct SourceFile {
 	}
 };
 
+// This function recursively parses the given file and all included files and returns all lines joined
+SourceFile GetParsedFile(const string& filedir, const string& filename) {
+	SourceFile src(filedir + "/" + filename);
+	// Include other files (and replace the include statement by the lines of the other file, recursively)
+	for (int i = 0; i < src.lines.size(); ++i) {
+		if (auto& line = src.lines[i]; line) {
+			if (line.scope == 0 && line.words[0] == "include") {
+				string includeFilename = line.words[1];
+				line.words.clear();
+				auto includeSrc = GetParsedFile(filedir, includeFilename);
+				src.lines.insert(src.lines.begin()+i, includeSrc.lines.begin(), includeSrc.lines.end());
+				i += includeSrc.lines.size();
+				src.lines.insert(src.lines.begin()+i, Word{Word::FileInfo, filedir + "/" + filename});
+				++i;
+			}
+		}
+	}
+	return src;
+}
+
 #pragma endregion
 
-#pragma region Compiler
+#pragma region Assembly Definition
+
+enum CODE_TYPE : uint8_t {
+	// Statements
+	RETURN = 0, // Must add this at the end of each function block
+	VOID = 10, // Must add this after each OP statement, helps validate validity and also makes the bytecode kind of human readable
+	OP = 32, // OP [...] VOID
+
+	// Reference Values
+	ROM_CONST_NUMERIC = 130,
+	ROM_CONST_TEXT = 131,
+	STORAGE_VAR_NUMERIC = 140,
+	STORAGE_VAR_TEXT = 141,
+	STORAGE_ARRAY_NUMERIC = 150,
+	STORAGE_ARRAY_TEXT = 151,
+	RAM_VAR_NUMERIC = 160,
+	RAM_VAR_TEXT = 161,
+	RAM_ARRAY_NUMERIC = 170,
+	RAM_ARRAY_TEXT = 171,
+	RAM_DATA = 180,
+	// Extra reference
+	ARRAY_INDEX = 201,
+	DEVICE_FUNCTION_INDEX = 210,
+	INTEGER = 215,
+	ADDR = 255,
+};
 
 constexpr uint32_t Interpret3CharsAsInt(const char* str) {
-	return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (32 << 24);
+	return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (OP << 24);
 }
 #define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
-#define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
 
 DEF_OP( SET /* [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero */ ) // Assign a value
 DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
@@ -1450,9 +1501,9 @@ DEF_OP( ACO /* REF_DST REF_NUM */ ) // acos(number)
 DEF_OP( ATA /* REF_DST REF_NUM */ ) // atan(number)
 DEF_OP( ABS /* REF_DST REF_NUM */ ) // abs(number)
 DEF_OP( FRA /* REF_DST REF_NUM */ ) // fract(number)
-DEF_OP( LOG /* REF_DST REF_NUM REF_BASE */ ) // log(number, base)
 DEF_OP( SQR /* REF_DST REF_NUM */ ) // sqrt(number)
 DEF_OP( SIG /* REF_DST REF_NUM */ ) // sign(number)
+DEF_OP( LOG /* REF_DST REF_NUM REF_BASE */ ) // log(number, base)
 DEF_OP( CLP /* REF_DST REF_NUM REF_MIN REF_MAX */ ) // clamp(number, min, max)
 DEF_OP( STP /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // step(t1, t2, number)
 DEF_OP( SMT /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // smoothstep(t1, t2, number)
@@ -1462,28 +1513,69 @@ DEF_OP( NUM /* REF_DST REF_SRC */ ) // cast numeric
 DEF_OP( TXT /* REF_DST REF_SRC [REPLACEMENT_VARS ...] */ ) // cast text
 DEF_OP( DEV /* DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...] */ ) // device function
 DEF_OP( OUT /* REF_NUM [REF_ARG ...] */ ) // output
-DEF_OP( CLR /* REF_ARR */ ) // array.clear()
 DEF_OP( APP /* REF_ARR REF_VALUE [REF_VALUE ...] */ ) // array.append(value, value...)
+DEF_OP( CLR /* REF_ARR */ ) // array.clear()
 DEF_OP( POP /* REF_ARR */ ) // array.pop()
+DEF_OP( ASC /* REF_ARR */ ) // array.sort()
+DEF_OP( DSC /* REF_ARR */ ) // array.sortd()
 DEF_OP( INS /* REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...] */ ) // array.insert(index, value, value...)
 DEF_OP( DEL /* REF_ARR REF_INDEX */ ) // array.erase(index)
 DEF_OP( FLL /* REF_ARR REF_QTY REF_VAL */ ) // array.fill(qty, value)
-DEF_OP( ASC /* REF_ARR */ ) // array.sort()
-DEF_OP( DSC /* REF_ARR */ ) // array.sortd()
 DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
 DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
-DEF_OP( SUM /* REF_DST REF_ARR */ ) // array.sum
 DEF_OP( MIN /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.min  min(number, number...)
 DEF_OP( MAX /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.max  max(number, number...)
 DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  avg(number, number...)
-DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
+DEF_OP( MED /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.med
+DEF_OP( SUM /* REF_DST REF_ARR */ ) // array.sum
 DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
 DEF_OP( IDX /* REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM] */ ) // get an indexed value from an array or text
 DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
 DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
 DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
 
-struct DeviceFunction {
+#pragma endregion
+
+#pragma region Compiler
+
+struct Var {
+	enum Type {
+		Void,
+		Numeric,
+		Text,
+		Data
+	} type;
+	string textValue;
+	double numericValue;
+	
+	Var() : type(Void), textValue(""), numericValue(0.0) {}
+	Var(bool value) : type(Numeric), textValue("0"), numericValue(value) {}
+	Var(int64_t value) : type(Numeric), textValue(ToString(value)), numericValue(value) {}
+	Var(double value) : type(Numeric), textValue(ToString(value)), numericValue(value) {}
+	Var(const char* value) : type(Text), textValue(value), numericValue(stod(value)) {}
+	Var(const string& value) : type(Text), textValue(value), numericValue(stod(value)) {}
+	Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
+	
+	operator bool() const {
+		if (type == Numeric) return numericValue;
+		if (type == Text) return textValue != "";
+		if (type == Data) return true;
+		return false;
+	}
+	operator double() const {
+		return numericValue;
+	}
+	operator int64_t() const {
+		return numericValue;
+	}
+	operator string() const {
+		return textValue;
+	}
+};
+
+using DeviceFunction = function<Var(const vector<Var>&)>;
+
+struct DeviceFunctionInfo {
 	struct Arg {
 		string name;
 		string type;
@@ -1494,7 +1586,7 @@ struct DeviceFunction {
 	vector<Arg> args {};
 	string returnType = "";
 	
-	DeviceFunction(uint32_t id, const string& line) : id(id) {
+	DeviceFunctionInfo(uint32_t id, const string& line) : id(id) {
 		vector<Word> words;
 		
 		int nextWordIndex = 0;
@@ -1548,43 +1640,14 @@ struct DeviceFunction {
 	}
 };
 
-static vector<DeviceFunction> deviceFunctions {}; // Implementation SHOULD add functions to it
-
-enum CODE_TYPE : uint8_t {
-	// Statements
-	RETURN = 0, // Must add this at the end of each function block
-	VOID = 10, // Must add this after each OP statement, helps validate validity and also makes the bytecode kind of human readable
-	OP = 32, // OP [...] VOID
-
-	// Reference Values
-	ROM_CONST_NUMERIC = 130,
-	ROM_CONST_TEXT = 131,
-	STORAGE_VAR_NUMERIC = 140,
-	STORAGE_VAR_TEXT = 141,
-	STORAGE_ARRAY_NUMERIC = 150,
-	STORAGE_ARRAY_TEXT = 151,
-	RAM_VAR_NUMERIC = 160,
-	RAM_VAR_TEXT = 161,
-	RAM_ARRAY_NUMERIC = 170,
-	RAM_ARRAY_TEXT = 171,
-	RAM_DATA = 180,
-	// Extra reference
-	ARRAY_INDEX = 201,
-	DEVICE_FUNCTION_INDEX = 210,
-	INTEGER = 215,
-	ADDR = 255,
-};
-
-CODE_TYPE GetRamVarType(uint32_t t) {
-	switch (t) {
-		case STORAGE_VAR_NUMERIC: return RAM_VAR_NUMERIC;
-		case STORAGE_VAR_TEXT: return RAM_VAR_TEXT;
-		case STORAGE_ARRAY_NUMERIC: return RAM_ARRAY_NUMERIC;
-		case STORAGE_ARRAY_TEXT: return RAM_ARRAY_TEXT;
-		case ROM_CONST_NUMERIC: return RAM_VAR_NUMERIC;
-		case ROM_CONST_TEXT: return RAM_VAR_TEXT;
-		default: return CODE_TYPE(t);
-	}
+// Implementation SHOULD add functions to it
+static unordered_map<string, DeviceFunctionInfo> deviceFunctionsByName {};
+static unordered_map<uint32_t, DeviceFunction> deviceFunctionsByIndex {};
+void DeclareDeviceFunction(const string& prototype, DeviceFunction&& func) {
+	static uint32_t index = 0;
+	DeviceFunctionInfo function {++index, prototype};
+	deviceFunctionsByName.emplace(function.name, function);
+	deviceFunctionsByIndex.emplace(index, std::forward<DeviceFunction>(func));
 }
 
 struct Stack {
@@ -1617,7 +1680,27 @@ struct ByteCode {
 	bool operator != (CODE_TYPE other) const {
 		return type != other;
 	}
+	operator bool() const {
+		if (type == RETURN) {
+			return value != 0;
+		} else if (type == VOID) {
+			return value != 0;
+		}
+		return true;
+	}
 };
+
+CODE_TYPE GetRamVarType(uint32_t t) {
+	switch (t) {
+		case STORAGE_VAR_NUMERIC: return RAM_VAR_NUMERIC;
+		case STORAGE_VAR_TEXT: return RAM_VAR_TEXT;
+		case STORAGE_ARRAY_NUMERIC: return RAM_ARRAY_NUMERIC;
+		case STORAGE_ARRAY_TEXT: return RAM_ARRAY_TEXT;
+		case ROM_CONST_NUMERIC: return RAM_VAR_NUMERIC;
+		case ROM_CONST_TEXT: return RAM_VAR_TEXT;
+		default: return CODE_TYPE(t);
+	}
+}
 
 ByteCode GetOperator(string op) {
 	if (op == "=") {
@@ -2019,16 +2102,16 @@ public:
 				ByteCode f = GetBuiltInFunctionOp(funcName, retType);
 				write(f);
 				if (f == DEV) {
-					auto function = find_if(deviceFunctions.begin(), deviceFunctions.end(), [&](auto& a){return a.name == funcName;});
-					if (function == deviceFunctions.end()) {
+					if (!deviceFunctionsByName.contains(funcName)) {
 						throw ParseError("Function", func, "does not exist");
 					}
-					write({DEVICE_FUNCTION_INDEX, function->id});
-					if (function->returnType == "number") {
+					auto& function = deviceFunctionsByName.at(funcName);
+					write({DEVICE_FUNCTION_INDEX, function.id});
+					if (function.returnType == "number") {
 						retType = RAM_VAR_NUMERIC;
-					} else if (function->returnType == "text") {
+					} else if (function.returnType == "text") {
 						retType = RAM_VAR_TEXT;
-					} else if (function->returnType == "data") {
+					} else if (function.returnType == "data") {
 						retType = RAM_DATA;
 					} else {
 						retType = VOID;
@@ -3480,8 +3563,352 @@ private:
 
 #pragma region Interpreter
 
-class Computer {
-	//TODO
+struct RuntimeError : public runtime_error {
+	using runtime_error::runtime_error;
+};
+
+struct Computer {
+	struct Capability {
+		uint32_t ipc = 1e5; // instructions per cycle
+		uint32_t ram = 1e5; // number of ram variables + sizes of arrays
+		uint32_t storage = 1e5; // number of storage variables + sizes of storage arrays
+		double storagePerfPenalty = 10.0;
+	} capability;
+	
+	string directory;
+	
+	Assembly* assembly = nullptr;
+	vector<double> ram_numeric {};
+	vector<string> ram_text {};
+	vector<vector<double>> ram_numeric_arrays {};
+	vector<vector<string>> ram_text_arrays {};
+	
+	Computer() {}
+	
+	void LoadProgram(const string& directory) {
+		this->directory = directory;
+		
+		{// Load Assembly
+			if (assembly) delete assembly;
+			string programFilepath = directory + "/" + PROGRAM_EXECUTABLE;
+			ifstream file{programFilepath};
+			assembly = new Assembly(file);
+		}
+		
+		// Prepare RAM
+		ram_numeric.clear();
+		ram_numeric.resize(assembly->ram_numericVariables, 0.0);
+		ram_text.clear();
+		ram_text.resize(assembly->ram_textVariables, "");
+		ram_numeric_arrays.clear();
+		ram_numeric_arrays.resize(assembly->ram_numericArrays, {});
+		ram_text_arrays.clear();
+		ram_text_arrays.resize(assembly->ram_textArrays, {});
+	}
+	
+	void MemSet(double value, ByteCode dst, uint32_t arrIndex = 0) {
+		switch (dst.type) {
+			// case STORAGE_VAR_NUMERIC: {
+			// }break;
+			// case STORAGE_ARRAY_NUMERIC: {
+			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			// }break;
+			case RAM_VAR_NUMERIC: {
+				if (dst.value >= ram_numeric.size()) throw RuntimeError("Invalid memory reference");
+				ram_numeric[dst.value] = value;
+			}break;
+			case RAM_ARRAY_NUMERIC: {
+				if (ref.value >= ram_numeric_arrays.size()) throw RuntimeError("Invalid memory reference");
+				auto& arr = ram_numeric_arrays[ref.value];
+				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+				arr[arrIndex-1] = value;
+			}break;
+			default: throw RuntimeError("Invalid memory reference");
+		}
+	}
+	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = 0) {
+		switch (dst.type) {
+			// case STORAGE_VAR_TEXT: {
+			// }break;
+			// case STORAGE_ARRAY_TEXT: {
+			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			// }break;
+			case RAM_VAR_TEXT: {
+				if (dst.value >= ram_text.size()) throw RuntimeError("Invalid memory reference");
+				ram_text[dst.value] = value;
+			}break;
+			case RAM_ARRAY_TEXT: {
+				auto& arr = 
+				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			}break;
+			default: throw RuntimeError("Invalid memory reference");
+		}
+	}
+	
+	double MemGetNumeric(ByteCode ref, uint32_t arrIndex = 0) {
+		switch (ref.type) {
+			case ROM_CONST_NUMERIC: {
+				if (ref.value >= assembly->rom_numericConstants.size()) throw RuntimeError("Invalid memory reference");
+				return assembly->rom_numericConstants[ref.value];
+			}break;
+			// case STORAGE_VAR_NUMERIC: {
+			// }break;
+			// case STORAGE_ARRAY_NUMERIC: {
+			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			// }break;
+			case RAM_VAR_NUMERIC: {
+				if (ref.value >= ram_numeric.size()) throw RuntimeError("Invalid memory reference");
+				return ram_numeric[ref.value];
+			}break;
+			case RAM_ARRAY_NUMERIC: {
+				if (ref.value >= ram_numeric_arrays.size()) throw RuntimeError("Invalid memory reference");
+				auto& arr = ram_numeric_arrays[ref.value];
+				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+				return arr[arrIndex-1];
+			}break;
+			default: throw RuntimeError("Invalid memory reference");
+		}
+	}
+	string MemGetText(ByteCode ref, uint32_t arrIndex = 0) {
+		switch (ref.type) {
+			case ROM_CONST_TEXT: {
+				if (ref.value >= assembly->rom_textConstants.size()) throw RuntimeError("Invalid memory reference");
+				return assembly->rom_textConstants[ref.value];
+			}break;
+			// case STORAGE_VAR_TEXT: {
+			// }break;
+			// case STORAGE_ARRAY_TEXT: {
+			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			// }break;
+			case RAM_VAR_TEXT: {
+				if (ref.value >= ram_text.size()) throw RuntimeError("Invalid memory reference");
+				return ram_text[ref.value];
+			}break;
+			case RAM_ARRAY_TEXT: {
+				auto& arr = 
+				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+			}break;
+			default: throw RuntimeError("Invalid memory reference");
+		}
+	}
+	
+	void RunCode(const vector<ByteCode>& program, uint32_t index = 0) {
+		auto nextCode = [&]{return index+1<program.size()? program[++index] : CODE_TYPE::VOID;};
+		while (index < program.size()) {
+			const ByteCode& code = program[index];
+			switch (code.type) {
+				case RETURN: return;
+				case VOID: break;
+				case OP: {
+					switch (code.rawValue) {
+						case SET: {// [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero
+							
+						}break;
+						case ADD: {// REF_DST REF_A REF_B
+							
+						}break;
+						case SUB: {
+							
+						}break;
+						case MUL: {
+							
+						}break;
+						case DIV: {
+							
+						}break;
+						case MOD: {
+							
+						}break;
+						case POW: {
+							
+						}break;
+						case CCT: {
+							
+						}break;
+						case AND: {
+							
+						}break;
+						case ORR: {
+							
+						}break;
+						case EQQ: {
+							
+						}break;
+						case NEQ: {
+							
+						}break;
+						case LST: {
+							
+						}break;
+						case GRT: {
+							
+						}break;
+						case LTE: {
+							
+						}break;
+						case GTE: {
+							
+						}break;
+						case INC: {// REF_NUM
+							
+						}break;
+						case DEC: {
+							
+						}break;
+						case NOT: {// REF_DST REF_VAL
+							
+						}break;
+						case FLR: {// REF_DST REF_NUM
+							
+						}break;
+						case CIL: {
+							
+						}break;
+						case RND: {
+							
+						}break;
+						case SIN: {
+							
+						}break;
+						case COS: {
+							
+						}break;
+						case TAN: {
+							
+						}break;
+						case ASI: {
+							
+						}break;
+						case ACO: {
+							
+						}break;
+						case ATA: {
+							
+						}break;
+						case ABS: {
+							
+						}break;
+						case FRA: {
+							
+						}break;
+						case SQR: {
+							
+						}break;
+						case SIG: {
+							
+						}break;
+						case LOG: {// REF_DST REF_NUM REF_BASE
+							
+						}break;
+						case CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
+							
+						}break;
+						case STP: {
+							
+						}break;
+						case SMT: {
+							
+						}break;
+						case LRP: {
+							
+						}break;
+						case SLP: {
+							
+						}break;
+						case NUM: {// REF_DST REF_SRC
+							
+						}break;
+						case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
+							
+						}break;
+						case DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
+							
+						}break;
+						case OUT: {// REF_NUM [REF_ARG ...]
+							
+						}break;
+						case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
+							
+						}break;
+						case CLR: {
+							
+						}break;
+						case POP: {
+							
+						}break;
+						case ASC: {
+							
+						}break;
+						case DSC: {
+							
+						}break;
+						case INS: {// REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
+							
+						}break;
+						case DEL: {// REF_ARR REF_INDEX
+							
+						}break;
+						case FLL: {// REF_ARR REF_QTY REF_VAL
+							
+						}break;
+						case SIZ: {// REF_DST (REF_ARR | REF_TXT)
+							
+						}break;
+						case LAS: {
+							
+						}break;
+						case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
+							
+						}break;
+						case MAX: {
+							
+						}break;
+						case AVG: {
+							
+						}break;
+						case MED: {
+							
+						}break;
+						case SUM: {// REF_DST REF_ARR
+							
+						}break;
+						case SBS: {// REF_DST REF_SRC REF_START REF_LENGTH
+							
+						}break;
+						case IDX: {// REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM]
+							
+						}break;
+						case JMP: {// ADDR
+							
+						}break;
+						case GTO: {
+							
+						}break;
+						case CND: {// ADDR_TRUE ADDR_FALSE REF_BOOL
+							
+						}break;
+					}
+				}break;
+				default: throw RuntimeError("Program Corrupted");
+			}
+			++index;
+		}
+	}
+	
+	bool RunInit() {
+		if (assembly) {
+			RunCode(assembly->rom_vars_init);
+			RunCode(assembly->rom_program, assembly->functionRefs["system.init"]);
+			return true;
+		}
+		return false;
+	}
+	
+	~Computer() {
+		if (assembly) {
+			delete assembly;
+		}
+	}
 };
 
 #pragma endregion

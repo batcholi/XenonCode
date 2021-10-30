@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "XenonCode.hpp"
 
 using namespace std;
@@ -9,7 +7,9 @@ bool verbose = false; // Set using -verbose in the arguments
 const string outputFileName = "xc_program.bin";
 
 void Init() {
-	XenonCode::deviceFunctions.emplace_back(1, "delta () : number");
+	XenonCode::DeclareDeviceFunction("delta () : number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		return {};
+	});
 }
 
 void PrintVersion() {
@@ -33,8 +33,13 @@ void PrintUsage() {
 	cout << endl;
 	cout << "  xenoncode [-verbose] -compile <sourcedir>" << endl;
 	cout << "    Parse and Compile a program from a given directory" << endl;
-	cout << "    There must be a main.xc present" << endl;
+	cout << "    There must be a 'main.xc' present" << endl;
 	cout << "    It compiles into '" << outputFileName << "' in that same given directory" << endl;
+	cout << endl;
+	cout << "  xenoncode [-verbose] -run <sourcedir>" << endl;
+	cout << "    Run a program from a given directory" << endl;
+	cout << "    There must be a '" << outputFileName << "' present" << endl;
+	cout << "    This will only run the body of the init function" << endl;
 	cout << endl;
 	cout << "All commands may be used multiple times and in conjunction with one another, in the order they will be executed. The program will stop on the first error." << endl;
 	cout << endl;
@@ -70,29 +75,9 @@ bool ParseLine(const string& line) {
 	return false;
 }
 
-// This function recursively parses the given file and all included files and returns all lines joined
-XenonCode::SourceFile GetParsedFile(const string& filedir, const string& filename) {
-	XenonCode::SourceFile src(filedir + "/" + filename);
-	// Include other files (and replace the include statement by the lines of the other file, recursively)
-	for (int i = 0; i < src.lines.size(); ++i) {
-		if (auto& line = src.lines[i]; line) {
-			if (line.scope == 0 && line.words[0] == "include") {
-				string includeFilename = line.words[1];
-				line.words.clear();
-				auto includeSrc = GetParsedFile(filedir, includeFilename);
-				src.lines.insert(src.lines.begin()+i, includeSrc.lines.begin(), includeSrc.lines.end());
-				i += includeSrc.lines.size();
-				src.lines.insert(src.lines.begin()+i, XenonCode::Word{XenonCode::Word::FileInfo, filedir + "/" + filename});
-				++i;
-			}
-		}
-	}
-	return src;
-}
-
 bool Compile(const string& directory) {
 	try {
-		auto mainFile = GetParsedFile(directory, "main.xc");
+		auto mainFile = XenonCode::GetParsedFile(directory, "main.xc");
 		if (verbose) {
 			mainFile.DebugParsedLines();
 			cout << "Compiling..." << endl;
@@ -108,6 +93,12 @@ bool Compile(const string& directory) {
 		cerr << e.what() << endl;
 	}
 	return false;
+}
+
+bool Run(const string& directory) {
+	XenonCode::Computer computer;
+	computer.LoadProgram(directory);
+	return computer.RunInit();
 }
 
 int main(const int argc, const char** argv) {
@@ -154,6 +145,14 @@ int main(const int argc, const char** argv) {
 						cerr << "You must provide a path to a directory containing the source files of the program to compile" << endl;
 					}
 					if (!Compile(directory)) return 1;
+				}
+				// Run (using a directory)
+				else if (arg == "run") {
+					string directory = nextArgStr();
+					if (directory == "") {
+						cerr << "You must provide a path to a directory containing the XenonCode program to run" << endl;
+					}
+					if (!Run(directory)) return 1;
 				}
 				// Invalid
 				else {
