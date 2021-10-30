@@ -68,7 +68,6 @@ These are defined per implementation and may include multiple variants or be cus
 - ROM (max compiled program size as a number of 32-bit words)
 - RAM (max number of local, global and tmp variables plus all local and global arrays multiplied by their size)
 - STORAGE (max number of storage variables plus all storage arrays multiplied by their size)
-- Timers (max number of timer functions)
 - Frequency (max frequency for timer functions and input read)
 - Ports (max number of inputs/outputs)
 - IPC (max instructions per cycle, one line of code may contain multiple instructions)
@@ -305,6 +304,7 @@ while $stuff < 5
 ## Trailing Operators
 - `++` increment the variable's value
 - `--` decrement the variable's value
+- `!!` reverses the variable's value
 
 ## Assignment operators
 These operators will compute the appropriate math operation and assign the result to the leading variable.  
@@ -314,6 +314,7 @@ These operators will compute the appropriate math operation and assign the resul
 - `/=`
 - `%=`
 - `^=`
+- `&=`
 
 ## Conditional Operators
 - `==` equal to
@@ -327,7 +328,7 @@ These operators will compute the appropriate math operation and assign the resul
 
 ## Other operators
 - `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable
-- `:` (typecast operator) cast as another type / format or convert value
+- `:` (typecast operator) cast as another type
 - `&` (concat operator) concatenate texts
 - `!` (not operator) reverses a boolean value or expression (non-zero numbers become 0, and 0 becomes 1)
 
@@ -336,9 +337,6 @@ These operators will compute the appropriate math operation and assign the resul
 To parse an existing variable as another type, simply add a colon and the type, like so: 
 ```$someTextValue = $someNumberValue:text```
 This only works with simple variable types `number` and `text`, not arrays or special data  
-
-It is also possible to cast as text using the `format` word and within parenthesis we can pass in the formatting expression  
-Formatting expressions will be defined in the future
 
 ## String concatenation
 
@@ -444,6 +442,7 @@ Trailing math functions will use the leading variable as its first argument and 
 
 ### Text functions
 - `substring`(inputText, start, length) // returns a new string
+- `text`(inputTextWithFormatting, vars ...) // Formatting specs coming soon
 
 ### Trailing functions for Arrays
 These functions MUST be called as trailing functions, and they do not return anything, instead they modify the array
@@ -452,7 +451,7 @@ These functions MUST be called as trailing functions, and they do not return any
 - $myArray.`sortd`() // Sort an array in Descending order
 - $myArray.`append`(value) // Append a new value to an array
 - $myArray.`pop`() // Erase the last value in an array, reducing its size by one
-- $myArray.`insert`(index, value) // Insert a new value to an array at a specific position, pushing back all following values by one
+- $myArray.`insert`(index, value) // Insert a new value to an array after a position, pushing back all following values by one
 - $myArray.`erase`(index) // Erase an element from an array at a specific index, pulling back all following values by one
 - $myArray.`fill`(qty, value) // Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
 
@@ -490,15 +489,9 @@ It is encouraged that the code editor runs the following parse on the current li
             - Built-in functions
             - Operators
 
-## Compiling to byte-code
-TODO
-
-## Parsing the byte-code
-TODO
-
 ## Runtime
 Upon powering up the virtual computer:
-- Execute the body of the Init() function
+- Execute the body of the init() function
 One clock cycle, executed 'frequency' times per second:
 - Execute the tick function
 - Execute all timer functions sequentially if their time is due

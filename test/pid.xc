@@ -1,22 +1,6 @@
-
-var $p = 1
-var $i = 1
-var $d = 1
-var $min = 1
-var $max = 1
-
-var $integral:number
-var $pre_error:number
-
-input.1 ($_p:number, $_i:number, $_d:number, $_min:number, $_max:number)
-	$p = $_p
-	$i = $_i
-	$d = $_d
-	$min = $_min
-	$max = $_max
-
-input.2 ($error:number) // $error is setpoint - pv
-
+function @pid($error:number, $p:number, $i:number, $d:number, $min:number, $max:number, $integral:number, $pre_error:number)
+// $error is setpoint - pv
+	
 	// Proportional term
 	var $Pout = $p * $error
 
@@ -39,6 +23,6 @@ input.2 ($error:number) // $error is setpoint - pv
 
 	// Save error to previous error
 	$pre_error = $error
-
-	output.1 ($output)
+	
+	return $output
 

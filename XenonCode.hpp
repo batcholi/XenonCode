@@ -22,7 +22,8 @@ const int VERSION_MAJOR = 0;
 const int VERSION_MINOR = 0;
 const int VERSION_PATCH = 0;
 
-const size_t MAX_TEXT_LENGTH = 256;
+// Limitations
+static size_t MAX_TEXT_LENGTH = 256;
 
 #pragma region Parser
 
@@ -98,7 +99,7 @@ struct Word {
 		TrailOperator = WORD_ENUM_OPERATOR_START, // .
 		CastOperator, // :
 		ConcatOperator, // & (text concatenation operator)
-		SuffixOperatorGroup, // ++ --
+		SuffixOperatorGroup, // ++ -- !!
 		NotOperator, // !
 		MulOperatorGroup, // ^ % * /
 		AddOperatorGroup, // + -
@@ -268,6 +269,9 @@ struct Word {
 							break;
 						}
 						if (s.peek() == '\\') s.get();
+						if (word.length() >= MAX_TEXT_LENGTH) {
+							throw ParseError("Text too long");
+						}
 						word += s.get();
 					}
 					type = Text;
@@ -370,7 +374,7 @@ void ParseWords(const string& str, vector<Word>& words, int& scope) {
 					word.type = Word::TrailOperator;
 				else if (word == ":")
 					word.type = Word::CastOperator;
-				else if (word == "++" || word == "--")
+				else if (word == "++" || word == "--" || word == "!!")
 					word.type = Word::SuffixOperatorGroup;
 				else if (word == "&")
 					word.type = Word::ConcatOperator;
@@ -1455,8 +1459,7 @@ DEF_OP( SMT /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // smoothstep(t1, t2, number)
 DEF_OP( LRP /* REF_DST REF_NUM REF_NUM REF_T */ ) // lerp(number, number, t)
 DEF_OP( SLP /* REF_DST REF_NUM REF_NUM REF_T */ ) // slerp(number, number, t)
 DEF_OP( NUM /* REF_DST REF_SRC */ ) // cast numeric
-DEF_OP( TXT /* REF_DST REF_SRC */ ) // cast text
-DEF_OP( FMT /* REF_DST REF_SRC <FORMAT> */ ) // format cast text
+DEF_OP( TXT /* REF_DST REF_SRC [REPLACEMENT_VARS ...] */ ) // cast text
 DEF_OP( DEV /* DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...] */ ) // device function
 DEF_OP( OUT /* REF_NUM [REF_ARG ...] */ ) // output
 DEF_OP( CLR /* REF_ARR */ ) // array.clear()
@@ -1572,13 +1575,6 @@ enum CODE_TYPE : uint8_t {
 	ADDR = 255,
 };
 
-struct Stack {
-	int id; // a unique id, at least per function
-	string type; // function, if, elseif, else, foreach, while, repeat
-	unordered_map<string, uint32_t> pointers;
-	Stack(int id, string type) : id(id), type(type), pointers() {}
-};
-
 CODE_TYPE GetRamVarType(uint32_t t) {
 	switch (t) {
 		case STORAGE_VAR_NUMERIC: return RAM_VAR_NUMERIC;
@@ -1590,6 +1586,13 @@ CODE_TYPE GetRamVarType(uint32_t t) {
 		default: return CODE_TYPE(t);
 	}
 }
+
+struct Stack {
+	int id; // a unique id, at least per function
+	string type; // function, if, elseif, else, foreach, while, repeat
+	unordered_map<string, uint32_t> pointers;
+	Stack(int id, string type) : id(id), type(type), pointers() {}
+};
 
 struct ByteCode {
 	union {
@@ -1637,6 +1640,8 @@ ByteCode GetOperator(string op) {
 		return INC;
 	} else if (op == "--") {
 		return DEC;
+	} else if (op == "!!") {
+		return NOT;
 	} else {
 		throw ParseError("Invalid Operator", op);
 	}
@@ -1682,6 +1687,7 @@ ByteCode GetBuiltInFunctionOp(const string& func, CODE_TYPE& returnType) {
 	if (func == "erase") {returnType = VOID; return DEL;}
 	if (func == "fill") {returnType = VOID; return FLL;}
 	if (func == "substring") {returnType = RAM_VAR_TEXT; return SBS;}
+	if (func == "text") {returnType = RAM_VAR_TEXT; return TXT;}
 	if (func == "sort") {returnType = VOID; return ASC;}
 	if (func == "sortd") {returnType = VOID; return DSC;}
 	if (func == "system.output") {returnType = VOID; return OUT;}
@@ -1798,24 +1804,22 @@ public:
 		
 		// Lambda functions to Get/Add user-defined symbols
 		auto getVar = [&](const string& name) -> ByteCode {
-			int s = stack.size()-1;
-			string functionName = currentFunctionName;
-			while (!userVars[functionName][s<0?0:stack[s].id].contains(name)) {
-				if (--s < 0) {
-					if (functionName == "") {
-						throw ParseError("$" + name + " is undefined");
-					} else {
-						functionName = "";
-						s = -1;
-					}
+			for (int s = stack.size()-1; s >= -1; --s) {
+				if (userVars[currentFunctionName][s<0?0:stack[s].id].contains(name)) {
+					return userVars.at(currentFunctionName).at(s<0?0:stack[s].id).at(name);
 				}
 			}
-			return userVars.at(functionName).at(s<0?0:stack[s].id).at(name);
+			if (currentFunctionName != "") {
+				if (userVars[""][0].contains(name)) {
+					return userVars.at("").at(0).at(name);
+				}
+			}
+			throw ParseError("$" + name + " is undefined");
 		};
 		auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
 			if (name != "") {
-				for (int s = stack.size()-1; s >= 0; --s) {
-					if (userVars[currentFunctionName][stack[s].id].contains(name)) {
+				for (int s = stack.size()-1; s >= -1; --s) {
+					if (userVars[currentFunctionName][s<0?0:stack[s].id].contains(name)) {
 						throw ParseError("$" + name + " is already defined");
 					}
 				}
@@ -2307,15 +2311,6 @@ public:
 					write(tmp);
 					write(ref1);
 					write(VOID);
-					return tmp;
-				} else if (t == "format") {
-					NOT_IMPLEMENTED_YET
-					ByteCode tmp = declareTmpText();
-					// write(FMT);
-					// write(tmp);
-					// write(ref1);
-					// write(<format>);
-					// write(VOID);
 					return tmp;
 				} else {
 					throw ParseError("Invalid cast", t);
@@ -2948,6 +2943,7 @@ public:
 								case Word::SuffixOperatorGroup:{
 									validate(IsNumeric(dst));
 									write(GetOperator(operation));
+									if (operation == "!!") write(dst);
 									write(dst);
 									write(VOID);
 								}break;
@@ -3466,7 +3462,7 @@ private:
 				rom_numericConstants.push_back(value);
 			}
 			for (size_t i = 0; i < rom_textConstantsSize; ++i) {
-				char value[MAX_TEXT_LENGTH];
+				char value[MAX_TEXT_LENGTH+1];
 				s.getline(value, MAX_TEXT_LENGTH, '\0');
 				rom_textConstants.push_back(value);
 			}
@@ -3478,6 +3474,14 @@ private:
 		// Read program bytecode
 		s.read((char*)rom_program.data(), programSize * sizeof(uint32_t));
 	}
+};
+
+#pragma endregion
+
+#pragma region Interpreter
+
+class Computer {
+	//TODO
 };
 
 #pragma endregion
