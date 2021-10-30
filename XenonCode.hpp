@@ -3341,7 +3341,7 @@ public:
 		// Debug
 		if (verbose) {
 			bool nextLine = true;
-			int address = 0;
+			uint32_t address = 0;
 			for (const ByteCode& code : rom_program) {
 				if (nextLine) {
 					cout << "\n" << getFunctionName({ADDR,address}) << endl;
@@ -3606,20 +3606,34 @@ struct Computer {
 		ram_text_arrays.resize(assembly->ram_textArrays, {});
 	}
 	
+	void StorageSet(double value, const string& name, uint32_t arrIndex = 0) {
+		NOT_IMPLEMENTED_YET
+	}
+	void StorageSet(const string& value, const string& name, uint32_t arrIndex = 0) {
+		NOT_IMPLEMENTED_YET
+	}
+	
+	double StorageGetNumeric(const string& name, uint32_t arrIndex = 0) {
+		NOT_IMPLEMENTED_YET
+	}
+	string StorageGetText(const string& name, uint32_t arrIndex = 0) {
+		NOT_IMPLEMENTED_YET
+	}
+	
 	void MemSet(double value, ByteCode dst, uint32_t arrIndex = 0) {
 		switch (dst.type) {
-			// case STORAGE_VAR_NUMERIC: {
-			// }break;
-			// case STORAGE_ARRAY_NUMERIC: {
-			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
-			// }break;
+			case STORAGE_VAR_NUMERIC:
+			case STORAGE_ARRAY_NUMERIC: {
+				if (dst.value >= assembly->storageRefs.size()) throw RuntimeError("Invalid memory reference");
+				StorageSet(value, assembly->storageRefs[dst.value], arrIndex);
+			}break;
 			case RAM_VAR_NUMERIC: {
 				if (dst.value >= ram_numeric.size()) throw RuntimeError("Invalid memory reference");
 				ram_numeric[dst.value] = value;
 			}break;
 			case RAM_ARRAY_NUMERIC: {
-				if (ref.value >= ram_numeric_arrays.size()) throw RuntimeError("Invalid memory reference");
-				auto& arr = ram_numeric_arrays[ref.value];
+				if (dst.value >= ram_numeric_arrays.size()) throw RuntimeError("Invalid memory reference");
+				auto& arr = ram_numeric_arrays[dst.value];
 				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
 				arr[arrIndex-1] = value;
 			}break;
@@ -3628,17 +3642,18 @@ struct Computer {
 	}
 	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = 0) {
 		switch (dst.type) {
-			// case STORAGE_VAR_TEXT: {
-			// }break;
-			// case STORAGE_ARRAY_TEXT: {
-			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
-			// }break;
+			case STORAGE_VAR_TEXT:
+			case STORAGE_ARRAY_TEXT: {
+				if (dst.value >= assembly->storageRefs.size()) throw RuntimeError("Invalid memory reference");
+				StorageSet(value, assembly->storageRefs[dst.value], arrIndex);
+			}break;
 			case RAM_VAR_TEXT: {
 				if (dst.value >= ram_text.size()) throw RuntimeError("Invalid memory reference");
 				ram_text[dst.value] = value;
 			}break;
 			case RAM_ARRAY_TEXT: {
-				auto& arr = 
+				if (dst.value >= ram_text_arrays.size()) throw RuntimeError("Invalid memory reference");
+				auto& arr = ram_text_arrays[dst.value];
 				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
 			}break;
 			default: throw RuntimeError("Invalid memory reference");
@@ -3651,11 +3666,11 @@ struct Computer {
 				if (ref.value >= assembly->rom_numericConstants.size()) throw RuntimeError("Invalid memory reference");
 				return assembly->rom_numericConstants[ref.value];
 			}break;
-			// case STORAGE_VAR_NUMERIC: {
-			// }break;
-			// case STORAGE_ARRAY_NUMERIC: {
-			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
-			// }break;
+			case STORAGE_VAR_NUMERIC:
+			case STORAGE_ARRAY_NUMERIC: {
+				if (ref.value >= assembly->storageRefs.size()) throw RuntimeError("Invalid memory reference");
+				return StorageGetNumeric(assembly->storageRefs[ref.value], arrIndex);
+			}break;
 			case RAM_VAR_NUMERIC: {
 				if (ref.value >= ram_numeric.size()) throw RuntimeError("Invalid memory reference");
 				return ram_numeric[ref.value];
@@ -3675,17 +3690,18 @@ struct Computer {
 				if (ref.value >= assembly->rom_textConstants.size()) throw RuntimeError("Invalid memory reference");
 				return assembly->rom_textConstants[ref.value];
 			}break;
-			// case STORAGE_VAR_TEXT: {
-			// }break;
-			// case STORAGE_ARRAY_TEXT: {
-			// 	if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
-			// }break;
+			case STORAGE_VAR_TEXT:
+			case STORAGE_ARRAY_TEXT: {
+				if (ref.value >= assembly->storageRefs.size()) throw RuntimeError("Invalid memory reference");
+				return StorageGetText(assembly->storageRefs[ref.value], arrIndex);
+			}break;
 			case RAM_VAR_TEXT: {
 				if (ref.value >= ram_text.size()) throw RuntimeError("Invalid memory reference");
 				return ram_text[ref.value];
 			}break;
 			case RAM_ARRAY_TEXT: {
-				auto& arr = 
+				if (ref.value >= ram_text_arrays.size()) throw RuntimeError("Invalid memory reference");
+				auto& arr = ram_text_arrays[ref.value];
 				if (arrIndex <= 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
 			}break;
 			default: throw RuntimeError("Invalid memory reference");
@@ -3702,190 +3718,190 @@ struct Computer {
 				case OP: {
 					switch (code.rawValue) {
 						case SET: {// [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ADD: {// REF_DST REF_A REF_B
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SUB: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case MUL: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case DIV: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case MOD: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case POW: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case CCT: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case AND: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ORR: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case EQQ: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case NEQ: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case LST: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case GRT: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case LTE: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case GTE: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case INC: {// REF_NUM
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case DEC: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case NOT: {// REF_DST REF_VAL
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case FLR: {// REF_DST REF_NUM
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case CIL: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case RND: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SIN: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case COS: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case TAN: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ASI: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ACO: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ATA: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ABS: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case FRA: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SQR: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SIG: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case LOG: {// REF_DST REF_NUM REF_BASE
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case STP: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SMT: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case LRP: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SLP: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case NUM: {// REF_DST REF_SRC
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case OUT: {// REF_NUM [REF_ARG ...]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case CLR: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case POP: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case ASC: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case DSC: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case INS: {// REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case DEL: {// REF_ARR REF_INDEX
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case FLL: {// REF_ARR REF_QTY REF_VAL
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SIZ: {// REF_DST (REF_ARR | REF_TXT)
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case LAS: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case MAX: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case AVG: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case MED: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SUM: {// REF_DST REF_ARR
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case SBS: {// REF_DST REF_SRC REF_START REF_LENGTH
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case IDX: {// REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM]
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case JMP: {// ADDR
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case GTO: {
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 						case CND: {// ADDR_TRUE ADDR_FALSE REF_BOOL
-							
+							NOT_IMPLEMENTED_YET
 						}break;
 					}
 				}break;
