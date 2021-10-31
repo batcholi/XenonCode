@@ -500,13 +500,14 @@ One clock cycle, executed 'frequency' times per second:
 - Sleep for Elapsed-1/Frequency Seconds
 
 # Testing XenonCode
-You may want to test XenonCode or practice your coding skill.  
+You may want to test XenonCode or practice your coding skills.  
 For this, XenonCode's cli has a `-run` command to test some scripts in the console.  
-```
+```shell
 git clone https://github.com/batcholi/XenonCode.git
 cd XenonCode
 build/xenoncode -compile test -run test
 ```
 You may edit the .xc source files in `test/` then try running the last line again to compile & run.  
 `test/storage/` directory will be created, it will contain the storage data (variables prefixed with the `storage` keyword).  
-Those are human-readable and can be edited by hand. 
+Those are human-readable and can be edited by hand.  
+Note that this `-run` command is meant to quickly test the language and will only run the `ini` function.  
