@@ -1567,7 +1567,7 @@ struct Var {
 	}
 	operator double() const {
 		if (type == Numeric) return numericValue;
-		else if (type == Text) return stod(textValue);
+		else if (type == Text) return textValue==""? 0.0 : stod(textValue);
 		return 0.0;
 	}
 	operator int64_t() const {
@@ -3752,12 +3752,12 @@ struct Computer {
 	double StorageGetNumeric(ByteCode arr, uint32_t arrIndex = 0) {
 		auto& storage = GetStorage(arr);
 		if (arrIndex == 0) {
-			return stod(storage[0]);
+			return storage[0]==""? 0.0 : stod(storage[0]);
 		} else{
 			if (arrIndex > storage.size()) {
 				throw RuntimeError("Invalid array indexing");
 			}
-			return stod(storage[arrIndex-1]);
+			return storage[arrIndex-1]==""? 0.0 : stod(storage[arrIndex-1]);
 		}
 	}
 	const string& StorageGetText(ByteCode arr, uint32_t arrIndex = 0) {
@@ -4236,7 +4236,8 @@ struct Computer {
 								ByteCode dst = nextCode();
 								ByteCode val = nextCode();
 								if (IsNumeric(dst) && IsText(val)) {
-									MemSet(stod(MemGetText(val)), dst);
+									string str = MemGetText(val);
+									MemSet(str==""? 0.0 : stod(str), dst);
 								} else throw RuntimeError("Invalid operation");
 							}break;
 							case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
@@ -4412,7 +4413,7 @@ struct Computer {
 										auto& array = GetStorage(arr);
 										vector<double> values {};
 										values.reserve(array.size());
-										for (const auto& val : array) values.push_back(stod(val));
+										for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
 										sort(values.begin(), values.end());
 										array.clear();
 										for (const auto& val : values) array.push_back(to_string(val));
@@ -4441,7 +4442,7 @@ struct Computer {
 										auto& array = GetStorage(arr);
 										vector<double> values {};
 										values.reserve(array.size());
-										for (const auto& val : array) values.push_back(stod(val));
+										for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
 										sort(values.begin(), values.end(), greater<double>());
 										array.clear();
 										for (const auto& val : values) array.push_back(to_string(val));
@@ -4603,7 +4604,8 @@ struct Computer {
 									switch (ref.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(ref);
-											MemSet(stod(array.back()), dst);
+											string last = array.back();
+											MemSet(last==""? 0.0 : stod(last), dst);
 										}break;
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(ref);
@@ -4638,7 +4640,7 @@ struct Computer {
 											auto& array = GetStorage(arr);
 											if (array.size() == 0) min = 0;
 											else for (const auto& val : array) {
-												double value = stod(val);
+												double value = val==""? 0.0 : stod(val);
 												if (value < min) min = value;
 											}
 										}break;
@@ -4679,7 +4681,7 @@ struct Computer {
 											auto& array = GetStorage(arr);
 											if (array.size() == 0) max = 0;
 											else for (const auto& val : array) {
-												double value = stod(val);
+												double value = val==""? 0.0 : stod(val);
 												if (value < max) max = value;
 											}
 										}break;
@@ -4721,7 +4723,7 @@ struct Computer {
 											auto& array = GetStorage(arr);
 											if (array.size() == 0) size = 1;
 											else for (const auto& value : array) {
-												total += stod(value);
+												total += value==""? 0.0 : stod(value);
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
@@ -4760,7 +4762,7 @@ struct Computer {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											for (const auto& value : array) {
-												total += stod(value);
+												total += value==""? 0.0 : stod(value);
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
@@ -4798,7 +4800,8 @@ struct Computer {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											if (array.size() > 0) {
-												med = stod(array[array.size()/2]);
+												string val = array[array.size()/2];
+												med = val==""? 0.0 : stod(val);
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
