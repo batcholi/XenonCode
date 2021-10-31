@@ -14,7 +14,8 @@ include "pid.xc"
 init // executed only once, when computer is powered on
 	$a = 2 + (1+1) * +2 - (5.0 - (1+3 + -8*0)) // Should result in 5
 	if $a == 5
-		output.2 ("Hello, World!")
+		output.2 ("Hello, World!", 1, 2, 3)
+		output.$console (text("The integer value of $a is {0} and its decimal value is {00.00}", $a, $a))
 	else
 		output.$console ("There must be a bug somewhere...")
 	$a!!
@@ -22,7 +23,7 @@ init // executed only once, when computer is powered on
 	$stuff.fill(10, "")
 	// Set all items in the array to their index
 	foreach $stuff ($item, $i)
-		$item = $i:text
+		$stuff.$i = $i:text
 	// Print the array
 	foreach $stuff ($item)
 		output.$console ($item)

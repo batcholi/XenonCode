@@ -1,4 +1,4 @@
-function @pid($error:number, $p:number, $i:number, $d:number, $min:number, $max:number, $integral:number, $pre_error:number)
+function @pid($error:number, $p:number, $i:number, $d:number, $min:number, $max:number, $integral:number, $pre_error:number) : number
 // $error is setpoint - pv
 	
 	// Proportional term

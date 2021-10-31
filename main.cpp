@@ -10,6 +10,13 @@ void Init() {
 	XenonCode::DeclareDeviceFunction("delta () : number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return {};
 	});
+	XenonCode::SetOutputFunction([](uint32_t ioIndex, const vector<XenonCode::Var>& args){
+		cout << "output." << ioIndex << "\n";
+		for (const auto& arg : args) {
+			cout << '\t' << string(arg) << "\n";
+		}
+		cout << endl;
+	});
 }
 
 void PrintVersion() {
@@ -98,7 +105,12 @@ bool Compile(const string& directory) {
 bool Run(const string& directory) {
 	XenonCode::Computer computer;
 	computer.LoadProgram(directory);
-	return computer.RunInit();
+	if (computer.RunInit()) {
+		computer.SaveStorage();
+		cout << "Progam's Init function successfully executed\n" << endl;
+		return true;
+	}
+	return false;
 }
 
 int main(const int argc, const char** argv) {

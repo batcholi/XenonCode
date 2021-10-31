@@ -427,10 +427,9 @@ Trailing math functions will use the leading variable as its first argument and 
 - `sign`(number)
 - `pow`(number, exponent)
 - `clamp`(number, minimum, maximum)
-- `step`(t1, t2, number)
-- `smoothstep`(t1, t2, number)
-- `lerp`(number, number, t)
-- `slerp`(number, number, t)
+- `step`(edge1, edge2, number) or (edge, number)
+- `smoothstep`(edge1, edge2, number)
+- `lerp`(a, b, number)
 - `mod`(number, divisor) // the modulo operator
 - `min`(number, number)
 - `max`(number, number)
