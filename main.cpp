@@ -11,11 +11,16 @@ void Init() {
 		return {};
 	});
 	XenonCode::SetOutputFunction([](uint32_t ioIndex, const vector<XenonCode::Var>& args){
-		cout << "output." << ioIndex << "\n";
-		for (const auto& arg : args) {
-			cout << '\t' << string(arg) << "\n";
+		if (verbose) {
+			cout << "output." << ioIndex << "\n";
 		}
-		cout << endl;
+		for (const auto& arg : args) {
+			if (verbose) {
+				cout << '\t';
+			}
+			cout << string(arg) << endl;
+		}
+		if (verbose) cout << endl;
 	});
 }
 
@@ -107,7 +112,9 @@ bool Run(const string& directory) {
 	computer.LoadProgram(directory);
 	if (computer.RunInit()) {
 		computer.SaveStorage();
-		cout << "Progam's Init function successfully executed\n" << endl;
+		if (verbose) {
+			cout << "Program's Init function successfully executed\n" << endl;
+		}
 		return true;
 	}
 	return false;

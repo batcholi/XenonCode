@@ -22,7 +22,7 @@ namespace XenonCode {
 
 // Version
 const int VERSION_MAJOR = 0;
-const int VERSION_MINOR = 0;
+const int VERSION_MINOR = 1;
 const int VERSION_PATCH = 0;
 
 // Limitations/Settings (may be changed by the implementation)
@@ -3583,6 +3583,7 @@ private:
 			for (size_t i = 0; i < rom_numericConstantsSize; ++i) {
 				double value;
 				s >> value;
+				s.get();
 				rom_numericConstants.push_back(value);
 			}
 			for (size_t i = 0; i < rom_textConstantsSize; ++i) {
