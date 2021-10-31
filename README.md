@@ -472,7 +472,9 @@ Here are examples of basic device functions:
 - `delta`() // returns the time difference in seconds from the last execution of this function  
 
 # Compiler Specifications
-This section is intented for game developers who want to use this in their game
+This section is intented for game developers who want to use this in their game.  
+
+XenonCode comes with its own parser/compiler/interpreter library, and a very simple cli tool.  
 
 ## Editor
 It is encouraged that the code editor runs the following parse on the current line on each keystroke: 
@@ -497,3 +499,14 @@ One clock cycle, executed 'frequency' times per second:
 - Execute all input functions that have received some data since the last cycle
 - Sleep for Elapsed-1/Frequency Seconds
 
+# Testing XenonCode
+You may want to test XenonCode or practice your coding skill.  
+For this, XenonCode's cli has a `-run` command to test some scripts in the console.  
+```
+git clone https://github.com/batcholi/XenonCode.git
+cd XenonCode
+build/xenoncode -compile test -run test
+```
+You may edit the .xc source files in `test/` then try running the last line again to compile & run.  
+`test/storage/` directory will be created, it will contain the storage data (variables prefixed with the `storage` keyword).  
+Those are human-readable and can be edited by hand. 
