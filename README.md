@@ -512,6 +512,5 @@ build/xenoncode -compile test -run test
 ```
 You may edit the .xc source files in `test/` then try running the last line again to compile & run.  
 `test/storage/` directory will be created, it will contain the storage data (variables prefixed with the `storage` keyword).  
-Those are human-readable and can be edited by hand.  
 Note that this `-run` command is meant to quickly test the language and will only run the `init` function.  
 Also, make sure that your editor is configured to use tabs and not spaces, for correct parsing of indentation.  
