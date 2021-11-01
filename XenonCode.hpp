@@ -3902,7 +3902,7 @@ struct Computer {
 		// Find current file and line for debug
 		string currentFile = "";
 		uint32_t currentLine = 0;
-		for (uint32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
+		for (int32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
 			if (currentLine == 0 && program[tmpIndex].type == LINENUMBER) {
 				currentLine = program[tmpIndex].value;
 			} else if (currentFile == "" && program[tmpIndex].type == SOURCEFILE) {
