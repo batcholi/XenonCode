@@ -147,6 +147,9 @@ if (!empty($_GET['theme'])) {
 	<!-- jQuery -->
 	<script src="https://code.jquery.com/jquery-3.3.1.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 	
+	<!-- Font Awesome -->
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+
 	<style>
 		body {
 			background-color: #222;
@@ -176,10 +179,15 @@ if (!empty($_GET['theme'])) {
 		}
 		pre#output {
 			overflow-y: scroll;
-			min-height: 50px;
+			min-height: 16px;
 			width: 120%;
 		}
 		footer {}
+		
+		/* Loading Spinner */
+		i.fa-spinner {animation: loadingSpinner 1s linear infinite;}
+		@keyframes loadingSpinner {100% {transform:rotate(360deg);}}
+		
 	</style>
 </head>
 <body>
@@ -216,15 +224,16 @@ if (!empty($_GET['theme'])) {
 	<script src="<?=$codemirror_baseurl?>/codemirror.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="<?=$codemirror_baseurl?>/keymap/<?=$codemirror_keymap?>.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="<?=$codemirror_baseurl?>/addon/mode/simple.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+	<script src="<?=$codemirror_baseurl?>/addon/comment/comment.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="/codemirror_xenoncode.js"></script>
 	<script>
 		var editor = null;
-		var heightRatio = 0.9;
-		var editorTop = 40;
+		var heightRatio = 0.85;
+		var editorTop = 50;
 		
 		// Resize
 		function ResizeEditor() {
-			editorTop = $('code').offset().top + 20;
+			editorTop = $('code').offset().top + 25;
 			var innerHeight = window.innerHeight - editorTop;
 			editor.setSize(null, heightRatio * innerHeight);
 			$('pre#output').css('height', ((1.0 - heightRatio) * innerHeight - 15) + 'px');
@@ -259,17 +268,24 @@ if (!empty($_GET['theme'])) {
 					smartIndent: false,
 					mode: "xenoncode",
 					tabSize: 4,
+					indentUnit: 4,
 					keyMap: "<?=$codemirror_keymap?>",
 					autoCloseBrackets: true,
 					matchBrackets: true,
 					lineWrapping: false,
 					showCursorWhenSelecting: true,
 					theme: "<?=$codemirror_theme?>",
-					// viewportMargin: Infinity,
+					extraKeys: {
+						'Ctrl-/': function(){editor.execCommand('toggleComment')}
+					}
 				});
 				ResizeEditor();
 			}
 		});
+		
+		function ClearOutput() {
+			
+		}
 		
 		function Save(callback) {
 			$.ajax({
@@ -287,10 +303,14 @@ if (!empty($_GET['theme'])) {
 		}
 		
 		function Run() {
+			document.getElementById("output").innerHTML = '<i class="fas fa-spinner"></i>';
 			$.ajax({
 				url: '?run',
 				success: function(response) {
 					document.getElementById("output").innerHTML = response;
+				},
+				error: function() {
+					document.getElementById("output").innerHTML = 'ERROR';
 				}
 			});
 		}

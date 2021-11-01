@@ -1393,9 +1393,6 @@ struct SourceFile {
 		for (string lineStr; getline(stream, lineStr); lineNumber++) {
 			try {
 				auto& line = lines.emplace_back(lineStr, lineNumber);
-				if (line.scope > scope + 1) {
-					throw ParseError("Too many leading tabs");
-				}
 				scope = line.scope;
 			} catch (ParseError& e) {
 				stringstream err {};
@@ -1765,7 +1762,7 @@ ByteCode GetBuiltInFunctionOp(const string& func, CODE_TYPE& returnType) {
 	if (func == "smoothstep") {returnType = RAM_VAR_NUMERIC; return SMT;}
 	if (func == "lerp") {returnType = RAM_VAR_NUMERIC; return LRP;}
 	if (func == "size") {returnType = RAM_VAR_NUMERIC; return SIZ;}
-	if (func == "last") {returnType = RAM_VAR_NUMERIC; return LAS;}
+	if (func == "last") {returnType = VOID/*NUMERIC|TEXT*/; return LAS;}
 	if (func == "mod") {returnType = RAM_VAR_NUMERIC; return MOD;}
 	if (func == "min") {returnType = RAM_VAR_NUMERIC; return MIN;}
 	if (func == "max") {returnType = RAM_VAR_NUMERIC; return MAX;}
@@ -2121,19 +2118,43 @@ public:
 					}
 					auto& function = deviceFunctionsByName.at(funcName);
 					write({DEVICE_FUNCTION_INDEX, function.id});
-					if (function.returnType == "number") {
-						retType = RAM_VAR_NUMERIC;
-					} else if (function.returnType == "text") {
-						retType = RAM_VAR_TEXT;
-					} else if (function.returnType == "data") {
-						retType = RAM_DATA;
-					} else {
-						retType = VOID;
+					if (getReturn) {
+						if (function.returnType == "number") {
+							retType = RAM_VAR_NUMERIC;
+						} else if (function.returnType == "text") {
+							retType = RAM_VAR_TEXT;
+						} else if (function.returnType == "data") {
+							retType = RAM_DATA;
+						} else {
+							retType = VOID;
+						}
+					}
+				} else if (f == LAS) {
+					if (getReturn) {
+						if (args.size() == 0) {
+							throw ParseError("Invalid arguments");
+						}
+						switch (args[0].type) {
+							case STORAGE_ARRAY_NUMERIC:
+							case RAM_ARRAY_NUMERIC:
+								retType = RAM_VAR_NUMERIC;
+							break;
+							case ROM_CONST_TEXT:
+							case STORAGE_VAR_TEXT:
+							case STORAGE_ARRAY_TEXT:
+							case RAM_VAR_TEXT:
+							case RAM_ARRAY_TEXT:
+								retType = RAM_VAR_TEXT;
+							break;
+							default: throw ParseError("Invalid arguments");
+						}
 					}
 				}
-				if (retType != VOID) {
-					ret = declareVar("", retType);
-					write(ret);
+				if (getReturn) {
+					if (retType != VOID) {
+						ret = declareVar("", retType);
+						write(ret);
+					}
 				}
 				for (auto arg : args) {
 					write(arg);
@@ -3682,9 +3703,6 @@ struct Computer {
 			while (file.getline(value, MAX_TEXT_LENGTH, '\0')) {
 				storage.emplace_back(string(value));
 			}
-			if (storage.size() == 0) {
-				storage.emplace_back();
-			}
 		}
 	}
 	
@@ -3710,6 +3728,9 @@ struct Computer {
 		string name = assembly->storageRefs[arr.value];
 		if (!storageCache.contains(name)) {
 			throw RuntimeError("Invalid storage reference");
+		}
+		if ((arr.type == STORAGE_VAR_NUMERIC || arr.type == STORAGE_VAR_TEXT) && storageCache.at(name).size() == 0) {
+			storageCache.at(name).emplace_back();
 		}
 		return storageCache.at(name);
 	}
@@ -3797,12 +3818,16 @@ struct Computer {
 				StorageSet(value, dst, arrIndex);
 			}break;
 			case RAM_VAR_TEXT: {
-				if (dst.value >= ram_text.size()) throw RuntimeError("Invalid memory reference");
+				if (dst.value >= ram_text.size()) {
+					throw RuntimeError("Invalid memory reference");
+				}
 				ram_text[dst.value] = value;
 			}break;
 			case RAM_ARRAY_TEXT: {
 				auto& arr = GetTextArray(dst);
-				if (arrIndex == 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
+				if (arrIndex == 0 || arrIndex > arr.size()) {
+					throw RuntimeError("Invalid array indexing");
+				}
 				arr[arrIndex-1] = value;
 			}break;
 			default: throw RuntimeError("Invalid memory reference");
@@ -4473,12 +4498,14 @@ struct Computer {
 								if (args.size() == 0) throw RuntimeError("Not enough arguments");
 								if (!IsArray(arr)) throw RuntimeError("Not an array");
 								if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
-								uint32_t index = MemGetNumeric(idx);
+								int32_t index = MemGetNumeric(idx);
+								if (index < 0) throw RuntimeError("Invalid array index");
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
-										vector<string> values(args.size());
+										vector<string> values{};
+										values.reserve(args.size());
 										for (const auto& c : args) {
 											if (IsNumeric(c)) {
 												values.push_back(to_string(MemGetNumeric(c)));
@@ -4486,19 +4513,24 @@ struct Computer {
 												values.push_back(MemGetText(c));
 											}
 										}
+										if (index > array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 										storageDirty = true;
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
-										vector<double> values(args.size());
+										vector<double> values{};
+										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetNumeric(c));
+										if (index > array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
-										vector<string> values(args.size());
+										vector<string> values{};
+										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetText(c));
+										if (index > array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 									}break;
 								}
@@ -4509,13 +4541,17 @@ struct Computer {
 								ByteCode idx2 = nextCode();
 								if (!IsArray(arr)) throw RuntimeError("Not an array");
 								if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
-								uint32_t index = MemGetNumeric(idx);
-								uint32_t index2 = idx2.type != VOID? MemGetNumeric(idx) : index;
+								int32_t index = MemGetNumeric(idx);
+								int32_t index2 = idx2.type != VOID? MemGetNumeric(idx2) : index;
+								if (index <= 0 || index2 <= 0) throw RuntimeError("Invalid array index");
+								--index;
+								if (index2 <= index) throw RuntimeError("Invalid array index");
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
-										if (index2 == index) {
+										if (index2 > array.size()) throw RuntimeError("Invalid array index");
+										if (index2 == index+1) {
 											array.erase(array.begin()+index);
 										} else {
 											array.erase(array.begin()+index, array.begin()+index2);
@@ -4524,7 +4560,8 @@ struct Computer {
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
-										if (index2 == index) {
+										if (index2 > array.size()) throw RuntimeError("Invalid array index");
+										if (index2 == index+1) {
 											array.erase(array.begin()+index);
 										} else {
 											array.erase(array.begin()+index, array.begin()+index2);
@@ -4532,7 +4569,8 @@ struct Computer {
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
-										if (index2 == index) {
+										if (index2 > array.size()) throw RuntimeError("Invalid array index");
+										if (index2 == index+1) {
 											array.erase(array.begin()+index);
 										} else {
 											array.erase(array.begin()+index, array.begin()+index2);
@@ -4682,14 +4720,14 @@ struct Computer {
 											if (array.size() == 0) max = 0;
 											else for (const auto& val : array) {
 												double value = val==""? 0.0 : stod(val);
-												if (value < max) max = value;
+												if (value > max) max = value;
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
 											if (array.size() == 0) max = 0;
 											else for (const auto& value : array) {
-												if (value < max) max = value;
+												if (value > max) max = value;
 											}
 										}break;
 										case STORAGE_ARRAY_TEXT:
@@ -4701,7 +4739,7 @@ struct Computer {
 									for (const ByteCode& c : args) {
 										if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 										double value = MemGetNumeric(c);
-										if (value < max) max = value;
+										if (value > max) max = value;
 									}
 								}
 								MemSet(max, dst);
@@ -4721,14 +4759,16 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
-											if (array.size() == 0) size = 1;
+											size = array.size();
+											if (size == 0) size = 1;
 											else for (const auto& value : array) {
 												total += value==""? 0.0 : stod(value);
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
-											if (array.size() == 0) size = 1;
+											size = array.size();
+											if (size == 0) size = 1;
 											else for (const auto& value : array) {
 												total += value;
 											}
@@ -4744,6 +4784,7 @@ struct Computer {
 										double value = MemGetNumeric(c);
 										total += value;
 									}
+									size = args.size();
 								}
 								MemSet(total / size, dst);
 							}break;

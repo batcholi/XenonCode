@@ -413,7 +413,7 @@ These functions are defined in the base language and they take one or more argum
 Trailing math functions will use the leading variable as its first argument and modify that variable with the return value.  
 - `floor`(number)
 - `ceil`(number)
-- `round`(number) // takes an optional second argument to specify the number of decimals, otherwise rounding to integer
+- `round`(number)
 - `sin`(number)
 - `cos`(number)
 - `tan`(number)
