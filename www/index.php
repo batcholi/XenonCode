@@ -163,6 +163,10 @@ if (!empty($_GET['theme'])) {
 		header a {
 			color: #fff;
 		}
+		header span {
+			color: #666;
+			line-height: 24px;
+		}
 		main {}
 		code {}
 		.CodeMirror {
@@ -192,8 +196,7 @@ if (!empty($_GET['theme'])) {
 </head>
 <body>
 	<header>
-		<a target="_blank" href="https://github.com/batcholi/XenonCode">View documentation on GitHub</a>
-		<br><br>
+		<a target="_blank" href="https://github.com/batcholi/XenonCode">View documentation</a>
 		<label style="float: right;">Theme
 			<select onchange="location = '?theme='+this.value">
 				<?php foreach ($codemirror_themes as $theme) {
@@ -201,15 +204,18 @@ if (!empty($_GET['theme'])) {
 				}?>
 			</select>
 		</label>
-		<button onclick="Save()">Save (ctrl+s)</button>
-		<button onclick="Save(Run)">Run (ctrl+r)</button>
 		<br><br>
+		<!-- <button onclick="Save()" title="ctrl+s">Save</button> -->
+		<button onclick="Save(Run)" title="ctrl+r (this also saves the file)">Run</button> <span>(runs the init block)</span>
+		<br>
+		<span>Make sure to use Tabs instead of spaces for indentation</span>
+		<br>
 	</header>
 
 	<main>
 		<code></code>
 		<div id="resizer"></div>
-		<pre id="output"></pre>
+		<pre id="output">Output will be displayed here when you run the program...</pre>
 	</main>
 
 	<footer></footer>
