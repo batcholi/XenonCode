@@ -343,6 +343,15 @@ This only works with simple variable types `number` and `text`, not arrays or sp
 To concatenate texts, simply separate all text values/variables with the concat operator `&` in the same assignment (don't forget to cast to text if you need to).  
 ```$someTextVar = "Hello, " & $someName & "!, My age is " & $age:text & " and I have all my teeth"```
 
+## Include
+You may want to split your project into multiple source files.  
+To do this, you can put some code into another `.xc` file and use the `include` keyword in the parent file. 
+```
+include "test.xc"
+```
+This is effectively the same as taking all the lines from `test.xc` and inserting them into the current file where the `include` is.  
+This can be done on multiple levels, just make sure that a file does not include itself, directly or indirectly.
+
 # User-Defined Functions
 
 Functions define a group of operations that we may call one or more times during the execution of the program. 
@@ -501,8 +510,12 @@ One clock cycle, executed 'frequency' times per second:
 
 # Testing XenonCode
 You may want to test XenonCode or practice your coding skills.  
-For this, XenonCode's cli has a `-run` command to test some scripts in the console.  
-This repository comes with the cli tool, located in `build/xenoncode`
+There is an online fiddle tool at <a href="https://xenoncode.com/">XenonCode.com</a>  
+
+Otherwise, you may want to try running it directly on your computer.  
+For this, XenonCode has a cli with a `-run` command to test some scripts in the console.  
+This repository comes with the cli tool, located in `build/xenoncode`  
+Here's how you can download and run XenonCode:
 ```shell
 # Clone this github repository
 git clone https://github.com/batcholi/XenonCode.git
@@ -514,3 +527,6 @@ You may edit the .xc source files in `test/` then try running the last line agai
 `test/storage/` directory will be created, it will contain the storage data (variables prefixed with the `storage` keyword).  
 Note that this `-run` command is meant to quickly test the language and will only run the `init` function.  
 Also, make sure that your editor is configured to use tabs and not spaces, for correct parsing of indentation.  
+
+If you want to integrate XenonCode into your C++ project, you can include `XenonCode.hpp`.  
+Further documentation will be coming soon for this, in the meantime you may use `main.cpp` as an example but its usage is still subject to change.  

@@ -13,19 +13,18 @@ if (empty($_GET['PROJECT'])) {header("Location: /".uniqid());exit;}
 $PROJECT = $_GET['PROJECT'];
 if (!preg_match("#^\w+$#", $PROJECT) || strlen($PROJECT) > 100) exit;
 $PROJECT_DIR = "../projects/$PROJECT";
-if (!is_dir($PROJECT_DIR)) {
-	mkdir($PROJECT_DIR, 0777, true);
-	chmod($PROJECT_DIR, 0777);
-	$filepath = "$PROJECT_DIR/main.xc";
-	file_put_contents($filepath, file_get_contents("../examples/helloworld.xc"));
-	chmod($filepath, 0666);
-}
 
 // Ajax Load
 if (!empty($_GET['loadfile'])) {
 	if (preg_match("#^\w+\.xc$#", $_GET['loadfile'])) {
-		$filepath = "$PROJECT_DIR/".$_GET['loadfile'];
-		readfile($filepath);
+		if (is_dir($PROJECT_DIR)) {
+			$filepath = "$PROJECT_DIR/".$_GET['loadfile'];
+			if (is_file($filepath)) {
+				readfile($filepath);
+			}
+		} else if ($_GET['loadfile'] == 'main.xc') {
+			readfile("../examples/helloworld.xc");
+		}
 	}
 	exit;
 }
@@ -33,6 +32,10 @@ if (!empty($_GET['loadfile'])) {
 // Ajax Save
 if (!empty($_GET['savefile']) && isset($_POST['content'])) {
 	if (preg_match("#^\w+\.xc$#", $_GET['savefile'])) {
+		if (!is_dir($PROJECT_DIR)) {
+			mkdir($PROJECT_DIR, 0777, true);
+			chmod($PROJECT_DIR, 0777);
+		}
 		$filepath = "$PROJECT_DIR/".$_GET['savefile'];
 		file_put_contents($filepath, $_POST['content']);
 		chmod($filepath, 0666);
@@ -42,10 +45,16 @@ if (!empty($_GET['savefile']) && isset($_POST['content'])) {
 
 // Ajax Run
 if (isset($_GET['run'])) {
-	chdir($PROJECT_DIR);
-	system("timeout 0.5s ../../build/xenoncode -compile . -run . 2>&1", $resultCode);
+	if (is_dir($PROJECT_DIR)) {
+		chdir($PROJECT_DIR);
+		system("timeout 0.5s ../../build/xenoncode -compile . -run . 2>&1", $resultCode);
+	}
 	exit;
 }
+
+// File
+$FILE = !empty($_GET['file'])? $_GET['file'] : 'main.xc';
+if (!preg_match("#^\w+\.xc$#", $FILE)) exit;
 
 // CodeMirror
 $codemirror_version = "5.63.3";
@@ -134,11 +143,11 @@ if (!empty($_GET['theme'])) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<title>XenonCode - Lightweight in-game scripting language</title>
+	<title>XenonCode - The new in-game scripting language</title>
 	<meta charset="utf-8">
 	<meta name="description" content="XenonCode is a lightweight programming language designed for in-game scripting">
 	<meta name="keywords" content="XenonCode">
-	<meta property="og:title" content="XenonCode - Lightweight in-game scripting language" />
+	<meta property="og:title" content="XenonCode - The new in-game scripting language" />
 	<meta property="og:description" content="XenonCode is a lightweight programming language designed for in-game scripting">
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content="https://XenonCode.com/" />
@@ -155,16 +164,19 @@ if (!empty($_GET['theme'])) {
 			color-scheme: dark;
 		}
 		body {
-			background-color: #222;
-			color: #ccc;
+			background-color: #222226;
+			color: #cde;
 			font-family: helvetica,arial;
 			margin: 0 auto;
 			padding: 10px;
 			overflow: hidden;
 		}
-		header {}
+		header h1 {
+			font-size: 18px;
+			font-weight: normal;
+		}
 		header a {
-			color: #fff;
+			color: #cde;
 		}
 		header span {
 			color: #666;
@@ -190,6 +202,7 @@ if (!empty($_GET['theme'])) {
 			width: 120%;
 		}
 		footer {}
+		br {clear:both;}
 		
 		/* Loading Spinner */
 		i.fa-spinner {animation: loadingSpinner 1s linear infinite;}
@@ -199,7 +212,8 @@ if (!empty($_GET['theme'])) {
 </head>
 <body>
 	<header>
-		<a target="_blank" href="https://github.com/batcholi/XenonCode">View documentation</a>
+		<h1><b>XenonCode</b> - The new in-game scripting language</h1>
+		<a target="_blank" href="/documentation.php">Read the documentation</a>
 		<label style="float: right;">Theme
 			<select onchange="location = '?theme='+this.value">
 				<?php foreach ($codemirror_themes as $theme) {
@@ -209,16 +223,47 @@ if (!empty($_GET['theme'])) {
 		</label>
 		<br><br>
 		<!-- <button onclick="Save()" title="ctrl+s">Save</button> -->
-		<button onclick="Save(Run)" title="ctrl+r (this also saves the file)">Run</button> <span>(runs the init block)</span>
+		<button onclick="Save(Run)" title="ctrl+r (this also saves the file)">RUN</button> <span> &lt;--- runs the <b>init</b> block in main.xc</span>
 		<br>
-		<span>Make sure to use Tabs instead of spaces for indentation</span>
+		<span>
+			Try running the program, you will see the output under the editor
+			<br>
+			You may set your own url, share your code with friends
+			<br>
+			CTRL+S to save the file, CTRL+R to run the program
+			<br>
+			Indent using <b>tabs</b> instead of spaces
+		</span>
+		<label style="float: right;">File
+			<select onchange="
+				var filename = (this.value || prompt('Enter a filename'));
+				$(this).val('<?=$FILE?>');
+				if (filename) Save(function(){
+					if (filename.match(/^\w+\.xc$/))
+						location = '?file='+filename;
+					else if (filename.match(/^\w+$/))
+						location = '?file='+filename+'.xc';
+					else
+						alert('Invalid filename. Try not to use special characters.');
+				});
+			">
+				<?php 
+				if (!is_file("$PROJECT_DIR/$FILE")) echo "<option value=\"$FILE\">$FILE</option>";
+				if (is_dir($PROJECT_DIR)) foreach (glob($PROJECT_DIR."/*.xc") as $file) {
+					$filename = basename($file);
+					echo "<option value=\"$filename\" ".($filename == $FILE? 'selected':'').">$filename</option>";
+				}
+				?>
+				<option value="">New file</option>
+			</select>
+		</label>
 		<br>
 	</header>
 
 	<main>
 		<code></code>
 		<div id="resizer"></div>
-		<pre id="output">Output will be displayed here when you run the program...</pre>
+		<pre id="output"></pre>
 	</main>
 
 	<footer></footer>
@@ -234,7 +279,7 @@ if (!empty($_GET['theme'])) {
 	<script src="<?=$codemirror_baseurl?>/keymap/<?=$codemirror_keymap?>.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="<?=$codemirror_baseurl?>/addon/mode/simple.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 	<script src="<?=$codemirror_baseurl?>/addon/comment/comment.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-	<script src="/codemirror_xenoncode.js"></script>
+	<script src="/xc_mode.js"></script>
 	<script>
 		var editor = null;
 		var heightRatio = 0.85;
@@ -268,7 +313,7 @@ if (!empty($_GET['theme'])) {
 		
 		// Load
 		$.ajax({
-			url: '?loadfile=main.xc',
+			url: '?loadfile=<?=$FILE?>',
 			success: function(content) {
 				editor = CodeMirror(document.body.getElementsByTagName("code")[0], {
 					value: content,
@@ -294,7 +339,7 @@ if (!empty($_GET['theme'])) {
 		
 		function Save(callback) {
 			$.ajax({
-				url: '?savefile=main.xc',
+				url: '?savefile=<?=$FILE?>',
 				method: 'post',
 				data: {
 					content: editor.getValue()
