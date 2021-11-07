@@ -436,14 +436,16 @@ int GetExpressionEnd(const vector<Word>& words, int begin, int end = -1) {
 	return -1;
 }
 
-// From a given index of a closing parenthesis, returns the index of the corresponsing opening parenthesis, or -1 if not found. This function will include a leading Name if there is one (for a function call)
-int GetExpressionBegin(const vector<Word>& words, int end) {
+// From a given index of a closing parenthesis (end), returns the index of the corresponsing opening parenthesis, or -1 if not found. This function will include a leading Name if there is one (for a function call)
+int GetExpressionBegin(const vector<Word>& words, int begin, int end) {
 	int stack = 0;
 	while(--end >= 0) {
 		if (words[end] == Word::ExpressionBegin) {
 			if (stack == 0) {
 				if (end > 0 && (words[end-1] == Word::Name || words[end-1] == Word::Funcname)) {
-					return end-1;
+					if (end-1 >= begin) {
+						return end-1;
+					}
 				}
 				return end;
 			}
@@ -656,8 +658,8 @@ bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
 						}
 					}
 					if (prev == Word::ExpressionEnd) {
-						prevPos = GetExpressionBegin(words, prevPos);
-						if (prevPos < startIndex) {
+						prevPos = GetExpressionBegin(words, startIndex, prevPos);
+						if (prevPos < 0) {
 							return false;
 						}
 					}
@@ -2581,7 +2583,7 @@ public:
 							validate(false);
 							return VOID;
 						}
-						ByteCode tmp = declareTmpText();
+						ByteCode tmp = declareTmpNumeric();
 						write(tmp);
 						write(ref1);
 						write(ref2);

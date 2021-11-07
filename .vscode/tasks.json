@@ -1,7 +1,7 @@
 {
     "tasks": [
         {
-            "type": "cppbuild",
+            "type": "shell",
             "label": "Build XenonCode",
             "command": "/usr/bin/g++",
             "args": [
