@@ -30,6 +30,10 @@ static string PROGRAM_EXECUTABLE = "xc_program.bin";
 
 #define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
 
+struct RuntimeError : public runtime_error {
+	using runtime_error::runtime_error;
+};
+
 ///////////////////////////////////////////////////////////////
 
 #pragma region Parser
@@ -104,6 +108,7 @@ struct Word {
 		
 		// Operators (by order of precedence)
 		TrailOperator = WORD_ENUM_OPERATOR_START, // .
+		NamespaceOperator, // ::
 		CastOperator, // :
 		ConcatOperator, // & (text concatenation operator)
 		SuffixOperatorGroup, // ++ -- !!
@@ -172,6 +177,9 @@ struct Word {
 					}break;
 				case TrailOperator:{
 					this->word = ".";
+					}break;
+				case NamespaceOperator:{
+					this->word = "::";
 					}break;
 				case CastOperator:{
 					this->word = ":";
@@ -379,6 +387,8 @@ void ParseWords(const string& str, vector<Word>& words, int& scope) {
 			if (word == Word::Operator) {
 				if (word == ".")
 					word.type = Word::TrailOperator;
+				else if (word == "::")
+					word.type = Word::NamespaceOperator;
 				else if (word == ":")
 					word.type = Word::CastOperator;
 				else if (word == "++" || word == "--" || word == "!!")
@@ -506,6 +516,9 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 				case Word::TrailOperator:
 					cout << "TrailOperator{" << word << "} ";
 					break;
+				case Word::NamespaceOperator:
+					cout << "NamespaceOperator{" << word << "} ";
+					break;
 				case Word::CastOperator:
 					cout << "CastOperator{" << word << "} ";
 					break;
@@ -576,6 +589,7 @@ void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
 					cout << word << " ";
 					break;
 				case Word::TrailOperator:
+				case Word::NamespaceOperator:
 				case Word::CastOperator:
 				case Word::SuffixOperatorGroup:
 				case Word::ConcatOperator:
@@ -1447,26 +1461,27 @@ enum CODE_TYPE : uint8_t {
 	OP = 32, // OP [...] VOID
 	
 	// Comments/Info
-	SOURCEFILE = 40,
-	LINENUMBER = 41,
+	SOURCEFILE = 33,
+	LINENUMBER = 34,
 
 	// Reference Values
-	ROM_CONST_NUMERIC = 130,
-	ROM_CONST_TEXT = 131,
-	STORAGE_VAR_NUMERIC = 140,
-	STORAGE_VAR_TEXT = 141,
-	STORAGE_ARRAY_NUMERIC = 150,
-	STORAGE_ARRAY_TEXT = 151,
-	RAM_VAR_NUMERIC = 160,
-	RAM_VAR_TEXT = 161,
-	RAM_ARRAY_NUMERIC = 170,
-	RAM_ARRAY_TEXT = 171,
-	RAM_DATA = 180,
-	// Extra reference
-	ARRAY_INDEX = 201,
-	DEVICE_FUNCTION_INDEX = 210,
-	INTEGER = 215,
-	ADDR = 255,
+	ROM_CONST_NUMERIC = 40,
+	ROM_CONST_TEXT = 41,
+	STORAGE_VAR_NUMERIC = 50,
+	STORAGE_VAR_TEXT = 51,
+	STORAGE_ARRAY_NUMERIC = 60,
+	STORAGE_ARRAY_TEXT = 61,
+	RAM_VAR_NUMERIC = 70,
+	RAM_VAR_TEXT = 71,
+	RAM_ARRAY_NUMERIC = 80,
+	RAM_ARRAY_TEXT = 81,
+	// Extra references
+	ARRAY_INDEX = 101,
+	DEVICE_FUNCTION_INDEX = 110,
+	INTEGER = 115,
+	ADDR = 120,
+	// Objects
+	RAM_OBJECT = 128,
 };
 
 constexpr uint32_t Interpret3CharsAsInt(const char* str) {
@@ -1541,14 +1556,18 @@ DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrI
 #pragma region Compiler
 
 struct Var {
-	enum Type {
-		Void,
-		Numeric,
-		Text,
-		Data
+	enum Type : uint8_t {
+		Void = 0,
+		Numeric = 1,
+		Text = 2,
+		Object = 128
 	} type;
+	
 	string textValue;
-	double numericValue;
+	union {
+		double numericValue;
+		uint64_t addrValue;
+	};
 	
 	Var() : type(Void), textValue(""), numericValue(0.0) {}
 	Var(bool value) : type(Numeric), textValue(""), numericValue(value) {}
@@ -1557,11 +1576,12 @@ struct Var {
 	Var(const char* value) : type(Text), textValue(value), numericValue(0) {}
 	Var(const string& value) : type(Text), textValue(value), numericValue(0) {}
 	Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
+	Var(Type type, uint64_t objAddr) : type(type), textValue(""), addrValue(objAddr) {}
 	
 	operator bool() const {
 		if (type == Numeric) return numericValue;
 		if (type == Text) return textValue != "";
-		if (type == Data) return true;
+		if (type >= Object) return addrValue;
 		return false;
 	}
 	operator double() const {
@@ -1574,6 +1594,11 @@ struct Var {
 		else if (type == Text) return stol(textValue);
 		return 0;
 	}
+	operator uint64_t() const {
+		if (type == Numeric) return numericValue;
+		else if (type == Text) return stoul(textValue);
+		return 0;
+	}
 	operator string() const {
 		if (type == Numeric) return to_string(numericValue);
 		else if (type == Text) return textValue;
@@ -1581,8 +1606,17 @@ struct Var {
 	}
 };
 
-using DeviceFunction = function<Var(const vector<Var>&)>;
-using OutputFunction = function<void(uint32_t, const vector<Var>&)>;
+using DeviceFunction = function<Var(const vector<Var>& args)>;
+using DeviceObjectMember = function<Var(const Var& obj, const vector<Var>& args)>;
+using OutputFunction = function<void(uint32_t ioNumber, const vector<Var>& args)>;
+
+struct ObjectType {
+	uint8_t id;
+	string name;
+};
+
+static unordered_map<string, ObjectType> objectTypesByName {};
+static unordered_map<uint8_t, string> objectNamesById {};
 
 struct DeviceFunctionInfo {
 	struct Arg {
@@ -1617,31 +1651,38 @@ struct DeviceFunctionInfo {
 		
 		if (words.size() == 1) return;
 		
-		readWord(Word::ExpressionBegin);
+		auto nextWord = readWord();
+		if (nextWord == Word::NamespaceOperator) {
+			name += "::" + readWord().word;
+			nextWord = readWord();
+		}
 		
 		// Arguments
-		int argN = 0;
-		for (;;) {
-			Word word = readWord();
-			if (!word || word == Word::ExpressionEnd) break;
-			if (word == Word::CommaOperator) {
-				assert(argN > 0);
-				word = readWord();
+		if (nextWord == Word::ExpressionBegin) {
+			int argN = 0;
+			for (;;) {
+				Word word = readWord();
+				if (!word || word == Word::ExpressionEnd) break;
+				if (word == Word::CommaOperator) {
+					assert(argN > 0);
+					word = readWord();
+				}
+				++argN;
+				assert(word == Word::Varname);
+				readWord(Word::CastOperator);
+				string type = readWord(Word::Name);
+				if (type != "number" && type != "text" && !objectTypesByName.contains(type)) {
+					assert(!"Invalid argument type in device function prototype");
+				}
+				args.emplace_back(string(word), type);
 			}
-			++argN;
-			assert(word == Word::Varname);
-			readWord(Word::CastOperator);
-			string type = readWord(Word::Name);
-			if (type != "number" && type != "text" && type != "data") {
-				assert(!"Invalid argument type in device function prototype");
-			}
-			args.emplace_back(string(word), type);
+			nextWord = readWord();
 		}
 		
 		// Return type
-		if (readWord() == Word::CastOperator) {
+		if (nextWord == Word::CastOperator) {
 			Word type = readWord(Word::Name);
-			if (type != "number" && type != "text" && type != "data") {
+			if (type != "number" && type != "text" && !objectTypesByName.contains(type)) {
 				assert(!"Invalid return type in device function prototype");
 			}
 			returnType = string(type);
@@ -1649,16 +1690,44 @@ struct DeviceFunctionInfo {
 	}
 };
 
-// Implementation SHOULD add functions to it
 static unordered_map<string, DeviceFunctionInfo> deviceFunctionsByName {};
-static unordered_map<uint32_t, DeviceFunction> deviceFunctionsByIndex {};
-static OutputFunction outputFunction = [](uint32_t, const vector<Var>&){};
-void DeclareDeviceFunction(const string& prototype, DeviceFunction&& func) {
-	static uint32_t index = 0;
-	DeviceFunctionInfo function {++index, prototype};
-	deviceFunctionsByName.emplace(function.name, function);
-	deviceFunctionsByIndex.emplace(index, std::forward<DeviceFunction>(func));
+static unordered_map<uint32_t/*24 least significant bits only*/, string> deviceFunctionNamesById {};
+static unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById {};
+
+// Implementation SHOULD declare device functions
+DeviceFunctionInfo& DeclareDeviceFunction(const string& prototype, DeviceFunction&& func, uint8_t base = 0) {
+	static map<uint8_t, uint32_t> nextID {};
+	assert(nextID[base] < 65535);
+	uint32_t id = (++nextID[base]) | (uint32_t(base) << 16);
+	DeviceFunctionInfo f {id, prototype};
+	deviceFunctionsByName.emplace(f.name, f);
+	deviceFunctionNamesById.emplace(id, f.name);
+	deviceFunctionsById.emplace(id, std::forward<DeviceFunction>(func));
+	return deviceFunctionsByName.at(f.name);
 }
+
+// Implementation SHOULD declare object types
+Var::Type DeclareObjectType(const string& name, const std::map<string, DeviceObjectMember>& members = {}) {
+	static uint8_t nextID = 0;
+	assert(nextID < 127);
+	uint8_t id = ++nextID;
+	objectTypesByName.emplace(name, ObjectType{id, name});
+	objectNamesById.emplace(id, name);
+	for (auto&[prototype, method] : members) {
+		auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](const vector<Var>& args) -> XenonCode::Var {
+			if (args.size() > 0) {
+				return method(args[0], vector<Var>(args.begin()+1, args.end()));
+			} else {
+				throw XenonCode::RuntimeError("Invalid object member arguments");
+			}
+		}, id);
+		func.args.insert(func.args.begin(), DeviceFunctionInfo::Arg{"_this", name});
+	}
+	return Var::Type(Var::Object | id);
+}
+
+static OutputFunction outputFunction = [](uint32_t, const vector<Var>&){};
+// Implementation SHOULD set this function
 void SetOutputFunction(OutputFunction&& func) {
 	outputFunction = std::forward<OutputFunction>(func);
 }
@@ -1786,6 +1855,7 @@ ByteCode GetBuiltInFunctionOp(const string& func, CODE_TYPE& returnType) {
 	if (func == "sort") {returnType = VOID; return ASC;}
 	if (func == "sortd") {returnType = VOID; return DSC;}
 	if (func == "system.output") {returnType = VOID; return OUT;}
+	returnType = VOID;
 	return DEV;
 }
 
@@ -1832,6 +1902,10 @@ bool IsText(ByteCode v) {
 	return false;
 }
 
+bool IsObject(ByteCode v) {
+	return v.type >= RAM_OBJECT;
+}
+
 class Assembly {
 	static inline const string parserFiletype = "XenonCode!";
 	static inline const uint32_t parserVersion = VERSION_MINOR;
@@ -1862,7 +1936,7 @@ public:
 	// RAM size
 	uint32_t ram_numericVariables = 0;
 	uint32_t ram_textVariables = 0;
-	uint32_t ram_dataReferences = 0;
+	uint32_t ram_objectReferences = 0;
 	uint32_t ram_numericArrays = 0;
 	uint32_t ram_textArrays = 0;
 	
@@ -1982,9 +2056,6 @@ public:
 				case RAM_VAR_TEXT:
 					index = ram_textVariables++;
 					break;
-				case RAM_DATA:
-					index = ram_dataReferences++;
-					break;
 				case RAM_ARRAY_NUMERIC:
 					index = ram_numericArrays++;
 					break;
@@ -1992,7 +2063,16 @@ public:
 					index = ram_textArrays++;
 					break;
 				
-				default: assert(!"Invalid CODE_TYPE");
+				case VOID:
+					assert(!"Invalid var type VOID");
+					break;
+					
+				default:
+					if (type >= RAM_OBJECT) {
+						index = ram_objectReferences++;
+					} else {
+						assert(!"Invalid CODE_TYPE");
+					}
 			}
 			
 			ByteCode byteCode{uint8_t(type), index};
@@ -2076,7 +2156,7 @@ public:
 			currentStackId = 0;
 		};
 		// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
-		auto compileFunctionCall = [&](Word func, const vector<ByteCode>& args, bool getReturn) -> ByteCode {
+		auto compileFunctionCall = [&](Word func, const vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false) -> ByteCode {
 			string funcName = func;
 			if (func == Word::Funcname) {
 				if (!functionRefs.contains(funcName)) {
@@ -2101,18 +2181,38 @@ public:
 				// Get the Return value
 				if (getReturn) {
 					ByteCode ret = getReturnVar(funcName);
-					ByteCode tmp = declareVar("", GetRamVarType(ret.type));
+					if (ret.type != VOID) {
+						ByteCode tmp = declareVar("", GetRamVarType(ret.type));
+						write(SET);
+						write(tmp);
+						write(ret);
+						write(VOID);
+						return tmp;
+					} else {
+						throw ParseError("A function call here should return a value, but", funcName, "does not");
+					}
+				} else if (isTrailingFunction) {
+					validate(args.size() > 0);
 					write(SET);
-					write(tmp);
-					write(ret);
+					write(args[0]);
+					write(getReturnVar(funcName));
 					write(VOID);
-					return tmp;
-				} else return VOID;
-				
+				}
+				return VOID;
 			} else if (func == Word::Name) {
 				CODE_TYPE retType;
-				ByteCode ret;
-				ByteCode f = GetBuiltInFunctionOp(funcName, retType);
+				ByteCode ret = VOID;
+				ByteCode f = VOID;
+				if (isTrailingFunction && args.size() > 0 && args[0].type >= RAM_OBJECT) {
+					string objType = objectNamesById[args[0].type & (RAM_OBJECT-1)];
+					if (deviceFunctionsByName.contains(objType+"::"+funcName)) {
+						funcName = objType+"::"+funcName;
+						f = DEV;
+					}
+				}
+				if (f.type == VOID) {
+					f = GetBuiltInFunctionOp(funcName, retType);
+				}
 				write(f);
 				if (f == DEV) {
 					if (!deviceFunctionsByName.contains(funcName)) {
@@ -2125,11 +2225,14 @@ public:
 							retType = RAM_VAR_NUMERIC;
 						} else if (function.returnType == "text") {
 							retType = RAM_VAR_TEXT;
-						} else if (function.returnType == "data") {
-							retType = RAM_DATA;
+						} else if (function.returnType == "") {
+							throw ParseError("A function call here should return a value, but", funcName, "does not");
 						} else {
-							retType = VOID;
+							validate(objectTypesByName.contains(function.returnType));
+							retType = CODE_TYPE(RAM_OBJECT | objectTypesByName.at(function.returnType).id);
 						}
+					} else if (function.returnType != "" && !isTrailingFunction) {
+						throw ParseError("A function call here should NOT return a value, but", funcName, "does");
 					}
 				} else if (f == LAS) {
 					if (getReturn) {
@@ -2150,17 +2253,31 @@ public:
 							break;
 							default: throw ParseError("Invalid arguments");
 						}
+					} else {
+						throw ParseError("Cannot call", funcName, "here");
 					}
 				}
+				
 				if (getReturn) {
 					if (retType != VOID) {
 						ret = declareVar("", retType);
 						write(ret);
+					} else {
+						throw ParseError("A function call here should return a value, but", funcName, "does not");
 					}
+				} else if (isTrailingFunction) {
+					if (retType != VOID) {
+						validate(args.size() > 0);
+						write(args[0]);
+					}
+				} else if (retType != VOID) {
+					throw ParseError("A function call here should NOT return a value, but", funcName, "does");
 				}
+				
 				for (auto arg : args) {
 					write(arg);
 				}
+				
 				write(VOID);
 				return ret;
 			} else {
@@ -2438,28 +2555,31 @@ public:
 			} else if (op == Word::TrailOperator) {
 				Word operand = words[opIndex+1];
 				if (operand == Word::Name || operand == Word::Funcname) {
-					if (opIndex+1 == endIndex) {
-						validate(operand == Word::Name);
-						validate(IsArray(ref1) || IsText(ref1));
-						return compileFunctionCall(operand, {ref1}, true);
-					} else {
-						validate(words[opIndex+2] == Word::ExpressionBegin);
-						vector<ByteCode> args {};
-						args.push_back(ref1);
-						int argBegin = opIndex+3;
-						while (argBegin <= endIndex) {
-							int argEnd = GetArgEnd(words, argBegin, endIndex);
-							if (argEnd == -1) {
-								++argBegin;
-								break;
-							}
-							args.push_back(compileExpression(words, argBegin, argEnd));
-							argBegin = argEnd + 2;
-							if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
-								break;
-							}
-						}
-						return compileFunctionCall(operand, args, true);
+					if (opIndex+1 == endIndex) { // trailing member with no parenthesis, in an expression
+						validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
+						return compileFunctionCall(operand, {ref1}, true, true);
+					} else { // trailing function call, in an expression
+					
+						// validate(words[opIndex+2] == Word::ExpressionBegin);
+						// vector<ByteCode> args {};
+						// args.push_back(ref1);
+						// int argBegin = opIndex+3;
+						// while (argBegin <= endIndex) {
+						// 	int argEnd = GetArgEnd(words, argBegin, endIndex);
+						// 	if (argEnd == -1) {
+						// 		++argBegin;
+						// 		break;
+						// 	}
+						// 	args.push_back(compileExpression(words, argBegin, argEnd));
+						// 	argBegin = argEnd + 2;
+						// 	if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
+						// 		break;
+						// 	}
+						// }
+						// return compileFunctionCall(operand, args, true);
+						
+						throw ParseError("A trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
+						
 					}
 				} else if (operand == Word::Numeric || operand == Word::Varname) {
 					validate(IsArray(ref1) || IsText(ref1));
@@ -2860,10 +2980,12 @@ public:
 										arg = declareVar(word, RAM_VAR_NUMERIC);
 									} else if (type == "text") {
 										arg = declareVar(word, RAM_VAR_TEXT);
-									} else if (type == "data") {
-										arg = declareVar(word, RAM_DATA);
 									} else {
-										throw ParseError("Invalid argument type in function declaration");
+										if (objectTypesByName.contains(type)) {
+											arg = declareVar(word, CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
+										} else {
+											throw ParseError("Invalid argument type in function declaration");
+										}
 									}
 									userVars[currentFunctionName][0].emplace("@"+name+"."+to_string(argN), arg);
 								}
@@ -2874,10 +2996,12 @@ public:
 										declareVar("@"+name+":", RAM_VAR_NUMERIC);
 									} else if (type == "text") {
 										declareVar("@"+name+":", RAM_VAR_TEXT);
-									} else if (type == "data") {
-										declareVar("@"+name+":", RAM_DATA);
 									} else {
-										throw ParseError("Invalid return type in function declaration");
+										if (objectTypesByName.contains(type)) {
+											declareVar("@"+name+":", CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
+										} else {
+											throw ParseError("Invalid return type in function declaration");
+										}
 									}
 								}
 								pushStack("function");
@@ -2918,10 +3042,12 @@ public:
 										arg = declareVar(word, RAM_VAR_NUMERIC);
 									} else if (type == "text") {
 										arg = declareVar(word, RAM_VAR_TEXT);
-									} else if (type == "data") {
-										arg = declareVar(word, RAM_DATA);
 									} else {
-										throw ParseError("Invalid argument type in function declaration");
+										if (objectTypesByName.contains(type)) {
+											arg = declareVar(word, CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
+										} else {
+											throw ParseError("Invalid argument type in function declaration");
+										}
 									}
 									userVars[currentFunctionName][0].emplace(name+"."+to_string(argN), arg);
 									Word next = readWord();
@@ -3040,6 +3166,7 @@ public:
 										write(ref);
 										write(VOID);
 									} else if (operand == Word::Funcname || operand == Word::Name) {
+										// Trailing function call statement
 										vector<ByteCode> args {};
 										args.push_back(dst);
 										validate(readWord() == Word::ExpressionBegin);
@@ -3054,15 +3181,7 @@ public:
 												break;
 											}
 										}
-										if (IsArray(dst)) {
-											compileFunctionCall(operand, args, false);
-										} else {
-											ByteCode ret = compileFunctionCall(operand, args, true);
-											write(SET);
-											write(dst);
-											write(ret);
-											write(VOID);
-										}
+										compileFunctionCall(operand, args, false, true);
 									} else validate(false);
 								}break;
 								case Word::SuffixOperatorGroup:{
@@ -3099,6 +3218,9 @@ public:
 								Word op = readWord(Word::AssignmentOperatorGroup);
 								validate(op == "=");
 								ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+								if (ref.type == VOID) {
+									throw ParseError("Cannot assign a var to VOID");
+								}
 								ByteCode var = declareVar(name, GetRamVarType(ref.type));
 								write(SET);
 								write(var);
@@ -3467,11 +3589,6 @@ public:
 						cout << "$" << getVarName(code);
 						cout << "} ";
 						break;
-					case RAM_DATA:
-						cout << "RAM_DATA{";
-						cout << "$" << getVarName(code);
-						cout << "} ";
-						break;
 					case ARRAY_INDEX:
 						cout << "ARRAY_INDEX{" << code.value << "} ";
 						break;
@@ -3484,7 +3601,14 @@ public:
 					case ADDR:
 						cout << "ADDR{" << getFunctionName(code) << "} ";
 						break;
-					default: cout << "UNKNOWN{" << code.value << "} ";
+					default:
+						if (code.type >= RAM_OBJECT && objectNamesById.contains(code.type & (RAM_OBJECT-1))) {
+							cout << "RAM_OBJECT:" << objectNamesById.at(code.type & (RAM_OBJECT-1)) << "{";
+							cout << "$" << getVarName(code);
+							cout << "} ";
+						} else {
+							cout << "UNKNOWN{" << code.value << "} ";
+						}
 				}
 			}
 			cout << endl;
@@ -3505,7 +3629,7 @@ public:
 			s << rom_textConstants.size() << '\n';
 			s << ram_numericVariables << ' ';
 			s << ram_textVariables << ' ';
-			s << ram_dataReferences << ' ';
+			s << ram_objectReferences << ' ';
 			s << ram_numericArrays << ' ';
 			s << ram_textArrays << '\n';
 			
@@ -3565,7 +3689,7 @@ private:
 			s >> rom_textConstantsSize;
 			s >> ram_numericVariables;
 			s >> ram_textVariables;
-			s >> ram_dataReferences;
+			s >> ram_objectReferences;
 			s >> ram_numericArrays;
 			s >> ram_textArrays;
 
@@ -3626,10 +3750,6 @@ private:
 
 #pragma region Interpreter
 
-struct RuntimeError : public runtime_error {
-	using runtime_error::runtime_error;
-};
-
 double step(double edge1, double edge2, double val) {
 	if (edge1 > edge2) {
 		if (val >= edge2 && val <= edge1) {
@@ -3671,6 +3791,7 @@ struct Computer {
 	vector<string> ram_text {};
 	vector<vector<double>> ram_numeric_arrays {};
 	vector<vector<string>> ram_text_arrays {};
+	vector<uint64_t> ram_objects {};
 	unordered_map<string, vector<string>> storageCache {};
 	bool storageDirty = false;
 	
@@ -3694,6 +3815,8 @@ struct Computer {
 		ram_numeric_arrays.resize(assembly->ram_numericArrays, {});
 		ram_text_arrays.clear();
 		ram_text_arrays.resize(assembly->ram_textArrays, {});
+		ram_objects.clear();
+		ram_objects.resize(assembly->ram_objectReferences, 0);
 		
 		// Prepare storage cache
 		storageCache.clear();
@@ -3835,6 +3958,14 @@ struct Computer {
 			default: throw RuntimeError("Invalid memory reference");
 		}
 	}
+	void MemSetObject(uint64_t value, ByteCode dst) {
+		if (dst.type >= RAM_OBJECT) {
+			if (dst.value >= ram_objects.size()) throw RuntimeError("Invalid memory reference");
+			ram_objects[dst.value] = value;
+		} else {
+			throw RuntimeError("Invalid memory reference");
+		}
+	}
 	
 	double MemGetNumeric(ByteCode ref, uint32_t arrIndex = 0) {
 		switch (ref.type) {
@@ -3898,6 +4029,13 @@ struct Computer {
 		}
 	}
 	
+	Var MemGetObject(ByteCode ref) {
+		if (ref.value >= ram_objects.size()) {
+			throw RuntimeError("Invalid memory reference");
+		}
+		return {Var::Type(Var::Object | (ref & (RAM_OBJECT-1))), ram_objects[ref.value]};
+	}
+	
 	void RunCode(const vector<ByteCode>& program, uint32_t index = 0) {
 		if (program.size() <= index) return;
 		
@@ -3956,6 +4094,8 @@ struct Computer {
 									MemSet(MemGetNumeric(val), dst, index);
 								} else if (IsText(dst) || (index > 0 && (dst.type == STORAGE_ARRAY_TEXT || dst.type == RAM_ARRAY_TEXT))) {
 									MemSet(MemGetText(val), dst, index);
+								} else if (IsObject(dst) && IsObject(val) && index == 0) {
+									MemSetObject(MemGetObject(val).addrValue, dst); // Reference assignment for objects
 								} else {
 									throw RuntimeError("Invalid operation");
 								}
@@ -4328,22 +4468,33 @@ struct Computer {
 							}break;
 							case DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
 								ByteCode dev = nextCode();
-								if (dev.type != DEVICE_FUNCTION_INDEX || dev.value >= deviceFunctionsByIndex.size()) {
+								if (dev.type != DEVICE_FUNCTION_INDEX || !deviceFunctionsById.contains(dev.value)) {
 									throw RuntimeError("Invalid device function");
 								}
-								ByteCode dst = nextCode();
+								ByteCode dst = 0;
+								if (deviceFunctionsByName.at(deviceFunctionNamesById.at(dev.value)).returnType != "") {
+									dst = nextCode();
+								}
 								vector<Var> args {};
 								for (ByteCode c; (c = nextCode()).type != VOID;) {
 									if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
-									else args.emplace_back(MemGetText(c));
+									else if (IsText(c)) args.emplace_back(MemGetText(c));
+									else if (IsObject(c)) args.emplace_back(MemGetObject(c));
+									else throw RuntimeError("Invalid operation");
 								}
-								Var ret = deviceFunctionsByIndex[dev.value](args);
-								if (ret.type == Var::Numeric) {
-									MemSet(ret.numericValue, dst);
-								} else if (ret.type == Var::Text) {
-									MemSet(ret.textValue, dst);
-								} else {
-									throw RuntimeError("Invalid operation");
+								Var ret = deviceFunctionsById[dev.value](args);
+								if (dst && ret.type != Var::Void) {
+									if (ret.type == Var::Numeric) {
+										MemSet(ret.numericValue, dst);
+									} else if (ret.type == Var::Text) {
+										MemSet(ret.textValue, dst);
+									} else {
+										if (ret.type >= Var::Object && objectNamesById.contains(ret.type & (Var::Object-1))) {
+											MemSetObject(ret.addrValue, dst);
+										} else {
+											throw RuntimeError("Invalid operation");
+										}
+									}
 								}
 							}break;
 							case OUT: {// REF_NUM [REF_ARG ...]

@@ -7,9 +7,21 @@ bool verbose = false; // Set using -verbose in the arguments
 const string outputFileName = "xc_program.bin";
 
 void Init() {
-	XenonCode::DeclareDeviceFunction("delta () : number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
+	// Do NOT change the order of declarations once in production, just append new things after the last one. This is because scripts are compiled using the indices, which are based on the order they were declared.
+	// Maximum of 127 object types
+	auto positionType = XenonCode::DeclareObjectType("position", {
+		{"x:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+			return 0.0;
+		}},
+	});
+	// Maximum of 65k global device functions plus 65k methods or members per object type
+	XenonCode::DeclareDeviceFunction("delta:number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return {};
 	});
+	XenonCode::DeclareDeviceFunction("position:position", [=](const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		return {positionType, 0/*This would be an implementation-defined object pointer (uint64_t) that must be mapped somewhere*/};
+	});
+	// Must set the output function here
 	XenonCode::SetOutputFunction([](uint32_t ioIndex, const vector<XenonCode::Var>& args){
 		if (verbose) {
 			cout << "output." << ioIndex << "\n";

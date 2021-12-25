@@ -31,7 +31,7 @@ XenonCode is designed with a very basic syntax in mind and a very precise struct
 
 ### Types
 
-XenonCode is a typed language, but only includes two generic types, as well as arrays of either, and special opaque data types.  
+XenonCode is a typed language, but only includes two generic types, as well as arrays of either, and implementation-defined objects.  
 
 Generic data types the user can declare: 
 * `number`
@@ -41,7 +41,7 @@ A `number` variable is always a 64-bit floating point internally, but may also a
 
 `text` variables contain pure arbitrary text, altough their maximum size depends on the implementation.  
 
-Special `data` types are for use by the implementation and are opaque to the user, meaning their structure is not specifically defined, and cannot be declared by a user. They can only be passed around from one function call to another. 
+Object types are for use by the implementation and are opaque to the user, meaning their structure is not necessarily defined. 
 
 Even though this is a typed language, specifying the type is not needed when it can be automatically deduced by the compiler.  
 
@@ -327,7 +327,7 @@ These operators will compute the appropriate math operation and assign the resul
 - `||` or `or` conditional OR
 
 ## Other operators
-- `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable
+- `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable, or a member of an object
 - `:` (typecast operator) cast as another type
 - `&` (concat operator) concatenate texts
 - `!` (not operator) reverses a boolean value or expression (non-zero numbers become 0, and 0 becomes 1)
@@ -336,7 +336,7 @@ These operators will compute the appropriate math operation and assign the resul
 
 To parse an existing variable as another type, simply add a colon and the type, like so: 
 ```$someTextValue = $someNumberValue:text```
-This only works with simple variable types `number` and `text`, not arrays or special data  
+This only works with generic types `number` and `text`, not arrays or objects  
 
 ## String concatenation
 
@@ -360,7 +360,7 @@ The operations to run in a function appear within its body.
 
 Functions may have arguments that can be used within the body so that the operations may have a variation depending on the value of some variables. 
 
-Function arguments are defined after the function name, within parenthesis and they can be of type `number`, `text`, or a special `data` type. 
+Function arguments are defined after the function name, within parenthesis and they can be of type `number`, `text`, or implementation-defined object. 
 
 Function names have the same rules as variable names.  
 
@@ -377,8 +377,8 @@ This function takes two number arguments:
 This function takes a number argument and a text argument:
 ```function @func2 ($var1:number, $var2:text)```
 
-This function takes a special data argument:
-```function @func3 ($var1:data)```
+This function takes an implementation-defined object type `position` argument:
+```function @func3 ($var1:position)```
 
 ### Body
 The body of a function (the operations to be executed when calling it) must be on the following lines after the declaration, indented with one tab.  
