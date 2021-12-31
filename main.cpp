@@ -113,7 +113,7 @@ bool Compile(const string& directory) {
 			cout << "\nCompiled Successfully!\n" << endl;
 		}
 		return true;
-	} catch (XenonCode::ParseError& e) {
+	} catch (XenonCode::CompileError& e) {
 		cerr << e.what() << endl;
 	}
 	return false;
@@ -121,13 +121,21 @@ bool Compile(const string& directory) {
 
 bool Run(const string& directory) {
 	XenonCode::Computer computer;
-	computer.LoadProgram(directory);
-	if (computer.RunInit()) {
-		computer.SaveStorage();
-		if (verbose) {
-			cout << "Program's Init function successfully executed\n" << endl;
+	computer.capability.ram = 65536;
+	if (computer.LoadProgram(directory)) {
+		try {
+			if (computer.RunInit()) {
+				computer.SaveStorage();
+				if (verbose) {
+					cout << "Program's Init function successfully executed\n" << endl;
+				}
+				return true;
+			}
+		} catch (XenonCode::RuntimeError& e) {
+			cerr << e.what() << endl;
 		}
-		return true;
+	} else {
+		cerr << "Cannot run this program" << endl;
 	}
 	return false;
 }

@@ -20,29 +20,74 @@ namespace XenonCode {
 
 // Version
 const int VERSION_MAJOR = 0;
-const int VERSION_MINOR = 1;
+const int VERSION_MINOR = 0; // minor version must always increment to make the bytecode format incompatible
 const int VERSION_PATCH = 0;
 
 // Limitations/Settings (may be changed by the implementation)
-static size_t MAX_TEXT_LENGTH = 1000; // number of chars
-static size_t MAX_ROM_SIZE = 65535; // number of 32-bit words (theoretical maximum of 16M)
+static size_t MAX_TEXT_LENGTH = 1024; // max number of chars in text variables
+static size_t MAX_ARRAY_SIZE = 4096; // max number of elements in arrays
+static size_t MAX_ROM_SIZE = 65535; // number of 32-bit words (defaults to 65k but the theoretical maximum is 16M)
 static string PROGRAM_EXECUTABLE = "xc_program.bin";
-
-#define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
-
-struct RuntimeError : public runtime_error {
-	using runtime_error::runtime_error;
-};
+static size_t TEXT_MEMORY_PENALTY = 16; // memory usage multiplier for text variables
+static size_t ARRAY_NUMERIC_MEMORY_PENALTY = 32; // memory usage multiplier for an array of numbers
+static size_t ARRAY_TEXT_MEMORY_PENALTY = 512; // memory usage multiplier for an array of text
+static size_t OBJECT_MEMORY_PENALTY = 16; // memory usage multiplier for objects
 
 ///////////////////////////////////////////////////////////////
 
-#pragma region Parser
+#pragma region Math helpers
+
+double step(double edge1, double edge2, double val) {
+	if (edge1 > edge2) {
+		if (val >= edge2 && val <= edge1) {
+			return 1.0;
+		}
+	} else {
+		if (val >= edge1 && val <= edge2) {
+			return 1.0;
+		}
+	}
+	return 0.0;
+}
+
+double step(double edge, double val) {
+	if (val >= edge) {
+		return 1.0;
+	}
+	return 0.0;
+}
+
+double smoothstep(double edge1, double edge2, double val) {
+	if (edge1 == edge2) return 0.0;
+	val = clamp((val - edge1) / (edge2 - edge1), 0.0, 1.0);
+	return val * val * val * (val * (val * 6 - 15) + 10);
+}
+
+#pragma endregion
+
+#pragma region Errors
+
+#define NOT_IMPLEMENTED_YET assert(!"Not Implemented Yet");
 
 struct ParseError : public runtime_error {
 	using runtime_error::runtime_error;
 	ParseError(const string& pre, const string& word) : runtime_error(pre + " '" + word + "'") {}
 	ParseError(const string& pre, const string& word, const string& post) : runtime_error(pre + " '" + word + "' " + post) {}
 };
+
+struct CompileError : public runtime_error {
+	using runtime_error::runtime_error;
+	CompileError(const string& pre, const string& word) : runtime_error(pre + " '" + word + "'") {}
+	CompileError(const string& pre, const string& word, const string& post) : runtime_error(pre + " '" + word + "' " + post) {}
+};
+
+struct RuntimeError : public runtime_error {
+	using runtime_error::runtime_error;
+};
+
+#pragma endregion
+
+#pragma region Parser
 
 bool isoperator(int c) {
 	switch (c) {
@@ -1702,12 +1747,12 @@ DeviceFunctionInfo& DeclareDeviceFunction(const string& prototype, DeviceFunctio
 	DeviceFunctionInfo f {id, prototype};
 	deviceFunctionsByName.emplace(f.name, f);
 	deviceFunctionNamesById.emplace(id, f.name);
-	deviceFunctionsById.emplace(id, std::forward<DeviceFunction>(func));
+	deviceFunctionsById.emplace(id, forward<DeviceFunction>(func));
 	return deviceFunctionsByName.at(f.name);
 }
 
 // Implementation SHOULD declare object types
-Var::Type DeclareObjectType(const string& name, const std::map<string, DeviceObjectMember>& members = {}) {
+Var::Type DeclareObjectType(const string& name, const map<string, DeviceObjectMember>& members = {}) {
 	static uint8_t nextID = 0;
 	assert(nextID < 127);
 	uint8_t id = ++nextID;
@@ -1729,7 +1774,7 @@ Var::Type DeclareObjectType(const string& name, const std::map<string, DeviceObj
 static OutputFunction outputFunction = [](uint32_t, const vector<Var>&){};
 // Implementation SHOULD set this function
 void SetOutputFunction(OutputFunction&& func) {
-	outputFunction = std::forward<OutputFunction>(func);
+	outputFunction = forward<OutputFunction>(func);
 }
 
 struct Stack {
@@ -1808,7 +1853,7 @@ ByteCode GetOperator(string op) {
 	} else if (op == "!!") {
 		return NOT;
 	} else {
-		throw ParseError("Invalid Operator", op);
+		throw CompileError("Invalid Operator", op);
 	}
 }
 
@@ -1906,6 +1951,16 @@ bool IsObject(ByteCode v) {
 	return v.type >= RAM_OBJECT;
 }
 
+struct TimerFunction {
+	double interval;
+	uint32_t addr;
+};
+
+struct InputFunction {
+	uint32_t addr = 0;
+	vector<uint32_t> args {};
+};
+
 class Assembly {
 	static inline const string parserFiletype = "XenonCode!";
 	static inline const uint32_t parserVersion = VERSION_MINOR;
@@ -1915,16 +1970,17 @@ public:
 	uint32_t programSize = 0; // number of byte codes in the program code (uint32_t)
 	vector<string> storageRefs {}; // storage references (addr)
 	unordered_map<string, uint32_t> functionRefs {}; // function references (addr)
+	vector<TimerFunction> timers {};
+	map<uint32_t, InputFunction> inputs {};
 	vector<string> sourceFiles {};
 	/* Function names:
 		system.init
 		system.tick
-		system.input.1
-		system.timer.frequency.1
+		system.input (not present in functionRefs)
+		system.timer (not present in functionRefs)
 	Varnames related to functions:
 		@funcname.1 		argument
 		@funcname:			return
-		system.input.1.1	input function argument
 	*/
 	
 	// ROM
@@ -1947,7 +2003,7 @@ public:
 		} else if (ref.type == ROM_CONST_TEXT) {
 			return {Word::Text, rom_textConstants[ref.value]};
 		} else {
-			throw ParseError("Not const");
+			throw CompileError("Not const");
 		}
 	}
 	
@@ -1958,6 +2014,8 @@ public:
 		uint32_t currentLine = 0;
 		int currentScope = 0;
 		string currentFunctionName = "";
+		double currentTimerInterval = 0;
+		double currentInputPort = 0;
 		uint32_t currentFunctionAddr = 0;
 		int currentStackId = 0;
 		vector<Stack> stack {};
@@ -1968,7 +2026,7 @@ public:
 		// Validation helper
 		auto validate = [](bool condition){
 			if (!condition) {
-				throw ParseError("Invalid statement");
+				throw CompileError("Invalid statement");
 			}
 		};
 		
@@ -1984,18 +2042,18 @@ public:
 					return userVars.at("").at(0).at(name);
 				}
 			}
-			throw ParseError("$" + name + " is undefined");
+			throw CompileError("$" + name + " is undefined");
 		};
 		auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
 			if (name != "") {
 				for (int s = stack.size()-1; s >= -1; --s) {
 					if (userVars[currentFunctionName][s<0?0:stack[s].id].contains(name)) {
-						throw ParseError("$" + name + " is already defined");
+						throw CompileError("$" + name + " is already defined");
 					}
 				}
 				if (currentFunctionName != "") {
 					if (userVars[""][0].contains(name)) {
-						throw ParseError("$" + name + " is already defined");
+						throw CompileError("$" + name + " is already defined");
 					}
 				}
 			}
@@ -2040,12 +2098,12 @@ public:
 					break;
 					
 				case ROM_CONST_NUMERIC:
-					if (!initialValue) throw ParseError("Const value not provided");
+					if (!initialValue) throw CompileError("Const value not provided");
 					index = rom_numericConstants.size();
 					rom_numericConstants.emplace_back(initialValue);
 					break;
 				case ROM_CONST_TEXT:
-					if (!initialValue) throw ParseError("Const value not provided");
+					if (!initialValue) throw CompileError("Const value not provided");
 					index = rom_textConstants.size();
 					rom_textConstants.emplace_back(initialValue);
 					break;
@@ -2088,7 +2146,7 @@ public:
 			if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(retVarName)) {
 				return userVars.at(funcName).at(0).at(retVarName);
 			} else {
-				throw ParseError("Function", funcName, "does not have a return type");
+				throw CompileError("Function", funcName, "does not have a return type");
 			}
 		};
 		auto getVarName = [&](ByteCode code) -> string {
@@ -2140,8 +2198,8 @@ public:
 		auto openFunction = [&](const string& name){
 			assert(currentScope == 0);
 			assert(currentFunctionName == "");
-			if (functionRefs.contains(name)) {
-				throw ParseError("Function " + name + " is already defined");
+			if (name != "system.timer" && name != "system.input" && functionRefs.contains(name)) {
+				throw CompileError("Function " + name + " is already defined");
 			}
 			currentFunctionName = name;
 			currentFunctionAddr = addr();
@@ -2149,7 +2207,18 @@ public:
 		auto closeCurrentFunction = [&](){
 			if (currentFunctionName != "") {
 				write(RETURN);
-				functionRefs.emplace(currentFunctionName, currentFunctionAddr);
+				if (currentFunctionName == "system.timer") {
+					assert(currentTimerInterval);
+					timers.emplace_back(currentTimerInterval, currentFunctionAddr);
+					currentTimerInterval = 0;
+					userVars["system.timer"].clear();
+				} else if (currentFunctionName == "system.input") {
+					inputs[currentInputPort].addr = currentFunctionAddr;
+					currentInputPort = 0;
+					userVars["system.input"].clear();
+				} else {
+					functionRefs.emplace(currentFunctionName, currentFunctionAddr);
+				}
 				currentFunctionName = "";
 				currentFunctionAddr = 0;
 			}
@@ -2160,7 +2229,7 @@ public:
 			string funcName = func;
 			if (func == Word::Funcname) {
 				if (!functionRefs.contains(funcName)) {
-					throw ParseError("Function", func, "is not defined");
+					throw CompileError("Function", func, "is not defined");
 				}
 				
 				// Set arguments
@@ -2189,7 +2258,7 @@ public:
 						write(VOID);
 						return tmp;
 					} else {
-						throw ParseError("A function call here should return a value, but", funcName, "does not");
+						throw CompileError("A function call here should return a value, but", funcName, "does not");
 					}
 				} else if (isTrailingFunction) {
 					validate(args.size() > 0);
@@ -2216,7 +2285,7 @@ public:
 				write(f);
 				if (f == DEV) {
 					if (!deviceFunctionsByName.contains(funcName)) {
-						throw ParseError("Function", func, "does not exist");
+						throw CompileError("Function", func, "does not exist");
 					}
 					auto& function = deviceFunctionsByName.at(funcName);
 					write({DEVICE_FUNCTION_INDEX, function.id});
@@ -2226,18 +2295,18 @@ public:
 						} else if (function.returnType == "text") {
 							retType = RAM_VAR_TEXT;
 						} else if (function.returnType == "") {
-							throw ParseError("A function call here should return a value, but", funcName, "does not");
+							throw CompileError("A function call here should return a value, but", funcName, "does not");
 						} else {
 							validate(objectTypesByName.contains(function.returnType));
 							retType = CODE_TYPE(RAM_OBJECT | objectTypesByName.at(function.returnType).id);
 						}
 					} else if (function.returnType != "" && !isTrailingFunction) {
-						throw ParseError("A function call here should NOT return a value, but", funcName, "does");
+						throw CompileError("A function call here should NOT return a value, but", funcName, "does");
 					}
 				} else if (f == LAS) {
 					if (getReturn) {
 						if (args.size() == 0) {
-							throw ParseError("Invalid arguments");
+							throw CompileError("Invalid arguments");
 						}
 						switch (args[0].type) {
 							case STORAGE_ARRAY_NUMERIC:
@@ -2251,10 +2320,10 @@ public:
 							case RAM_ARRAY_TEXT:
 								retType = RAM_VAR_TEXT;
 							break;
-							default: throw ParseError("Invalid arguments");
+							default: throw CompileError("Invalid arguments");
 						}
 					} else {
-						throw ParseError("Cannot call", funcName, "here");
+						throw CompileError("Cannot call", funcName, "here");
 					}
 				}
 				
@@ -2263,7 +2332,7 @@ public:
 						ret = declareVar("", retType);
 						write(ret);
 					} else {
-						throw ParseError("A function call here should return a value, but", funcName, "does not");
+						throw CompileError("A function call here should return a value, but", funcName, "does not");
 					}
 				} else if (isTrailingFunction) {
 					if (retType != VOID) {
@@ -2271,7 +2340,7 @@ public:
 						write(args[0]);
 					}
 				} else if (retType != VOID) {
-					throw ParseError("A function call here should NOT return a value, but", funcName, "does");
+					throw CompileError("A function call here should NOT return a value, but", funcName, "does");
 				}
 				
 				for (auto arg : args) {
@@ -2281,7 +2350,7 @@ public:
 				write(VOID);
 				return ret;
 			} else {
-				throw ParseError("Invalid function name");
+				throw CompileError("Invalid function name");
 			}
 		};
 		
@@ -2381,7 +2450,7 @@ public:
 					word1.type = Word::Text;
 					return word1;
 				} else {
-					throw ParseError("Const expression may only be cast to either 'number' or 'text'");
+					throw CompileError("Const expression may only be cast to either 'number' or 'text'");
 				}
 			} else if (op == Word::NotOperator) {
 				if (word2 == Word::Numeric) {
@@ -2405,14 +2474,14 @@ public:
 					return Word{double(word1) * double(word2)};
 				} else if (op == "/") {
 					if (double(word2) == 0.0) {
-						throw ParseError("Division by zero in const expression");
+						throw CompileError("Division by zero in const expression");
 					}
 					return Word{double(word1) / double(word2)};
 				} else if (op == "^") {
 					return Word{pow(double(word1), double(word2))};
 				} else if (op == "%") {
 					if (double(word2) == 0.0) {
-						throw ParseError("Division by zero in const expression");
+						throw CompileError("Division by zero in const expression");
 					}
 					return Word{double(long(round(double(word1))) % long(round(double(word2))))};
 				} else {
@@ -2467,7 +2536,7 @@ public:
 				validate(word1 == Word::Numeric && word2 == Word::Numeric);
 				return Word{double(double(word1) || double(word2))};
 			}
-			throw ParseError("Invalid operator", op, "in const expression");
+			throw CompileError("Invalid operator", op, "in const expression");
 		};
 		/*compileExpression*/ function<ByteCode(const vector<Word>&, int, int)> compileExpression = [&](const vector<Word>& words, int startIndex, int endIndex = -1) -> ByteCode {
 			if (endIndex < 0) endIndex += words.size();
@@ -2550,7 +2619,7 @@ public:
 					write(VOID);
 					return tmp;
 				} else {
-					throw ParseError("Invalid cast", t);
+					throw CompileError("Invalid cast", t);
 				}
 			} else if (op == Word::TrailOperator) {
 				Word operand = words[opIndex+1];
@@ -2578,7 +2647,7 @@ public:
 						// }
 						// return compileFunctionCall(operand, args, true);
 						
-						throw ParseError("A trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
+						throw CompileError("A trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
 						
 					}
 				} else if (operand == Word::Numeric || operand == Word::Varname) {
@@ -2733,7 +2802,7 @@ public:
 					return tmp;
 				}
 				
-				throw ParseError("Invalid operator", op);
+				throw CompileError("Invalid operator", op);
 			}
 		};
 		
@@ -2811,7 +2880,7 @@ public:
 								}
 								// Error
 								else {
-									throw ParseError("Cannot assign non-const expression to const value");
+									throw CompileError("Cannot assign non-const expression to const value");
 								}
 							}
 							// var
@@ -2856,7 +2925,7 @@ public:
 											case STORAGE_VAR_TEXT:
 												var = declareVar(name, RAM_VAR_TEXT);
 												break;
-											default: throw ParseError("Invalid assignment");
+											default: throw CompileError("Invalid assignment");
 										}
 										
 										rom_vars_init.emplace_back(SET);
@@ -2898,7 +2967,7 @@ public:
 									} else if (type == "text") {
 										declareVar(name, RAM_VAR_TEXT);
 									} else {
-										throw ParseError("Var declaration in global scope can only be of type 'number' or 'text'");
+										throw CompileError("Var declaration in global scope can only be of type 'number' or 'text'");
 									}
 									validate(!readWord());
 								}
@@ -2914,7 +2983,7 @@ public:
 								} else if (type == "text") {
 									declareVar(name, RAM_ARRAY_TEXT);
 								} else {
-									throw ParseError("Array declaration in global scope can only be of type 'number' or 'text'");
+									throw CompileError("Array declaration in global scope can only be of type 'number' or 'text'");
 								}
 								validate(!readWord());
 							}
@@ -2943,7 +3012,7 @@ public:
 										validate(false);
 									}
 								} else {
-									throw ParseError("Storage declaration in global scope can only be of type 'number' or 'text'");
+									throw CompileError("Storage declaration in global scope can only be of type 'number' or 'text'");
 								}
 								validate(!readWord());
 							}
@@ -2984,7 +3053,7 @@ public:
 										if (objectTypesByName.contains(type)) {
 											arg = declareVar(word, CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
 										} else {
-											throw ParseError("Invalid argument type in function declaration");
+											throw CompileError("Invalid argument type in function declaration");
 										}
 									}
 									userVars[currentFunctionName][0].emplace("@"+name+"."+to_string(argN), arg);
@@ -3000,7 +3069,7 @@ public:
 										if (objectTypesByName.contains(type)) {
 											declareVar("@"+name+":", CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
 										} else {
-											throw ParseError("Invalid return type in function declaration");
+											throw CompileError("Invalid return type in function declaration");
 										}
 									}
 								}
@@ -3014,19 +3083,27 @@ public:
 									timerValue = GetConstValue(getVar(timerValue));
 								}
 								validate(timerValue == Word::Numeric);
-								openFunction("system.timer."+timerType+"."+string(timerValue));
+								currentTimerInterval = double(timerValue);
+								if (timerType == "frequency") {
+									currentTimerInterval = 1.0 / currentTimerInterval;
+								}
+								openFunction("system.timer");
 								pushStack("function");
 							}
 							// input
 							else if (firstWord == "input") {
 								readWord(Word::TrailOperator);
-								Word inputIndex = readWord();
-								if (inputIndex == Word::Varname) {
-									inputIndex = GetConstValue(getVar(inputIndex));
+								Word inputPort = readWord();
+								if (inputPort == Word::Varname) {
+									inputPort = GetConstValue(getVar(inputPort));
 								}
-								validate(inputIndex == Word::Numeric);
-								string name = "system.input."+string(inputIndex);
-								openFunction(name);
+								validate(inputPort == Word::Numeric);
+								currentInputPort = uint32_t(double(inputPort));
+								if (inputs.contains(currentInputPort)) {
+									throw CompileError("Input " + to_string(currentInputPort) + " is already defined");
+								}
+								auto& args = inputs[currentInputPort].args;
+								openFunction("system.input");
 								readWord(Word::ExpressionBegin);
 								// Arguments
 								int argN = 0;
@@ -3046,10 +3123,10 @@ public:
 										if (objectTypesByName.contains(type)) {
 											arg = declareVar(word, CODE_TYPE(RAM_OBJECT | objectTypesByName.at(type).id));
 										} else {
-											throw ParseError("Invalid argument type in function declaration");
+											throw CompileError("Invalid argument type in function declaration");
 										}
 									}
-									userVars[currentFunctionName][0].emplace(name+"."+to_string(argN), arg);
+									args.emplace_back(arg.rawValue);
 									Word next = readWord();
 									if (next == Word::CommaOperator) continue;
 									else if (next == Word::ExpressionEnd) break;
@@ -3060,10 +3137,10 @@ public:
 							}
 							// ERROR
 							else {
-								throw ParseError("Invalid statement");
+								throw CompileError("Invalid statement");
 							}
 						}break;
-						default: throw ParseError("Invalid statement");
+						default: throw CompileError("Invalid statement");
 					}
 				} else {
 					// Function Scope
@@ -3071,7 +3148,7 @@ public:
 						write({LINENUMBER, currentLine});
 					}
 					if (line.scope > currentScope) {
-						throw ParseError("Invalid scope");
+						throw CompileError("Invalid scope");
 					}
 					while (line.scope < currentScope) {
 						if (line.scope == currentScope - 1) {
@@ -3191,7 +3268,7 @@ public:
 									write(dst);
 									write(VOID);
 								}break;
-								default: throw ParseError("Invalid operator", operation);
+								default: throw CompileError("Invalid operator", operation);
 							}
 						}break;
 						case Word::Funcname: {
@@ -3219,7 +3296,7 @@ public:
 								validate(op == "=");
 								ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
 								if (ref.type == VOID) {
-									throw ParseError("Cannot assign a var to VOID");
+									throw CompileError("Cannot assign a var to VOID");
 								}
 								ByteCode var = declareVar(name, GetRamVarType(ref.type));
 								write(SET);
@@ -3483,10 +3560,10 @@ public:
 							}
 							// ERROR
 							else {
-								throw ParseError("Invalid statement");
+								throw CompileError("Invalid statement");
 							}
 						}break;
-						default: throw ParseError("Invalid statement");
+						default: throw CompileError("Invalid statement");
 					}
 				}
 			}
@@ -3494,10 +3571,10 @@ public:
 				popStack();
 			}
 			closeCurrentFunction();
-		} catch (ParseError& e) {
+		} catch (CompileError& e) {
 			stringstream err;
 			err << e.what() << " at line " << currentLine << " in " << currentFile;
-			throw ParseError(err.str());
+			throw CompileError(err.str());
 		}
 		varsInitSize = rom_vars_init.size();
 		programSize = rom_program.size();
@@ -3624,7 +3701,7 @@ public:
 			s << parserFiletype << ' ' << parserVersion << '\n';
 			
 			// Write some sizes
-			s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << sourceFiles.size() << '\n';
+			s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << sourceFiles.size() << '\n';
 			s << rom_numericConstants.size() << ' ';
 			s << rom_textConstants.size() << '\n';
 			s << ram_numericVariables << ' ';
@@ -3648,6 +3725,18 @@ public:
 				s << name << ' ' << addr << '\n';
 			}
 			
+			// Write timers
+			for (auto&[interval, addr] : timers) {
+				s << interval << ' ' << addr << '\n';
+			}
+			
+			// Write inputs
+			for (auto&[port, input] : inputs) {
+				s << port << ' ' << input.addr << ' ' << input.args.size();
+				for (auto& arg : input.args) s << ' ' << arg;
+				s << '\n';
+			}
+			
 			// Write Rom data (constants)
 			for (auto& value : rom_numericConstants) {
 				s << value << ' ';
@@ -3655,6 +3744,11 @@ public:
 			for (auto& value : rom_textConstants) {
 				s << value << '\0';
 			}
+		}
+		
+		// Check ROM size
+		if (varsInitSize + programSize > MAX_ROM_SIZE) {
+			throw CompileError("Maximum ROM size exceeded");
 		}
 		
 		// Write vars_init bytecode
@@ -3672,6 +3766,8 @@ private:
 		uint32_t version;
 		size_t storageRefsSize;
 		size_t functionRefsSize;
+		size_t timersSize;
+		size_t inputsSize;
 		size_t sourceFilesSize;
 		size_t rom_numericConstantsSize;
 		size_t rom_textConstantsSize;
@@ -3684,7 +3780,7 @@ private:
 			if (version > parserVersion) throw runtime_error("XenonCode file version is more recent than this parser");
 			
 			// Read some sizes
-			s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> sourceFilesSize;
+			s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
 			s >> rom_numericConstantsSize;
 			s >> rom_textConstantsSize;
 			s >> ram_numericVariables;
@@ -3693,6 +3789,11 @@ private:
 			s >> ram_numericArrays;
 			s >> ram_textArrays;
 
+			// Check ROM size
+			if (varsInitSize + programSize > MAX_ROM_SIZE) {
+				throw CompileError("Maximum ROM size exceeded");
+			}
+			
 			// Prepare data
 			rom_vars_init.resize(varsInitSize);
 			rom_program.resize(programSize);
@@ -3724,6 +3825,27 @@ private:
 				functionRefs.emplace(name, address);
 			}
 			
+			// Read timers
+			for (size_t i = 0; i < timersSize; ++i) {
+				double interval;
+				uint32_t address;
+				s >> interval >> address;
+				timers.emplace_back(interval, address);
+			}
+			
+			// Read inputs
+			for (size_t i = 0; i < inputsSize; ++i) {
+				uint32_t port;
+				uint32_t address;
+				size_t argsSize;
+				s >> port >> address >> argsSize;
+				inputs[port].addr = address;
+				inputs[port].args.resize(argsSize);
+				for (size_t j = 0; j < argsSize; ++j) {
+					s >> inputs[port].args[j];
+				}
+			}
+
 			// Read Rom data (constants)
 			for (size_t i = 0; i < rom_numericConstantsSize; ++i) {
 				double value;
@@ -3750,42 +3872,14 @@ private:
 
 #pragma region Interpreter
 
-double step(double edge1, double edge2, double val) {
-	if (edge1 > edge2) {
-		if (val >= edge2 && val <= edge1) {
-			return 1.0;
-		}
-	} else {
-		if (val >= edge1 && val <= edge2) {
-			return 1.0;
-		}
-	}
-	return 0.0;
+double GetCurrentTimestamp() {
+	std::chrono::time_point<std::chrono::system_clock, std::chrono::duration<double, std::milli>> time = std::chrono::high_resolution_clock::now();
+	return time.time_since_epoch().count() * 0.001;
 }
 
-double step(double edge, double val) {
-	if (val >= edge) {
-		return 1.0;
-	}
-	return 0.0;
-}
-
-double smoothstep(double edge1, double edge2, double val) {
-	if (edge1 == edge2) return 0.0;
-	val = clamp((val - edge1) / (edge2 - edge1), 0.0, 1.0);
-	return val * val * val * (val * (val * 6 - 15) + 10);
-}
-
-struct Computer {
-	struct Capability {
-		uint32_t ipc = 1e5; // instructions per cycle
-		uint32_t ram = 1e5; // number of ram variables + sizes of arrays
-		uint32_t storage = 1e5; // number of storage variables + sizes of storage arrays
-		uint32_t io = 256; // Number of input/output ports
-	} capability;
-	
+class Computer {
+	// Data
 	string directory;
-	
 	Assembly* assembly = nullptr;
 	vector<double> ram_numeric {};
 	vector<string> ram_text {};
@@ -3793,17 +3887,52 @@ struct Computer {
 	vector<vector<string>> ram_text_arrays {};
 	vector<uint64_t> ram_objects {};
 	unordered_map<string, vector<string>> storageCache {};
+	
+	// State
 	bool storageDirty = false;
+	uint64_t currentCycleInstructions = 0;
+	vector<double> timersLastRun {};
+	
+public:
+	struct Capability {
+		uint32_t ipc = 65536; // instructions per cycle
+		uint32_t ram = 65536; // number of ram variables * their memory penalty
+		uint32_t storage = 64; // number of storage references
+		uint32_t io = 16; // Number of input/output ports
+	} capability;
 	
 	Computer() {}
+	~Computer() {
+		if (assembly) {
+			delete assembly;
+		}
+	}
 	
-	void LoadProgram(const string& directory) {
+	bool LoadProgram(const string& directory) {
 		this->directory = directory;
 		
 		{// Load Assembly
 			if (assembly) delete assembly;
 			ifstream file{directory + "/" + PROGRAM_EXECUTABLE};
 			assembly = new Assembly(file);
+		}
+		
+		{// Check Capabilities
+			// Do we have enough RAM to run this program?
+			if (capability.ram < assembly->ram_numericVariables
+							   + assembly->ram_textVariables * TEXT_MEMORY_PENALTY
+							   + assembly->ram_numericArrays * ARRAY_NUMERIC_MEMORY_PENALTY
+							   + assembly->ram_textArrays * ARRAY_TEXT_MEMORY_PENALTY
+							   + assembly->ram_objectReferences * OBJECT_MEMORY_PENALTY
+			) {
+				// Not enough RAM
+				return false;
+			}
+			// Do we have enough storage space to run this program?
+			if (capability.storage < assembly->storageRefs.size()) {
+				// Not enough Storage
+				return false;
+			}
 		}
 		
 		// Prepare RAM
@@ -3829,6 +3958,12 @@ struct Computer {
 				storage.emplace_back(string(value));
 			}
 		}
+		
+		// Prepare timers
+		timersLastRun.clear();
+		timersLastRun.resize(assembly->timers.size());
+		
+		return true;
 	}
 	
 	void SaveStorage() {
@@ -3846,6 +3981,7 @@ struct Computer {
 		}
 	}
 	
+private:
 	vector<string>& GetStorage(ByteCode arr) {
 		if ((arr.type != STORAGE_ARRAY_NUMERIC && arr.type != STORAGE_ARRAY_TEXT && arr.type != STORAGE_VAR_NUMERIC && arr.type != STORAGE_VAR_TEXT) || arr.value >= assembly->storageRefs.size()) {
 			throw RuntimeError("Invalid storage reference");
@@ -3937,6 +4073,9 @@ struct Computer {
 		}
 	}
 	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = 0) {
+		if (value.length() > MAX_TEXT_LENGTH) {
+			throw RuntimeError("Text too large");
+		}
 		switch (dst.type) {
 			case STORAGE_VAR_TEXT:
 			case STORAGE_ARRAY_TEXT: {
@@ -4054,6 +4193,14 @@ struct Computer {
 			}
 		}
 		
+		// IPC
+		auto ipcCheck = [this](int ipcPenalty = 1){
+			currentCycleInstructions += ipcPenalty;
+			if (currentCycleInstructions > capability.ipc) {
+				throw RuntimeError("Maximum IPC exceeded");
+			}
+		};
+		
 		bool eol = false;
 		auto nextCode = [&]() -> ByteCode {
 			if (!eol && index+1 < program.size()) {
@@ -4078,6 +4225,7 @@ struct Computer {
 						currentLine = code.value;
 					}break;
 					case OP: {
+						ipcCheck();
 						switch (code.rawValue) {
 							case SET: {// [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero
 								ByteCode dst = nextCode();
@@ -4414,6 +4562,7 @@ struct Computer {
 								for (ByteCode c; (c = nextCode()).type != VOID;) {
 									args.emplace_back(c);
 								}
+								ipcCheck(args.size());
 								if (IsText(dst) && (IsNumeric(src) || (IsText(src) && !args.empty()))) {
 									if (IsNumeric(src)) {
 										MemSet(ToString(MemGetNumeric(src)), dst);
@@ -4517,10 +4666,14 @@ struct Computer {
 								}
 								if (args.size() == 0) throw RuntimeError("Not enough arguments");
 								if (!IsArray(arr)) throw RuntimeError("Not an array");
+								ipcCheck(args.size());
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										array.reserve(args.size());
 										for (const auto& c : args) {
 											if (IsNumeric(c)) {
@@ -4533,11 +4686,17 @@ struct Computer {
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										array.reserve(args.size());
 										for (const auto& c : args) array.push_back(MemGetNumeric(c));
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										array.reserve(args.size());
 										for (const auto& c : args) array.push_back(MemGetText(c));
 									}break;
@@ -4589,6 +4748,7 @@ struct Computer {
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:{
 										auto& array = GetStorage(arr);
+										ipcCheck(array.size());
 										vector<double> values {};
 										values.reserve(array.size());
 										for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
@@ -4599,15 +4759,18 @@ struct Computer {
 									}break;
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end());
 										storageDirty = true;
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end());
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end());
 									}break;
 								}
@@ -4618,6 +4781,7 @@ struct Computer {
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:{
 										auto& array = GetStorage(arr);
+										ipcCheck(array.size());
 										vector<double> values {};
 										values.reserve(array.size());
 										for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
@@ -4628,15 +4792,18 @@ struct Computer {
 									}break;
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end(), greater<string>());
 										storageDirty = true;
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end(), greater<double>());
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
+										ipcCheck(array.size());
 										sort(array.begin(), array.end(), greater<string>());
 									}break;
 								}
@@ -4653,10 +4820,14 @@ struct Computer {
 								if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
 								int32_t index = MemGetNumeric(idx);
 								if (index < 0) throw RuntimeError("Invalid array index");
+								ipcCheck(args.size());
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										vector<string> values{};
 										values.reserve(args.size());
 										for (const auto& c : args) {
@@ -4672,6 +4843,9 @@ struct Computer {
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										vector<double> values{};
 										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetNumeric(c));
@@ -4680,6 +4854,9 @@ struct Computer {
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
+										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
 										vector<string> values{};
 										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetText(c));
@@ -4699,6 +4876,7 @@ struct Computer {
 								if (index <= 0 || index2 <= 0) throw RuntimeError("Invalid array index");
 								--index;
 								if (index2 <= index) throw RuntimeError("Invalid array index");
+								ipcCheck();
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
@@ -4737,28 +4915,33 @@ struct Computer {
 								ByteCode val = nextCode();
 								if (!IsArray(arr)) throw RuntimeError("Not an array");
 								if (!IsNumeric(qty)) throw RuntimeError("Invalid qty");
+								size_t count = MemGetNumeric(qty);
+								if (count > MAX_ARRAY_SIZE) {
+									throw RuntimeError("Maximum array size exceeded");
+								}
+								ipcCheck(count);
 								switch (arr.type) {
 									case STORAGE_ARRAY_NUMERIC:{
 										auto& array = GetStorage(arr);
 										array.clear();
-										array.resize(MemGetNumeric(qty), to_string(MemGetNumeric(val)));
+										array.resize(count, to_string(MemGetNumeric(val)));
 										storageDirty = true;
 									}break;
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
 										array.clear();
-										array.resize(MemGetNumeric(qty), MemGetText(val));
+										array.resize(count, MemGetText(val));
 										storageDirty = true;
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
 										array.clear();
-										array.resize(MemGetNumeric(qty), MemGetNumeric(val));
+										array.resize(count, MemGetNumeric(val));
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
 										array.clear();
-										array.resize(MemGetNumeric(qty), MemGetText(val));
+										array.resize(count, MemGetText(val));
 									}break;
 								}
 							}break;
@@ -4829,6 +5012,7 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
+											ipcCheck(array.size());
 											if (array.size() == 0) min = 0;
 											else for (const auto& val : array) {
 												double value = val==""? 0.0 : stod(val);
@@ -4837,6 +5021,7 @@ struct Computer {
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											ipcCheck(array.size());
 											if (array.size() == 0) min = 0;
 											else for (const auto& value : array) {
 												if (value < min) min = value;
@@ -4848,6 +5033,7 @@ struct Computer {
 										}break;
 									}
 								} else {
+									ipcCheck(args.size());
 									for (const ByteCode& c : args) {
 										if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 										double value = MemGetNumeric(c);
@@ -4870,6 +5056,7 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
+											ipcCheck(array.size());
 											if (array.size() == 0) max = 0;
 											else for (const auto& val : array) {
 												double value = val==""? 0.0 : stod(val);
@@ -4878,6 +5065,7 @@ struct Computer {
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											ipcCheck(array.size());
 											if (array.size() == 0) max = 0;
 											else for (const auto& value : array) {
 												if (value > max) max = value;
@@ -4889,6 +5077,7 @@ struct Computer {
 										}break;
 									}
 								} else {
+									ipcCheck(args.size());
 									for (const ByteCode& c : args) {
 										if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 										double value = MemGetNumeric(c);
@@ -4912,6 +5101,7 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
+											ipcCheck(array.size());
 											size = array.size();
 											if (size == 0) size = 1;
 											else for (const auto& value : array) {
@@ -4920,6 +5110,7 @@ struct Computer {
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											ipcCheck(array.size());
 											size = array.size();
 											if (size == 0) size = 1;
 											else for (const auto& value : array) {
@@ -4932,6 +5123,7 @@ struct Computer {
 										}break;
 									}
 								} else {
+									ipcCheck(args.size());
 									for (const ByteCode& c : args) {
 										if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 										double value = MemGetNumeric(c);
@@ -4955,12 +5147,14 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
+											ipcCheck(array.size());
 											for (const auto& value : array) {
 												total += value==""? 0.0 : stod(value);
 											}
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											ipcCheck(array.size());
 											for (const auto& value : array) {
 												total += value;
 											}
@@ -4971,6 +5165,7 @@ struct Computer {
 										}break;
 									}
 								} else {
+									ipcCheck(args.size());
 									for (const ByteCode& c : args) {
 										if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 										double value = MemGetNumeric(c);
@@ -4993,6 +5188,7 @@ struct Computer {
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
+											ipcCheck(array.size());
 											if (array.size() > 0) {
 												string val = array[array.size()/2];
 												med = val==""? 0.0 : stod(val);
@@ -5000,6 +5196,7 @@ struct Computer {
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											ipcCheck(array.size());
 											if (array.size() > 0) {
 												med = array[array.size()/2];
 											}
@@ -5091,8 +5288,10 @@ struct Computer {
 		}
 	}
 	
+public:
 	bool RunInit() {
 		if (assembly) {
+			currentCycleInstructions = 0;
 			RunCode(assembly->rom_vars_init);
 			RunCode(assembly->rom_program, assembly->functionRefs["system.init"]);
 			return true;
@@ -5100,9 +5299,48 @@ struct Computer {
 		return false;
 	}
 	
-	~Computer() {
-		if (assembly) {
-			delete assembly;
+	void RunCycle() {
+		assert(assembly);
+		currentCycleInstructions = 0;
+		double time = GetCurrentTimestamp();
+		
+		// Tick
+		if (assembly->functionRefs.contains("system.tick")) {
+			RunCode(assembly->rom_program, assembly->functionRefs["system.tick"]);
+		}
+		
+		// Timers
+		for (size_t i = 0; i < assembly->timers.size(); ++i) {
+			double lastRun = timersLastRun[i];
+			double interval = assembly->timers[i].interval;
+			if (lastRun + interval < time) {
+				RunCode(assembly->rom_program, assembly->timers[i].addr);
+				timersLastRun[i] = time;
+			}
+		}
+	}
+	
+	void RunInput(uint32_t port, const vector<Var>& args) {
+		if (assembly->inputs.contains(port)) {
+			auto& input = assembly->inputs[port];
+			
+			// Write args
+			for (size_t i = 0; i < args.size(); ++i) {
+				if (i >= input.args.size()) break;
+				const Var& arg = args[i];
+				ByteCode dst = input.args[i];
+				if (IsNumeric(dst) && arg.type == Var::Numeric) {
+					MemSet(arg.numericValue, dst);
+				} else if (IsText(dst) && arg.type == Var::Text) {
+					MemSet(arg.textValue, dst);
+				} else if (IsObject(dst) && arg.type == Var::Object) {
+					MemSetObject(arg.addrValue, dst); // Reference assignment for objects
+				} else {
+					throw RuntimeError("Input argument type mismatch");
+				}
+			}
+			
+			RunCode(assembly->rom_program, input.addr);
 		}
 	}
 };
