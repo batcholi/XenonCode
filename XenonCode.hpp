@@ -19,15 +19,17 @@ using namespace std;
 namespace XenonCode {
 
 // Version
-const int VERSION_MAJOR = 0;
-const int VERSION_MINOR = 0; // minor version must always increment to make the bytecode format incompatible
+const int VERSION_MAJOR = 0; // Requires assembly compiled with the same major version
+const int VERSION_MINOR = 0; // Requires assembly compiled with a version <= than interpreter's minor version
 const int VERSION_PATCH = 0;
 
 // Limitations/Settings (may be changed by the implementation)
+static string APP_NAME = "";
+static int APP_VERSION = 0;
+static string PROGRAM_EXECUTABLE = "xc_program.bin";
 static size_t MAX_TEXT_LENGTH = 1024; // max number of chars in text variables
 static size_t MAX_ARRAY_SIZE = 4096; // max number of elements in arrays
 static size_t MAX_ROM_SIZE = 65535; // number of 32-bit words (defaults to 65k but the theoretical maximum is 16M)
-static string PROGRAM_EXECUTABLE = "xc_program.bin";
 static size_t TEXT_MEMORY_PENALTY = 16; // memory usage multiplier for text variables
 static size_t ARRAY_NUMERIC_MEMORY_PENALTY = 32; // memory usage multiplier for an array of numbers
 static size_t ARRAY_TEXT_MEMORY_PENALTY = 512; // memory usage multiplier for an array of text
@@ -1963,7 +1965,8 @@ struct InputFunction {
 
 class Assembly {
 	static inline const string parserFiletype = "XenonCode!";
-	static inline const uint32_t parserVersion = VERSION_MINOR;
+	static inline const uint32_t parserVersionMajor = VERSION_MAJOR;
+	static inline const uint32_t parserVersionMinor = VERSION_MINOR;
 	
 public:
 	uint32_t varsInitSize = 0; // number of byte codes in the vars_init code (uint32_t)
@@ -2394,8 +2397,9 @@ public:
 			}
 			applyPointersAddresses();
 			--currentScope;
-			currentStackId = stack.back().id;
 			stack.pop_back();
+			userVars[currentFunctionName][currentStackId].clear();
+			currentStackId = stack.size() > 0 ? stack.back().id : 0;
 			assert(currentScope == stack.size());
 		};
 		
@@ -3199,13 +3203,13 @@ public:
 											switch (dst.type) {
 												case STORAGE_ARRAY_NUMERIC:
 												case RAM_ARRAY_NUMERIC:
-													tmp =  declareTmpNumeric();
+													tmp = declareTmpNumeric();
 													break;
 												case STORAGE_VAR_TEXT:
 												case STORAGE_ARRAY_TEXT:
 												case RAM_VAR_TEXT:
 												case RAM_ARRAY_TEXT:
-													tmp =  declareTmpText();
+													tmp = declareTmpText();
 													break;
 												default: validate(false);
 											}
@@ -3693,12 +3697,16 @@ public:
 	}
 
 	// From ByteCode stream
-	explicit Assembly(istream& s) {Read(s);}
+	explicit Assembly(istream& s) {
+		assert(APP_NAME != "");
+		assert(APP_VERSION != 0);
+		Read(s);
+	}
 	
 	void Write(ostream& s) {
 		{// Write Header
 			// Write assembly file info
-			s << parserFiletype << ' ' << parserVersion << '\n';
+			s << parserFiletype << ' ' << parserVersionMajor << ' ' << parserVersionMinor << ' ' << APP_NAME << ' ' << APP_VERSION << '\n';
 			
 			// Write some sizes
 			s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << sourceFiles.size() << '\n';
@@ -3763,7 +3771,10 @@ public:
 private:
 	void Read(istream& s) {
 		string filetype;
-		uint32_t version;
+		string appName;
+		uint32_t versionMajor;
+		uint32_t versionMinor;
+		uint32_t appVersion;
 		size_t storageRefsSize;
 		size_t functionRefsSize;
 		size_t timersSize;
@@ -3776,8 +3787,14 @@ private:
 			// Read assembly file info
 			s >> filetype;
 			if (filetype != parserFiletype) throw runtime_error("Bad XenonCode assembly");
-			s >> version;
-			if (version > parserVersion) throw runtime_error("XenonCode file version is more recent than this parser");
+			s >> versionMajor;
+			if (versionMajor != parserVersionMajor) throw runtime_error("This XenonCode file version is incompatible with this interpreter");
+			s >> versionMinor;
+			if (versionMinor > parserVersionMinor) throw runtime_error("This XenonCode file version is more recent than this interpreter");
+			s >> appName;
+			if (appName != APP_NAME) throw runtime_error("This XenonCode assembly is incompatible with this application");
+			s >> appVersion;
+			if (appVersion > APP_VERSION) throw runtime_error("This XenonCode file version is more recent than this application");
 			
 			// Read some sizes
 			s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
@@ -3968,10 +3985,10 @@ public:
 	
 	void SaveStorage() {
 		if (storageDirty) {
+			string storagePath = directory + "/storage/";
+			filesystem::create_directories(storagePath);
 			for (const auto& name : assembly->storageRefs) {
 				const auto& storage = storageCache[name];
-				string storagePath = directory + "/storage/";
-				filesystem::create_directories(storagePath);
 				ofstream file{storagePath + name};
 				for (const string& value : storage) {
 					file << value << '\0';
@@ -3979,6 +3996,11 @@ public:
 			}
 			storageDirty = false;
 		}
+	}
+	
+	void ClearStorage() {
+		string storagePath = directory + "/storage/";
+		filesystem::remove_all(storagePath);
 	}
 	
 private:

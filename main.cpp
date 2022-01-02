@@ -4,23 +4,39 @@ using namespace std;
 
 bool verbose = false; // Set using -verbose in the arguments
 
-const string outputFileName = "xc_program.bin";
-
 void Init() {
+	XenonCode::APP_NAME = "DEFAULT_XC_APP";
+	XenonCode::APP_VERSION = 1;
+	
 	// Do NOT change the order of declarations once in production, just append new things after the last one. This is because scripts are compiled using the indices, which are based on the order they were declared.
 	// Maximum of 127 object types
 	auto positionType = XenonCode::DeclareObjectType("position", {
+		// Those are the members, may be used either as functions (using args, modifying the object, returning void) or as properties (ignoring args, returning a value)
 		{"x:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			return 0.0;
 		}},
+		{"y:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+			return 0.0;
+		}},
+		{"z:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+			return 0.0;
+		}},
+		{"normalize()", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+			//...
+			return {};
+		}},
 	});
-	// Maximum of 65k global device functions plus 65k methods or members per object type
+	
+	// Maximum of 65k global device functions
 	XenonCode::DeclareDeviceFunction("delta:number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
-		return {};
+		return 0.0;
 	});
+	
+	// This is an example of a constructor for the object type "position" (defined as a global device function)
 	XenonCode::DeclareDeviceFunction("position:position", [=](const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return {positionType, 0/*This would be an implementation-defined object pointer (uint64_t) that must be mapped somewhere*/};
 	});
+	
 	// Must set the output function here
 	XenonCode::SetOutputFunction([](uint32_t ioIndex, const vector<XenonCode::Var>& args){
 		if (verbose) {
@@ -58,11 +74,11 @@ void PrintUsage() {
 	cout << "  xenoncode [-verbose] -compile <sourcedir>" << endl;
 	cout << "    Parse and Compile a program from a given directory" << endl;
 	cout << "    There must be a 'main.xc' present" << endl;
-	cout << "    It compiles into '" << outputFileName << "' in that same given directory" << endl;
+	cout << "    It compiles into '" << XenonCode::PROGRAM_EXECUTABLE << "' in that same given directory" << endl;
 	cout << endl;
 	cout << "  xenoncode [-verbose] -run <sourcedir>" << endl;
 	cout << "    Run a program from a given directory" << endl;
-	cout << "    There must be a '" << outputFileName << "' present" << endl;
+	cout << "    There must be a '" << XenonCode::PROGRAM_EXECUTABLE << "' present" << endl;
 	cout << "    This will only run the body of the init function" << endl;
 	cout << endl;
 	cout << "All commands may be used multiple times and in conjunction with one another, in the order they will be executed. The program will stop on the first error." << endl;
@@ -107,7 +123,7 @@ bool Compile(const string& directory) {
 			cout << "Compiling..." << endl;
 		}
 		XenonCode::Assembly assembly {mainFile.lines, verbose};
-		ofstream output(directory + "/" + outputFileName, ios_base::out | ios_base::trunc);
+		ofstream output(directory + "/" + XenonCode::PROGRAM_EXECUTABLE, ios_base::out | ios_base::trunc);
 		assembly.Write(output);
 		if (verbose) {
 			cout << "\nCompiled Successfully!\n" << endl;
