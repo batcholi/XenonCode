@@ -500,8 +500,10 @@ It is encouraged that the code editor runs the following parse on the current li
             - Operators
 
 ## Runtime
+
 Upon powering up the virtual computer:
 - Execute the body of the init() function  
+
 One clock cycle, executed 'frequency' times per second:
 - Execute the tick function
 - Execute all timer functions sequentially if their time is due
