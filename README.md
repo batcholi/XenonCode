@@ -173,7 +173,7 @@ We may assign initial values to a storage.
 ```
 storage var $stuff = 5
 storage var $stuff:text
-storage array $stuff:numeric
+storage array $stuff:number
 ```
 
 ## Accessing/Assigning the nth item within an array

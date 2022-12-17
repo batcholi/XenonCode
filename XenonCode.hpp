@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <functional>
 
 using namespace std;
 
@@ -1823,8 +1824,10 @@ CODE_TYPE GetRamVarType(uint32_t t) {
 	switch (t) {
 		case STORAGE_VAR_NUMERIC: return RAM_VAR_NUMERIC;
 		case STORAGE_VAR_TEXT: return RAM_VAR_TEXT;
-		case STORAGE_ARRAY_NUMERIC: return RAM_ARRAY_NUMERIC;
-		case STORAGE_ARRAY_TEXT: return RAM_ARRAY_TEXT;
+		case STORAGE_ARRAY_NUMERIC: return RAM_VAR_NUMERIC;
+		case STORAGE_ARRAY_TEXT: return RAM_VAR_TEXT;
+		case RAM_ARRAY_NUMERIC: return RAM_VAR_NUMERIC;
+		case RAM_ARRAY_TEXT: return RAM_VAR_TEXT;
 		case ROM_CONST_NUMERIC: return RAM_VAR_NUMERIC;
 		case ROM_CONST_TEXT: return RAM_VAR_TEXT;
 		default: return CODE_TYPE(t);

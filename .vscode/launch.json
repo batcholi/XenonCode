@@ -25,8 +25,7 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Build XenonCode",
-            "miDebuggerPath": "/usr/bin/gdb"
+            "preLaunchTask": "Debug XenonCode",
         }
     ]
 }
