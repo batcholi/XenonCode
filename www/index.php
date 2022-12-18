@@ -1,12 +1,14 @@
 <?php
+$RUN_TIME_LIMIT = 10; // seconds
+
 // DEV
 define("DEV", $_SERVER['HTTP_HOST'] === 'dev.xenoncode.com');
 error_reporting(E_ALL);
 ini_set("display_errors", DEV);
 
 // PHP Configuration
-set_time_limit(60);
-ob_implicit_flush(false);
+set_time_limit(1);
+ob_implicit_flush(true);
 
 // Project Setup
 if (empty($_GET['PROJECT'])) {header("Location: /".uniqid());exit;}
@@ -47,7 +49,15 @@ if (!empty($_GET['savefile']) && isset($_POST['content'])) {
 if (isset($_GET['run'])) {
 	if (is_dir($PROJECT_DIR)) {
 		chdir($PROJECT_DIR);
-		system("timeout 60s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", $resultCode);
+		set_time_limit($RUN_TIME_LIMIT);
+		ob_implicit_flush(false);
+		// system("timeout ".$RUN_TIME_LIMIT."s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", $resultCode);
+		$handle = popen("timeout ".$RUN_TIME_LIMIT."s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", 'r');
+		while (!feof($handle)) {
+			echo fgets($handle);
+			flush();
+		}
+		pclose($handle);
 	}
 	exit;
 }
