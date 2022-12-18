@@ -49,6 +49,7 @@ if (!empty($_GET['savefile']) && isset($_POST['content'])) {
 if (isset($_GET['run'])) {
 	if (is_dir($PROJECT_DIR)) {
 		chdir($PROJECT_DIR);
+		ob_end_flush();
 		set_time_limit($RUN_TIME_LIMIT);
 		ob_implicit_flush(false);
 		// system("timeout ".$RUN_TIME_LIMIT."s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", $resultCode);
