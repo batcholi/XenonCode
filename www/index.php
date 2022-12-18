@@ -1,5 +1,5 @@
 <?php
-$RUN_TIME_LIMIT = 10; // seconds
+$RUN_TIME_LIMIT = 60; // seconds
 
 // DEV
 define("DEV", $_SERVER['HTTP_HOST'] === 'dev.xenoncode.com');
@@ -52,7 +52,6 @@ if (isset($_GET['run'])) {
 		ob_end_flush();
 		set_time_limit($RUN_TIME_LIMIT);
 		ob_implicit_flush(false);
-		// system("timeout ".$RUN_TIME_LIMIT."s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", $resultCode);
 		$handle = popen("timeout ".$RUN_TIME_LIMIT."s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", 'r');
 		while (!feof($handle)) {
 			echo fgets($handle);
@@ -372,7 +371,7 @@ if (!empty($_GET['theme'])) {
 					var xhr = new window.XMLHttpRequest();
 					xhr.onprogress = function() {
 						$('#output > #loading_response_spinner').remove();
-						$("#output").append(xhr.responseText);
+						$("#output").text(xhr.responseText);
 						$("#output").append(loadingResponseSpinner);
 					};
 					return xhr;
