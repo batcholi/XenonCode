@@ -24,17 +24,37 @@ const int VERSION_MAJOR = 0; // Requires assembly compiled with the same major v
 const int VERSION_MINOR = 0; // Requires assembly compiled with a version <= than interpreter's minor version
 const int VERSION_PATCH = 0;
 
-// Limitations/Settings (may be changed by the implementation)
-static string APP_NAME = "";
-static int APP_VERSION = 0;
-static string PROGRAM_EXECUTABLE = "xc_program.bin";
-static size_t MAX_TEXT_LENGTH = 1024; // max number of chars in text variables
-static size_t MAX_ARRAY_SIZE = 4096; // max number of elements in arrays
-static size_t MAX_ROM_SIZE = 65535; // number of 32-bit words (defaults to 65k but the theoretical maximum is 16M)
-static size_t TEXT_MEMORY_PENALTY = 16; // memory usage multiplier for text variables
-static size_t ARRAY_NUMERIC_MEMORY_PENALTY = 32; // memory usage multiplier for an array of numbers
-static size_t ARRAY_TEXT_MEMORY_PENALTY = 512; // memory usage multiplier for an array of text
-static size_t OBJECT_MEMORY_PENALTY = 16; // memory usage multiplier for objects
+// Limitations/Settings (these are default values, may be changed by the implementation)
+#ifndef XC_APP_NAME
+	#define XC_APP_NAME "DEFAULT_XC_APP" // MUST be set by the implementation
+#endif
+#ifndef XC_APP_VERSION
+	#define XC_APP_VERSION 1
+#endif
+#ifndef XC_PROGRAM_EXECUTABLE
+	#define XC_PROGRAM_EXECUTABLE "xc_program.bin"
+#endif
+#ifndef XC_MAX_TEXT_LENGTH
+	#define XC_MAX_TEXT_LENGTH 1024 // max number of chars in text variables
+#endif
+#ifndef XC_MAX_ARRAY_SIZE
+	#define XC_MAX_ARRAY_SIZE 4096 // max number of elements in arrays
+#endif
+#ifndef XC_MAX_ROM_SIZE
+	#define XC_MAX_ROM_SIZE 65535 // number of 32-bit words (defaults to 65k but the theoretical maximum is 16M)
+#endif
+#ifndef XC_TEXT_MEMORY_PENALTY
+	#define XC_TEXT_MEMORY_PENALTY 16 // memory usage multiplier for text variables
+#endif
+#ifndef XC_ARRAY_NUMERIC_MEMORY_PENALTY
+	#define XC_ARRAY_NUMERIC_MEMORY_PENALTY 32 // memory usage multiplier for an array of numbers
+#endif
+#ifndef XC_ARRAY_TEXT_MEMORY_PENALTY
+	#define XC_ARRAY_TEXT_MEMORY_PENALTY 512 // memory usage multiplier for an array of text
+#endif
+#ifndef XC_OBJECT_MEMORY_PENALTY
+	#define XC_OBJECT_MEMORY_PENALTY 16 // memory usage multiplier for objects
+#endif
 
 ///////////////////////////////////////////////////////////////
 
@@ -332,7 +352,7 @@ struct Word {
 							break;
 						}
 						if (s.peek() == '\\') s.get();
-						if (word.length() >= MAX_TEXT_LENGTH) {
+						if (word.length() >= XC_MAX_TEXT_LENGTH) {
 							throw ParseError("Text too long");
 						}
 						word += s.get();
@@ -1106,7 +1126,7 @@ struct ParsedLine {
 					throw ParseError("Invalid first word", words[0], "in the global scope");
 				}
 			} else { // Function scope
-				if (words[0] != Word::Varname && words[0] != Word::Funcname && (words[0] != Word::Name || find(begin(functionScopeFirstWords), end(functionScopeFirstWords), words[0]) == end(functionScopeFirstWords))) {
+				if (words[0] != Word::Varname && words[0] != Word::Funcname && words[0] != Word::Name) {
 					throw ParseError("Invalid first word", words[0], "in a function scope");
 				}
 			}
@@ -1360,7 +1380,11 @@ struct ParsedLine {
 						}
 					} else
 					
-				throw ParseError("Invalid word", words[0]);
+				// device function
+					if (words.size() == 1 || words[1] != Word::ExpressionBegin) {
+						throw ParseError("A device function call must be followed by a set of parenthesis, optionally containing arguments");
+					}
+				
 			} else
 			
 			// Only in Function scope
@@ -3565,6 +3589,23 @@ public:
 								write(val);
 								write(VOID);
 							}
+							else if (deviceFunctionsByName.contains(firstWord.word)) {
+								// Device Function call
+								vector<ByteCode> args {};
+								validate(readWord() == Word::ExpressionBegin);
+								while (nextWordIndex < line.words.size()) {
+									int argEnd = GetArgEnd(line.words, nextWordIndex);
+									if (argEnd == -1) {
+										break;
+									}
+									args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+									nextWordIndex = argEnd+1;
+									if (readWord() != Word::CommaOperator) {
+										break;
+									}
+								}
+								compileFunctionCall(firstWord, args, false);
+							}
 							// ERROR
 							else {
 								throw CompileError("Invalid statement");
@@ -3701,15 +3742,15 @@ public:
 
 	// From ByteCode stream
 	explicit Assembly(istream& s) {
-		assert(APP_NAME != "");
-		assert(APP_VERSION != 0);
+		assert(XC_APP_NAME != "");
+		assert(XC_APP_VERSION != 0);
 		Read(s);
 	}
 	
 	void Write(ostream& s) {
 		{// Write Header
 			// Write assembly file info
-			s << parserFiletype << ' ' << parserVersionMajor << ' ' << parserVersionMinor << ' ' << APP_NAME << ' ' << APP_VERSION << '\n';
+			s << parserFiletype << ' ' << parserVersionMajor << ' ' << parserVersionMinor << ' ' << XC_APP_NAME << ' ' << XC_APP_VERSION << '\n';
 			
 			// Write some sizes
 			s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << sourceFiles.size() << '\n';
@@ -3758,7 +3799,7 @@ public:
 		}
 		
 		// Check ROM size
-		if (varsInitSize + programSize > MAX_ROM_SIZE) {
+		if (varsInitSize + programSize > XC_MAX_ROM_SIZE) {
 			throw CompileError("Maximum ROM size exceeded");
 		}
 		
@@ -3795,9 +3836,9 @@ private:
 			s >> versionMinor;
 			if (versionMinor > parserVersionMinor) throw runtime_error("This XenonCode file version is more recent than this interpreter");
 			s >> appName;
-			if (appName != APP_NAME) throw runtime_error("This XenonCode assembly is incompatible with this application");
+			if (appName != XC_APP_NAME) throw runtime_error("This XenonCode assembly is incompatible with this application");
 			s >> appVersion;
-			if (appVersion > APP_VERSION) throw runtime_error("This XenonCode file version is more recent than this application");
+			if (appVersion > XC_APP_VERSION) throw runtime_error("This XenonCode file version is more recent than this application");
 			
 			// Read some sizes
 			s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
@@ -3810,7 +3851,7 @@ private:
 			s >> ram_textArrays;
 
 			// Check ROM size
-			if (varsInitSize + programSize > MAX_ROM_SIZE) {
+			if (varsInitSize + programSize > XC_MAX_ROM_SIZE) {
 				throw CompileError("Maximum ROM size exceeded");
 			}
 			
@@ -3874,8 +3915,8 @@ private:
 				rom_numericConstants.push_back(value);
 			}
 			for (size_t i = 0; i < rom_textConstantsSize; ++i) {
-				char value[MAX_TEXT_LENGTH+1];
-				s.getline(value, MAX_TEXT_LENGTH, '\0');
+				char value[XC_MAX_TEXT_LENGTH+1];
+				s.getline(value, XC_MAX_TEXT_LENGTH, '\0');
 				rom_textConstants.push_back(value);
 			}
 		}
@@ -3933,17 +3974,17 @@ public:
 		
 		{// Load Assembly
 			if (assembly) delete assembly;
-			ifstream file{directory + "/" + PROGRAM_EXECUTABLE};
+			ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE};
 			assembly = new Assembly(file);
 		}
 		
 		{// Check Capabilities
 			// Do we have enough RAM to run this program?
 			if (capability.ram < assembly->ram_numericVariables
-							   + assembly->ram_textVariables * TEXT_MEMORY_PENALTY
-							   + assembly->ram_numericArrays * ARRAY_NUMERIC_MEMORY_PENALTY
-							   + assembly->ram_textArrays * ARRAY_TEXT_MEMORY_PENALTY
-							   + assembly->ram_objectReferences * OBJECT_MEMORY_PENALTY
+							   + assembly->ram_textVariables * XC_TEXT_MEMORY_PENALTY
+							   + assembly->ram_numericArrays * XC_ARRAY_NUMERIC_MEMORY_PENALTY
+							   + assembly->ram_textArrays * XC_ARRAY_TEXT_MEMORY_PENALTY
+							   + assembly->ram_objectReferences * XC_OBJECT_MEMORY_PENALTY
 			) {
 				// Not enough RAM
 				return false;
@@ -3973,8 +4014,8 @@ public:
 			auto& storage = storageCache[name];
 			storage.clear();
 			ifstream file{directory + "/storage/" + name};
-			char value[MAX_TEXT_LENGTH+1];
-			while (file.getline(value, MAX_TEXT_LENGTH, '\0')) {
+			char value[XC_MAX_TEXT_LENGTH+1];
+			while (file.getline(value, XC_MAX_TEXT_LENGTH, '\0')) {
 				storage.emplace_back(string(value));
 			}
 		}
@@ -4098,7 +4139,7 @@ private:
 		}
 	}
 	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = 0) {
-		if (value.length() > MAX_TEXT_LENGTH) {
+		if (value.length() > XC_MAX_TEXT_LENGTH) {
 			throw RuntimeError("Text too large");
 		}
 		switch (dst.type) {
@@ -4696,7 +4737,7 @@ private:
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										array.reserve(args.size());
@@ -4711,7 +4752,7 @@ private:
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										array.reserve(args.size());
@@ -4719,7 +4760,7 @@ private:
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										array.reserve(args.size());
@@ -4850,7 +4891,7 @@ private:
 									case STORAGE_ARRAY_NUMERIC:
 									case STORAGE_ARRAY_TEXT:{
 										auto& array = GetStorage(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										vector<string> values{};
@@ -4868,7 +4909,7 @@ private:
 									}break;
 									case RAM_ARRAY_NUMERIC:{
 										auto& array = GetNumericArray(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										vector<double> values{};
@@ -4879,7 +4920,7 @@ private:
 									}break;
 									case RAM_ARRAY_TEXT:{
 										auto& array = GetTextArray(arr);
-										if (array.size() + args.size() > MAX_ARRAY_SIZE) {
+										if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 											throw RuntimeError("Maximum array size exceeded");
 										}
 										vector<string> values{};
@@ -4941,7 +4982,7 @@ private:
 								if (!IsArray(arr)) throw RuntimeError("Not an array");
 								if (!IsNumeric(qty)) throw RuntimeError("Invalid qty");
 								size_t count = MemGetNumeric(qty);
-								if (count > MAX_ARRAY_SIZE) {
+								if (count > XC_MAX_ARRAY_SIZE) {
 									throw RuntimeError("Maximum array size exceeded");
 								}
 								ipcCheck(count);
@@ -5314,11 +5355,26 @@ private:
 	}
 	
 public:
+	bool HasTick() {
+		return assembly && assembly->functionRefs.contains("system.tick");
+	}
+	bool HasTimers() {
+		return assembly && assembly->timers.size() > 0;
+	}
+	bool HasInputs() {
+		return assembly && assembly->inputs.size() > 0;
+	}
+	bool ShouldRunContinuously() {
+		return HasTick() || HasTimers() || HasInputs();
+	}
+
 	bool RunInit() {
 		if (assembly) {
 			currentCycleInstructions = 0;
 			RunCode(assembly->rom_vars_init);
-			RunCode(assembly->rom_program, assembly->functionRefs["system.init"]);
+			if (assembly->functionRefs.contains("system.init")) {
+				RunCode(assembly->rom_program, assembly->functionRefs["system.init"]);
+			}
 			return true;
 		}
 		return false;

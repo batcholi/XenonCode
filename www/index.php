@@ -47,7 +47,7 @@ if (!empty($_GET['savefile']) && isset($_POST['content'])) {
 if (isset($_GET['run'])) {
 	if (is_dir($PROJECT_DIR)) {
 		chdir($PROJECT_DIR);
-		system("timeout 0.5s ../../build/xenoncode -compile . -run . 2>&1", $resultCode);
+		system("timeout 60s ../../build/xenoncode -compile . -hz 20 -run . 2>&1", $resultCode);
 	}
 	exit;
 }
@@ -353,14 +353,25 @@ if (!empty($_GET['theme'])) {
 		}
 		
 		function Run() {
-			document.getElementById("output").innerHTML = '<i class="fas fa-spinner"></i>';
+			var loadingResponseSpinner = '<i id="loading_response_spinner" class="fas fa-spinner"></i>';
+			$("#output").append(loadingResponseSpinner);
 			$.ajax({
 				url: '?run',
+				xhr: function() {
+					var xhr = new window.XMLHttpRequest();
+					xhr.onprogress = function() {
+						$('#output > #loading_response_spinner').remove();
+						$("#output").append(xhr.responseText);
+						$("#output").append(loadingResponseSpinner);
+					};
+					return xhr;
+				},
 				success: function(response) {
-					document.getElementById("output").innerHTML = response;
+					$('#output > #loading_response_spinner').remove();
 				},
 				error: function() {
-					document.getElementById("output").innerHTML = 'ERROR';
+					$('#output > #loading_response_spinner').remove();
+					$("#output").append('ERROR');
 				}
 			});
 		}

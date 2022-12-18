@@ -507,7 +507,7 @@ Upon powering up the virtual computer:
 One clock cycle, executed 'frequency' times per second:
 - Execute the tick function
 - Execute all timer functions sequentially if their time is due
-- Execute all input functions that have received some data since the last cycle
+- Execute all input functions that have received some data since the last cycle (once each per cycle)
 - Sleep for Elapsed-1/Frequency Seconds
 
 # Testing XenonCode

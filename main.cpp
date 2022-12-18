@@ -1,13 +1,16 @@
 #include "XenonCode.hpp"
+#include <thread>
+#include <queue>
+#include <mutex>
+#include <csignal>
 
 using namespace std;
 
 bool verbose = false; // Set using -verbose in the arguments
+bool isRunning = true;
+int64_t cyclesPerSecond = 0;
 
 void Init() {
-	XenonCode::APP_NAME = "DEFAULT_XC_APP";
-	XenonCode::APP_VERSION = 1;
-	
 	// Do NOT change the order of declarations once in production, just append new things after the last one. This is because scripts are compiled using the indices, which are based on the order they were declared.
 	// Maximum of 127 object types
 	auto positionType = XenonCode::DeclareObjectType("position", {
@@ -74,11 +77,11 @@ void PrintUsage() {
 	cout << "  xenoncode [-verbose] -compile <sourcedir>" << endl;
 	cout << "    Parse and Compile a program from a given directory" << endl;
 	cout << "    There must be a 'main.xc' present" << endl;
-	cout << "    It compiles into '" << XenonCode::PROGRAM_EXECUTABLE << "' in that same given directory" << endl;
+	cout << "    It compiles into '" << XC_PROGRAM_EXECUTABLE << "' in that same given directory" << endl;
 	cout << endl;
-	cout << "  xenoncode [-verbose] -run <sourcedir>" << endl;
+	cout << "  xenoncode [-verbose] [-hz <NCyclesPerSecond>] -run <sourcedir>" << endl;
 	cout << "    Run a program from a given directory" << endl;
-	cout << "    There must be a '" << XenonCode::PROGRAM_EXECUTABLE << "' present" << endl;
+	cout << "    There must be a '" << XC_PROGRAM_EXECUTABLE << "' present" << endl;
 	cout << "    This will only run the body of the init function" << endl;
 	cout << endl;
 	cout << "All commands may be used multiple times and in conjunction with one another, in the order they will be executed. The program will stop on the first error." << endl;
@@ -123,7 +126,7 @@ bool Compile(const string& directory) {
 			cout << "Compiling..." << endl;
 		}
 		XenonCode::Assembly assembly {mainFile.lines, verbose};
-		ofstream output(directory + "/" + XenonCode::PROGRAM_EXECUTABLE, ios_base::out | ios_base::trunc);
+		ofstream output(directory + "/" + XC_PROGRAM_EXECUTABLE, ios_base::out | ios_base::trunc);
 		assembly.Write(output);
 		if (verbose) {
 			cout << "\nCompiled Successfully!\n" << endl;
@@ -135,6 +138,10 @@ bool Compile(const string& directory) {
 	return false;
 }
 
+void InteruptSignalHandler(int signum) {
+	isRunning = false;
+}
+
 bool Run(const string& directory) {
 	XenonCode::Computer computer;
 	computer.capability.ram = 65536;
@@ -142,8 +149,46 @@ bool Run(const string& directory) {
 		try {
 			if (computer.RunInit()) {
 				computer.SaveStorage();
-				if (verbose) {
-					cout << "Program's Init function successfully executed\n" << endl;
+				if (cyclesPerSecond && computer.ShouldRunContinuously()) {
+					signal(SIGINT, InteruptSignalHandler);
+					std::mutex inputMutex;
+					std::queue<std::string> inputQueue;
+					std::thread inputThread;
+					if (computer.HasInputs()) {
+						inputThread = std::thread{[&](){
+							std::string input;
+							while (isRunning && std::getline(std::cin, input)) {
+								if (input == "exit") break;
+								if (input != "") {
+									std::lock_guard lock(inputMutex);
+									inputQueue.emplace(input);
+								}
+							}
+							isRunning = false;
+						}};
+					}
+					while (isRunning) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(1000 / std::min(int64_t(1000), cyclesPerSecond)));
+						computer.RunCycle();
+						{
+							std::lock_guard lock(inputMutex);
+							if (!inputQueue.empty()) {
+								computer.RunInput(0, {inputQueue.front()});
+								inputQueue.pop();
+							}
+						}
+						computer.SaveStorage();
+					}
+					if (inputThread.joinable()) {
+						inputThread.detach();
+					}
+					if (verbose) {
+						std::cout << "Program terminated gracefully" << std::endl;
+					}
+				} else {
+					if (verbose) {
+						cout << "Program's Init function successfully executed\n" << endl;
+					}
 				}
 				return true;
 			}
@@ -200,6 +245,10 @@ int main(const int argc, const char** argv) {
 						cerr << "You must provide a path to a directory containing the source files of the program to compile" << endl;
 					}
 					if (!Compile(directory)) return 1;
+				}
+				// HZ (Set Cycles Per Second)
+				else if (arg == "hz") {
+					cyclesPerSecond = nextArgInt();
 				}
 				// Run (using a directory)
 				else if (arg == "run") {
