@@ -6,7 +6,7 @@ ini_set("display_errors", DEV);
 
 // PHP Configuration
 set_time_limit(1);
-// ob_implicit_flush(true);
+ob_implicit_flush(true);
 
 // Project Setup
 if (empty($_GET['PROJECT'])) {header("Location: /".uniqid());exit;}
