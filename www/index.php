@@ -6,7 +6,7 @@ ini_set("display_errors", DEV);
 
 // PHP Configuration
 set_time_limit(1);
-ob_implicit_flush();
+// ob_implicit_flush(true);
 
 // Project Setup
 if (empty($_GET['PROJECT'])) {header("Location: /".uniqid());exit;}
@@ -354,7 +354,7 @@ if (!empty($_GET['theme'])) {
 		
 		function Run() {
 			var loadingResponseSpinner = '<i id="loading_response_spinner" class="fas fa-spinner"></i>';
-			$("#output").append(loadingResponseSpinner);
+			$("#output").html(loadingResponseSpinner);
 			$.ajax({
 				url: '?run',
 				xhr: function() {
