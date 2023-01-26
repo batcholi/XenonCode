@@ -150,7 +150,19 @@ bool Run(const string& directory) {
 			if (computer.RunInit()) {
 				computer.SaveStorage();
 				if (cyclesPerSecond && computer.ShouldRunContinuously()) {
-					signal(SIGINT, InteruptSignalHandler);
+					
+					{// Signal Handler
+					#ifdef _WIN32
+						signal(SIGINT, InteruptSignalHandler);
+					#else
+						struct sigaction _sa;
+						_sa.sa_handler = InteruptSignalHandler;
+						sigemptyset(&_sa.sa_mask);
+						_sa.sa_flags = 0;
+						sigaction(SIGINT, &_sa, NULL);
+					#endif
+					}
+					
 					std::mutex inputMutex;
 					std::queue<std::string> inputQueue;
 					std::thread inputThread;

@@ -57,3 +57,6 @@ init
 	// Run Unit tests
 	$results.clear()
 	@RunUnitTests()
+
+timer interval 1
+	output.0 ("tick")
