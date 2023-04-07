@@ -1088,6 +1088,7 @@ const vector<string> globalScopeFirstWords {
 	"timer",
 	"input",
 };
+static std::vector<string> entryPoints {};
 
 // Valid first words for the possible statements in a function scope
 const vector<string> functionScopeFirstWords {
@@ -1122,7 +1123,7 @@ struct ParsedLine {
 			
 			// Check first word validity for this Scope
 			if (scope == 0) { // Global scope
-				if (words[0] != Word::Name || find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords)) {
+				if (words[0] != Word::Name || (find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords) && find(begin(entryPoints), end(entryPoints), words[0]) == end(entryPoints))) {
 					throw ParseError("Invalid first word", words[0], "in the global scope");
 				}
 			} else { // Function scope
@@ -1237,6 +1238,11 @@ struct ParsedLine {
 						}
 						if (words.size() > 5) throw ParseError("Too many words");
 						if (words.size() < 5) throw ParseError("Too few words");
+					} else
+					
+				// entry points
+					if (find(begin(entryPoints), end(entryPoints), words[0]) != end(entryPoints)) {
+						if (words.size() != 1) throw ParseError("Too many words");
 					} else
 					
 				// In both Global and Function scopes
@@ -1766,6 +1772,12 @@ static unordered_map<string, DeviceFunctionInfo> deviceFunctionsByName {};
 static unordered_map<uint32_t/*24 least significant bits only*/, string> deviceFunctionNamesById {};
 static unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById {};
 
+// Implementation SHOULD declare entry points
+void DeclareEntryPoint(const string& entryName) {
+	assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), entryName) == globalScopeFirstWords.end());
+	entryPoints.emplace_back(entryName);
+}
+
 // Implementation SHOULD declare device functions
 DeviceFunctionInfo& DeclareDeviceFunction(const string& prototype, DeviceFunction&& func, uint8_t base = 0) {
 	static map<uint8_t, uint32_t> nextID {};
@@ -2008,6 +2020,7 @@ public:
 		system.tick
 		system.input (not present in functionRefs)
 		system.timer (not present in functionRefs)
+		system.* (implementation-defined entry points)
 	Varnames related to functions:
 		@funcname.1 		argument
 		@funcname:			return
@@ -3164,6 +3177,11 @@ public:
 									else validate(false);
 								}
 								validate(!readWord());
+								pushStack("function");
+							}
+							// entry points
+							else if (find(begin(entryPoints), end(entryPoints), firstWord) != end(entryPoints)) {
+								openFunction("system." + firstWord.word);
 								pushStack("function");
 							}
 							// ERROR
@@ -5358,6 +5376,9 @@ public:
 	bool HasTick() {
 		return assembly && assembly->functionRefs.contains("system.tick");
 	}
+	bool HasEntryPoint(const string& name) {
+		return assembly && assembly->functionRefs.contains("system." + name);
+	}
 	bool HasTimers() {
 		return assembly && assembly->timers.size() > 0;
 	}
@@ -5424,6 +5445,13 @@ public:
 			RunCode(assembly->rom_program, input.addr);
 		}
 	}
+	
+	void RunEntryPoint(const string& name) {
+		if (HasEntryPoint(name)) {
+			RunCode(assembly->rom_program, assembly->functionRefs.at("system." + name));
+		}
+	}
+	
 };
 
 #pragma endregion

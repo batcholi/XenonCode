@@ -11,6 +11,8 @@ bool isRunning = true;
 int64_t cyclesPerSecond = 0;
 
 void Init() {
+	XenonCode::DeclareEntryPoint("shutdown");
+	
 	// Do NOT change the order of declarations once in production, just append new things after the last one. This is because scripts are compiled using the indices, which are based on the order they were declared.
 	// Maximum of 127 object types
 	auto positionType = XenonCode::DeclareObjectType("position", {
@@ -202,6 +204,7 @@ bool Run(const string& directory) {
 						cout << "Program's Init function successfully executed\n" << endl;
 					}
 				}
+				computer.RunEntryPoint("shutdown");
 				return true;
 			}
 		} catch (XenonCode::RuntimeError& e) {

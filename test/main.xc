@@ -60,3 +60,6 @@ init
 
 timer interval 1
 	output.0 ("tick")
+
+shutdown
+	output.0 ("Shutdown!")
