@@ -1562,12 +1562,14 @@ enum CODE_TYPE : uint8_t {
 	RAM_OBJECT = 128,
 };
 
+#define ARRAY_INDEX_NONE uint32_t(0xFFFFFF)
+
 constexpr uint32_t Interpret3CharsAsInt(const char* str) {
 	return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (OP << 24);
 }
 #define DEF_OP(op) inline constexpr uint32_t op = Interpret3CharsAsInt(#op);
 
-DEF_OP( SET /* [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero */ ) // Assign a value
+DEF_OP( SET /* [ARRAY_INDEX ifindexnone[REF_NUM]] REF_DST [REF_VALUE]orZero */ ) // Assign a value
 DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
 DEF_OP( SUB /* REF_DST REF_A REF_B */ ) // -
 DEF_OP( MUL /* REF_DST REF_A REF_B */ ) // *
@@ -1624,7 +1626,7 @@ DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  av
 DEF_OP( SUM /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.sum
 DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
-DEF_OP( IDX /* REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM] */ ) // get an indexed value from an array or text
+DEF_OP( IDX /* REF_DST REF_ARR ARRAY_INDEX ifindexnone[REF_NUM] */ ) // get an indexed value from an array or text
 DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
 DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
 DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
@@ -2710,7 +2712,7 @@ public:
 					if (operand == Word::Varname) {
 						ByteCode ref2 = getVar(operand);
 						validate(IsNumeric(ref2));
-						write(ARRAY_INDEX);
+						write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 						write(ref2);
 					} else /*numeric*/{
 						write({ARRAY_INDEX, uint32_t(round(double(operand)))});
@@ -3272,7 +3274,7 @@ public:
 											if (operand == Word::Varname) {
 												ByteCode idx = getVar(operand);
 												validate(IsNumeric(idx));
-												write(ARRAY_INDEX);
+												write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 												write(idx);
 											} else /*numeric*/ {
 												write({ARRAY_INDEX, uint32_t(round(double(operand)))});
@@ -3290,7 +3292,7 @@ public:
 										if (operand == Word::Varname) {
 											ByteCode idx = getVar(operand);
 											validate(IsNumeric(idx));
-											write(ARRAY_INDEX);
+											write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 											write(idx);
 										} else /*numeric*/ {
 											write({ARRAY_INDEX, uint32_t(round(double(operand)))});
@@ -3448,18 +3450,26 @@ public:
 									indexRef = declareTmpNumeric();
 								}
 								
-								// Set index to 0
+								// Set index to -1
 								write(SET);
 								write(indexRef);
 								write(VOID);
-								
-								addPointer("LoopBegin") = addr();
+								write(DEC);
+								write(indexRef);
+								write(VOID);
 								
 								// Get Array Size
 								ByteCode arrSize = declareTmpNumeric();
 								write(SIZ);
 								write(arrSize);
 								write(arr);
+								write(VOID);
+								
+								addPointer("LoopBegin") = addr();
+								
+								// Increment index
+								write(INC);
+								write(indexRef);
 								write(VOID);
 								
 								// Assign condition
@@ -3479,16 +3489,11 @@ public:
 								
 								applyPointerAddr("LoopContinue");
 								
-								// Increment index
-								write(INC);
-								write(indexRef);
-								write(VOID);
-								
 								// Set current item
 								write(IDX);
 								write(itemRef);
 								write(arr);
-								write(ARRAY_INDEX);
+								write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 								write(indexRef);
 								write(VOID);
 							}
@@ -3509,12 +3514,20 @@ public:
 								validate(nextWordIndex == line.words.size());
 								ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
 								
-								// Set index to 0
+								// Set index to -1
 								write(SET);
+								write(indexRef);
+								write(VOID);
+								write(DEC);
 								write(indexRef);
 								write(VOID);
 								
 								addPointer("LoopBegin") = addr();
+								
+								// Increment index
+								write(INC);
+								write(indexRef);
+								write(VOID);
 								
 								// Assign condition
 								ByteCode condition = declareTmpNumeric();
@@ -3532,11 +3545,6 @@ public:
 								write(VOID);
 								
 								applyPointerAddr("LoopContinue");
-								
-								// Increment index
-								write(INC);
-								write(indexRef);
-								write(VOID);
 							}
 							// while
 							else if (firstWord == "while") {
@@ -4097,55 +4105,55 @@ private:
 		return ram_text_arrays[arr.value];
 	}
 	
-	void StorageSet(double value, ByteCode arr, uint32_t arrIndex = 0) {
+	void StorageSet(double value, ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		auto& storage = GetStorage(arr);
-		if (arrIndex == 0) {
+		if (arrIndex == ARRAY_INDEX_NONE) {
 			storage[0] = ToString(value);
 		} else{
-			if (arrIndex > storage.size()) {
+			if (arrIndex >= storage.size()) {
 				throw RuntimeError("Invalid array indexing");
 			}
-			storage[arrIndex-1] = ToString(value);
+			storage[arrIndex] = ToString(value);
 		}
 		storageDirty = true;
 	}
-	void StorageSet(const string& value, ByteCode arr, uint32_t arrIndex = 0) {
+	void StorageSet(const string& value, ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		auto& storage = GetStorage(arr);
-		if (arrIndex == 0) {
+		if (arrIndex == ARRAY_INDEX_NONE) {
 			storage[0] = value;
 		} else{
-			if (arrIndex > storage.size()) {
+			if (arrIndex >= storage.size()) {
 				throw RuntimeError("Invalid array indexing");
 			}
-			storage[arrIndex-1] = value;
+			storage[arrIndex] = value;
 		}
 		storageDirty = true;
 	}
 	
-	double StorageGetNumeric(ByteCode arr, uint32_t arrIndex = 0) {
+	double StorageGetNumeric(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		auto& storage = GetStorage(arr);
-		if (arrIndex == 0) {
+		if (arrIndex == ARRAY_INDEX_NONE) {
 			return storage[0]==""? 0.0 : stod(storage[0]);
 		} else{
-			if (arrIndex > storage.size()) {
+			if (arrIndex >= storage.size()) {
 				throw RuntimeError("Invalid array indexing");
 			}
-			return storage[arrIndex-1]==""? 0.0 : stod(storage[arrIndex-1]);
+			return storage[arrIndex]==""? 0.0 : stod(storage[arrIndex]);
 		}
 	}
-	const string& StorageGetText(ByteCode arr, uint32_t arrIndex = 0) {
+	const string& StorageGetText(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		auto& storage = GetStorage(arr);
-		if (arrIndex == 0) {
+		if (arrIndex == ARRAY_INDEX_NONE) {
 			return storage[0];
 		} else{
-			if (arrIndex > storage.size()) {
+			if (arrIndex >= storage.size()) {
 				throw RuntimeError("Invalid array indexing");
 			}
-			return storage[arrIndex-1];
+			return storage[arrIndex];
 		}
 	}
 	
-	void MemSet(double value, ByteCode dst, uint32_t arrIndex = 0) {
+	void MemSet(double value, ByteCode dst, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		switch (dst.type) {
 			case STORAGE_VAR_NUMERIC:
 			case STORAGE_ARRAY_NUMERIC: {
@@ -4157,13 +4165,13 @@ private:
 			}break;
 			case RAM_ARRAY_NUMERIC: {
 				auto& arr = GetNumericArray(dst);
-				if (arrIndex == 0 || arrIndex > arr.size()) throw RuntimeError("Invalid array indexing");
-				arr[arrIndex-1] = value;
+				if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) throw RuntimeError("Invalid array indexing");
+				arr[arrIndex] = value;
 			}break;
 			default: throw RuntimeError("Invalid memory reference");
 		}
 	}
-	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = 0) {
+	void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		if (value.length() > XC_MAX_TEXT_LENGTH) {
 			throw RuntimeError("Text too large");
 		}
@@ -4180,10 +4188,10 @@ private:
 			}break;
 			case RAM_ARRAY_TEXT: {
 				auto& arr = GetTextArray(dst);
-				if (arrIndex == 0 || arrIndex > arr.size()) {
+				if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				arr[arrIndex-1] = value;
+				arr[arrIndex] = value;
 			}break;
 			default: throw RuntimeError("Invalid memory reference");
 		}
@@ -4197,7 +4205,7 @@ private:
 		}
 	}
 	
-	double MemGetNumeric(ByteCode ref, uint32_t arrIndex = 0) {
+	double MemGetNumeric(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		switch (ref.type) {
 			case ROM_CONST_NUMERIC: {
 				if (ref.value >= assembly->rom_numericConstants.size()) {
@@ -4217,16 +4225,16 @@ private:
 			}break;
 			case RAM_ARRAY_NUMERIC: {
 				auto& arr = GetNumericArray(ref);
-				if (arrIndex == 0 || arrIndex > arr.size()) {
+				if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				return arr[arrIndex-1];
+				return arr[arrIndex];
 			}break;
 			case VOID: return 0.0;
 			default: throw RuntimeError("Invalid memory reference");
 		}
 	}
-	const string& MemGetText(ByteCode ref, uint32_t arrIndex = 0) {
+	const string& MemGetText(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 		switch (ref.type) {
 			case ROM_CONST_TEXT: {
 				if (ref.value >= assembly->rom_textConstants.size()) {
@@ -4246,10 +4254,10 @@ private:
 			}break;
 			case RAM_ARRAY_TEXT: {
 				auto& arr = GetTextArray(ref);
-				if (arrIndex == 0 || arrIndex > arr.size()) {
+				if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				return arr[arrIndex-1];
+				return arr[arrIndex];
 			}break;
 			case VOID: {
 				static const string empty = "";
@@ -4318,22 +4326,22 @@ private:
 					case OP: {
 						ipcCheck();
 						switch (code.rawValue) {
-							case SET: {// [ARRAY_INDEX ifval0[REF_NUM]] REF_DST [REF_VALUE]orZero
+							case SET: {// [ARRAY_INDEX ifindexnone[REF_NUM]] REF_DST [REF_VALUE]orZero
 								ByteCode dst = nextCode();
-								uint32_t index = 0;
+								uint32_t index = ARRAY_INDEX_NONE;
 								if (dst.type == ARRAY_INDEX) {
 									index = dst.value;
-									if (index == 0) {
+									if (index == ARRAY_INDEX_NONE) {
 										index = uint32_t(MemGetNumeric(nextCode()));
 									}
 									dst = nextCode();
 								}
 								ByteCode val = nextCode();
-								if (IsNumeric(dst) || (index > 0 && (dst.type == STORAGE_ARRAY_NUMERIC || dst.type == RAM_ARRAY_NUMERIC))) {
+								if (IsNumeric(dst) || (index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_NUMERIC || dst.type == RAM_ARRAY_NUMERIC))) {
 									MemSet(MemGetNumeric(val), dst, index);
-								} else if (IsText(dst) || (index > 0 && (dst.type == STORAGE_ARRAY_TEXT || dst.type == RAM_ARRAY_TEXT))) {
+								} else if (IsText(dst) || (index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_TEXT || dst.type == RAM_ARRAY_TEXT))) {
 									MemSet(MemGetText(val), dst, index);
-								} else if (IsObject(dst) && IsObject(val) && index == 0) {
+								} else if (IsObject(dst) && IsObject(val) && index == ARRAY_INDEX_NONE) {
 									MemSetObject(MemGetObject(val).addrValue, dst); // Reference assignment for objects
 								} else {
 									throw RuntimeError("Invalid operation");
@@ -4929,7 +4937,7 @@ private:
 												values.push_back(MemGetText(c));
 											}
 										}
-										if (index > array.size()) throw RuntimeError("Invalid array index");
+										if (index >= array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 										storageDirty = true;
 									}break;
@@ -4941,7 +4949,7 @@ private:
 										vector<double> values{};
 										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetNumeric(c));
-										if (index > array.size()) throw RuntimeError("Invalid array index");
+										if (index >= array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 									}break;
 									case RAM_ARRAY_TEXT:{
@@ -4952,7 +4960,7 @@ private:
 										vector<string> values{};
 										values.reserve(args.size());
 										for (const auto& c : args) values.push_back(MemGetText(c));
-										if (index > array.size()) throw RuntimeError("Invalid array index");
+										if (index >= array.size()) throw RuntimeError("Invalid array index");
 										array.insert(array.begin()+index, values.begin(), values.end());
 									}break;
 								}
@@ -4965,8 +4973,8 @@ private:
 								if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
 								int32_t index = MemGetNumeric(idx);
 								int32_t index2 = idx2.type != VOID? MemGetNumeric(idx2) : index;
-								if (index <= 0 || index2 <= 0) throw RuntimeError("Invalid array index");
-								--index;
+								if (index < 0 || index2 < 0) throw RuntimeError("Invalid array index");
+								++index2;
 								if (index2 <= index) throw RuntimeError("Invalid array index");
 								ipcCheck();
 								switch (arr.type) {
@@ -5314,13 +5322,13 @@ private:
 								if (!IsText(dst)) throw RuntimeError("Invalid operation");
 								MemSet(text.substr(start, len), dst);
 							}break;
-							case IDX: {// REF_DST REF_ARR ARRAY_INDEX ifval0[REF_NUM]
+							case IDX: {// REF_DST REF_ARR ARRAY_INDEX ifindexnone[REF_NUM]
 								ByteCode dst = nextCode();
 								ByteCode arr = nextCode();
 								ByteCode idx = nextCode();
 								if (idx.type != ARRAY_INDEX) throw RuntimeError("Invalid array index type");
 								uint32_t index = idx.value;
-								if (index == 0) {
+								if (index == ARRAY_INDEX_NONE) {
 									idx = nextCode();
 									if (!IsNumeric(idx)) throw RuntimeError("Invalid array index type");
 									index = MemGetNumeric(idx);

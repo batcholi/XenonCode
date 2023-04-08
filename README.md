@@ -69,9 +69,16 @@ init
 	foreach $myArray ($item, $index)
 		$myVar4 &= $index:text & ": " & $item:text & ", "
 
-	; Output to a virtual device (ie: a console at input port 1)
-	output.1 ($myVar4)
-	output.1 (text("Sum of values in the array: {}", $myArray.sum))
+	; Output to a virtual device (ie: a console at input port 0)
+	output.0 ($myVar4)
+	output.0 (text("Sum of values in the array: {}", $myArray.sum))
+	output.1 ($myArray.0:text)
+	output.1 ($myArray.1:text)
+    var $index = 2
+	output.1 ($myArray.$index:text)
+	
+	repeat 3 ($i)
+		output.1 ($i)
 
 ```
 
@@ -88,7 +95,7 @@ XenonCode is designed with a very basic syntax in mind and a very precise struct
 - Very little special characters needed
 - Indentations define the scope (tabs ONLY)
 - A single instruction per line
-- Array indexing is 1-based, NOT 0-based, and uses the `arr.1` notation instead of `arr[0]` to make it easier to adopt
+- Array indexing, like most other programming languages, is 0-based but uses the `arr.0` notation instead of the typical `arr[0]`
 - 100% Case-insensitive
 - An implementation may define custom "Device" functions, objects and entry points
 
@@ -242,14 +249,14 @@ storage array $stuff:number
 ```
 
 ## Accessing/Assigning the nth item within an array
-To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 1-based index of the item or a variable containing that index
-`$stuff.1 = 5` // Assign the value 5 to the first item of the array
+To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 0-based index of the item or a variable containing that index
+`$stuff.0 = 5` // Assign the value 5 to the first item of the array
 `$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index
-`$value = $stuff.2` // Assign the value of the second item of the array to the variable $value
+`$value = $stuff.1` // Assign the value of the second item of the array to the variable $value
 
 ## Accessing/Assigning the nth character within a text variable
 Text variables work in a very similar with to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
-`$myText.1 = "a"` // Set "a" as the first character of $myText
+`$myText.0 = "a"` // Set "a" as the first character of $myText
 
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
@@ -292,7 +299,7 @@ The port index may be specified via a constant as well (must be known at compile
 Function arguments must be surrounded with parenthesis and their types must be specified.  
 Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them as data is received.  
 ```
-input.1 ($arg1:number, $arg2:text)
+input.0 ($arg1:number, $arg2:text)
     $stuff = $arg1
 input.$myPortIndex ($arg1:number, $arg2:text)
     $stuff = $arg1
@@ -302,7 +309,7 @@ input.$myPortIndex ($arg1:number, $arg2:text)
 The output function is how we send data to another device. This function is meant to be called as a statement, and cannot be used in the global scope like the input functions are.  
 We must also pass in the port index as we do with the input function, and it can also be specified via a constant that is known at compile-time.  
 We must pass a list of arguments surrounded with parenthesis (or an empty set of parenthesis).  
-`output.1 ($stuff, $moreStuff)`
+`output.0 ($stuff, $moreStuff)`
 
 ## If Elseif Else
 Like most programming languages, we can use conditionals.  
@@ -323,7 +330,7 @@ foreach $stuff ($item)
     // we loop through the array $stuff, and we define $item and its value is the current item's
     // note that there is no such thing as a reference value and $item is a copy, so modifying the value of $item will not affect the original array $stuff
 foreach $stuff ($item, $i)
-    // here we also define $i which contains the 1-based index of this item within the array $stuff
+    // here we also define $i which contains the 0-based index of this item within the array $stuff
     // if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
     $stuff.$i = $item
 ```
@@ -332,7 +339,7 @@ foreach $stuff ($item, $i)
 This loop will repeat the execution of the following block a given number of times.  
 ```
 repeat 5 ($i)
-    // this block will be repeated 5 times, and $i is the 1-based index of this iteration (first time will be 1, last will be 5)
+    // this block will be repeated 5 times, and $i is the 0-based index of this iteration (first time will be 0, last will be 4)
 ```
 The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
 

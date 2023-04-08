@@ -10,10 +10,10 @@ function @RunUnitTests()
 	// Test 1
 	$results.append("	Test 1	")
 	repeat 10 ($i)
-		$results.append(text("{0.0}",$i))
+		$results.append(text("{0.0}",$i+1))
 	repeat 4 ($i)
-		$results.append(text("{0}",$i))
-		$results.append($i+2)
+		$results.append(text("{0}",$i+1))
+		$results.append($i+3)
 		
 	// Test 2
 	$results.append("	Test 2	")
