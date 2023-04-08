@@ -74,9 +74,10 @@ init
 	output.0 (text("Sum of values in the array: {}", $myArray.sum))
 	output.1 ($myArray.0:text)
 	output.1 ($myArray.1:text)
-    var $index = 2
+	var $index = 2
 	output.1 ($myArray.$index:text)
 	
+	; Repeat a statement three times
 	repeat 3 ($i)
 		output.1 ($i)
 
@@ -226,17 +227,17 @@ Variable names must start with a letter or underscore (`a`-`z` or `_`) then must
 To assign a new value to a variable, we can simply start a statement with the variable name followed by a `=` and an expression the result of which will be the new value.  
 We may also use a trailing function which will inherently modify the value of said variable.  
 
-`$stuff = 5` // assign the value 5 to the variable named $stuff
-`$stuff = $other + 5` // assign the result of the expression ($other + 5) to the variable named $stuff
-`$stuff.round()` // call a trailing function that rounds the value of the variable
+`$stuff = 5` // assign the value 5 to the variable named $stuff  
+`$stuff = $other + 5` // assign the result of the expression ($other + 5) to the variable named $stuff  
+`$stuff.round()` // call a trailing function that rounds the value of the variable  
 
 ## Declaring an array
 An array is a dynamic list of values of a certain type. We can append or erase values, we can access a specific value from the list, or loop through all its values.  
 When declaring an array, we cannot specify an initial value, and we must provide a type.  
 Arrays are initialized with zero size when the program starts, values may be added/erased/modified throughout the execution of the program  
 
-`array $stuff:number` // declare an array of numbers
-`array $stuff:text` // declare an array of texts
+`array $stuff:number` // declare an array of numbers  
+`array $stuff:text` // declare an array of texts  
 
 ## Declaring storage
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  
@@ -249,14 +250,14 @@ storage array $stuff:number
 ```
 
 ## Accessing/Assigning the nth item within an array
-To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 0-based index of the item or a variable containing that index
-`$stuff.0 = 5` // Assign the value 5 to the first item of the array
-`$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index
-`$value = $stuff.1` // Assign the value of the second item of the array to the variable $value
+To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 0-based index of the item or a variable containing that index  
+`$stuff.0 = 5` // Assign the value 5 to the first item of the array  
+`$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index  
+`$value = $stuff.1` // Assign the value of the second item of the array to the variable $value  
 
 ## Accessing/Assigning the nth character within a text variable
 Text variables work in a very similar with to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
-`$myText.0 = "a"` // Set "a" as the first character of $myText
+`$myText.0 = "a"` // Set "a" as the first character of $myText  
 
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
