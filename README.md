@@ -20,6 +20,61 @@
 - `foreach` loops for arrays
 - `repeat n` loops (akin to `for (i=0;i<n;i++)` in most other languages)
 
+# Sample code
+
+```
+include "my_functions.xc"
+
+; Declare global storage
+storage var $myStorageVar : number
+storage array $myStorageArray : number
+
+; Declare global variables
+var $myVar = 0
+var $myVar2 = "Hello World"
+var $myVar3 : number
+var $myVar4 : text
+array $myArray : number
+array $myArray2 : text
+
+; Declare a user-defined function that changes the values of $myVar and $myVar2
+function @myFunction($arg1 : number, $arg2 : text)
+	$myVar = $arg1
+	$myVar2 = $arg2
+
+; Declare a user-defined function that returns a value
+function @myFunction2($arg1 : number, $arg2 : text) : number
+	return $arg1 + $arg2.size
+
+init
+	; Call a user-defined function
+	@myFunction(1, "Hello")
+
+	; Call a trailing function
+	$myVar.@myFunction2("Hey")
+
+	; Add values to an array
+	$myArray.append(1)
+	$myArray.append(5)
+	$myArray.append(0)
+
+	; Sort an array
+	$myArray.sort()
+
+	; Iterate over an array
+	foreach $myArray ($item)
+		$myVar3 += $item
+
+	; Iterate over an array with index
+	foreach $myArray ($item, $index)
+		$myVar4 &= $index:text & ": " & $item:text & ", "
+
+	; Output to a virtual device (ie: a console at input port 1)
+	output.1 ($myVar4)
+	output.1 (text("Sum of values in the array: {}", $myArray.sum))
+
+```
+
 ## Types of developer
 
 1. `User`: The person who is using this language to write a script, typically a player in a game. 
@@ -180,9 +235,8 @@ Arrays are initialized with zero size when the program starts, values may be add
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  
 We can declare storage variables and arrays of either number or text.  
 Storage must be declared in the global scope.  
-We may assign initial values to a storage if it's not an array.  
 ```
-storage var $stuff = 5
+storage var $stuff:number
 storage var $stuff:text
 storage array $stuff:number
 ```
@@ -267,8 +321,11 @@ The block of code under that loop statement will be executed for every item in t
 ```
 foreach $stuff ($item)
     // we loop through the array $stuff, and we define $item and its value is the current item's
+    // note that there is no such thing as a reference value and $item is a copy, so modifying the value of $item will not affect the original array $stuff
 foreach $stuff ($item, $i)
     // here we also define $i which contains the 1-based index of this item within the array $stuff
+    // if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
+    $stuff.$i = $item
 ```
 
 ## Repeat loops
