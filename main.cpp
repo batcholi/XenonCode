@@ -1,3 +1,4 @@
+#define XENONCODE_IMPLEMENTATION
 #include "XenonCode.hpp"
 #include <thread>
 #include <queue>
