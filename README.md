@@ -4,12 +4,14 @@
 
 # Capabilities
 
-- Typed Variables, Constants and Dynamic Arrays
+- Typed Variables
+- Constants
+- Dynamic Arrays
 - Standard arithmetic operations on numeric values
 - Easy string concatenation and formatting
 - User-defined functions
-- Device-defined functions
-- Trailing functions support
+- Device-defined functions and objects
+- Trailing functions
 - Built-in standard math functions
 - Built-in IO operations between virtual devices
 - Synchronized interval functions (timers)
@@ -18,16 +20,22 @@
 - `foreach` loops for arrays
 - `repeat n` loops (akin to `for (i=0;i<n;i++)` in most other languages)
 
+## Types of developer
+
+1. `User`: The person who is using this language to write a script, typically a player in a game. 
+2. `Device`: The implementation defining the capabilities and available functions, typically a specific type of programmable virtual device in a specific game. 
+
 # Syntax
 
 XenonCode is designed with a very basic syntax in mind and a very precise structure. 
 
 - Each statement has to be short and easy to read
 - Very little special characters needed
-- Indentations define the scope (tabs)
+- Indentations define the scope (tabs ONLY)
 - A single instruction per line
-- Array indexing is 1-based, NOT 0-based, and uses a `arr.1` notation instead of `arr[0]` to make it easier to adopt
+- Array indexing is 1-based, NOT 0-based, and uses the `arr.1` notation instead of `arr[0]` to make it easier to adopt
 - 100% Case-insensitive
+- An implementation may define custom "Device" functions, objects and entry points
 
 ### Types
 
@@ -37,13 +45,13 @@ Generic data types the user can declare:
 * `number`
 * `text`
 
-A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false), although any value other than zero is considered true.  
+A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false), although any value other than zero is evaluated to true.  
 
 `text` variables contain pure arbitrary text, altough their maximum size depends on the implementation.  
 
-Object types are for use by the implementation and are opaque to the user, meaning their structure is not necessarily defined. 
+Object types are for use by the implementation and are opaque to the user, meaning their structure is not necessarily defined, however the implementation may make availalbe some member functions for those objects to the user.  
 
-Even though this is a typed language, specifying the type is not needed when it can be automatically deduced by the compiler.  
+Even though this is a typed language, specifying the type is not needed when it can be automatically deduced by the compiler during initialization. The type should only be specified when there is no initialization.  
 
 All user-defined words must start with a prefix character:  
 - `$` for variables
@@ -55,12 +63,13 @@ Comments are lines that start with either `;` or `//`
 A code statement may also end with a trailing comment
 
 # Limitations
-This language is designed to potentially be executed on Server-side in a multiplayer game, hence for security and performance reasons there are limits to what users can do.
+This language is designed to potentially be executed Server-side in the context of a multiplayer game, hence for security and performance reasons there are limits to what users can do.
 
-- No pointer nor reference types
-- The number of instructions per cycle may be limited, on which an overflow can slow things down
-- Arrays may be limited in size at runtime, on which an overflow may trigger a virtual crash
-- Recursive stack (calling a function recursively) is NOT allowed
+- No pointer nor reference types (except for implementation-defined objects)
+- The number of instructions per cycle may be limited, upon which an overflow may cause a virtual crash for the user
+- Arrays may be limited in size at runtime, upon which an overflow may trigger a virtual crash for the user
+- Recursive stack (calling a function recursively) is NOT allowed for the user
+- Functions MUST be fully defined BEFORE their use (this ensures the previous point)
 
 ### Per-Virtual-Computer limitations
 These are defined per implementation and may include multiple variants or be customizable by the user
@@ -70,11 +79,11 @@ These are defined per implementation and may include multiple variants or be cus
 - STORAGE (max number of storage variables plus all storage arrays multiplied by their size)
 - Frequency (max frequency for timer functions and input read)
 - Ports (max number of inputs/outputs)
-- IPC (max instructions per cycle, one line of code may contain multiple instructions)
+- IPC (max instructions per cycle, one line of code may count as multiple instructions)
 
 ### Operation on data
 - All functions, including timers, are executed atomically, preventing any data-race
-- Function arguments are always passed by copy, a function cannot modify the variables placed in its argument list
+- Function arguments are always passed by copy, a function CANNOT modify the variables placed in its argument list
 - Trailing functions DO modify the value of the leading variable
 - Variable assignments always copy the value
 - Divisions by zero result in the value zero. It is at the responsibility of the user to make sure to account for it.
@@ -88,6 +97,7 @@ These are defined per implementation and may include multiple variants or be cus
 - Starting a statement with a function name (starting with `@` for user-defined functions) means that we are calling this function
 - Calling a function will NEVER modify the value of any of its arguments passed within parenthesis
 - Anything in parenthesis that is not preceeded by a function name is considered a separate expression, inner left-most expressions are computed first
+- Typical rules apply for mathematical precedence of operators
 
 # Valid usage
 
@@ -108,6 +118,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `input` Define an input function
 - `;` or `//` Comments
 - one or more tabs, meaning we're within a function body, then the following rules apply:
+- an entry point defined by the implementation
 
 ### Function body
 - `var` Declare a new variable in this local scope
@@ -115,7 +126,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `$` To assign a new value to an existing variable
 - `@` To call a leading user-defined function
 - `output` Built-in function to send data to another device through a specific port
-- `foreach` Loops through all items of an array
+- `foreach` loops through all items of an array
 - `repeat` loops a block of code n times
 - `while` loops as long as a condition evaluates to true
 - `break` stops a loop here as if it completed all iterations
@@ -169,7 +180,7 @@ Arrays are initialized with zero size when the program starts, values may be add
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  
 We can declare storage variables and arrays of either number or text.  
 Storage must be declared in the global scope.  
-We may assign initial values to a storage.  
+We may assign initial values to a storage if it's not an array.  
 ```
 storage var $stuff = 5
 storage var $stuff:text
@@ -188,7 +199,7 @@ Text variables work in a very similar with to arrays. We can use the trail opera
 
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
-The init function cannot be called by the user. If can only be defined.  
+The init function cannot be called by the user. It can only be defined, and the device will automatically call it upon virtual startup.  
 ```
 init
     $stuff = 5
@@ -198,7 +209,7 @@ init
 
 ## Tick function
 The tick function is executed at the beginning of every clock cycle of this virtual computer.  
-The tick function cannot be called by the user. If can only be defined.  
+The tick function cannot be called by the user. It can only be defined, and the device will automatically call it for each cycle.  
 ```
 tick
     // This body is executed once per clock cycle at the virtual computer's frequency
@@ -207,7 +218,7 @@ tick
 ## Timer functions
 Timer functions are executed at a specified interval or frequency, but at most Once per clock cycle.  
 We can either specify an `interval` as in every N seconds or a `frequency` as in N times per second.  
-Timer functions cannot be called by the user. They can only be defined.  
+Timer functions cannot be called by the user. They can only be defined, and the device will automatically call them at their appropriate time.  
 ```
 timer frequency 4
     // stuff here runs 4 times per second
@@ -218,14 +229,14 @@ Note: If the clock speed of the virtual computer is slower than the given interv
 
 ## Input functions
 Input functions are a way of accessing the information that we have received from another device.  
-They may be executed any number of times per clock cycle, depending on how much data it has received since the previous clock cycle.  
+They may be executed any number of times per clock cycle, depending on how much data it has received since the previous clock cycle. The implementation may decide to only run it once per cycle using only the latest data received.  
 Devices may have an upper limit in the receiving buffer which defines the maximum number of times the input function may be called per clock cycle.  
 If that limit has been reached, only the last N values will be kept in the buffer.  
-Input functions are like a user-defined function, containing arguments, but no return value, and also we must specify a port index.  
-The 1-based port index must be specified after the input keyword and a trail operator `.`  
-The port index may be specified via a constant as well.  
-Function arguments must be surrounded with parenthesis and their types must be specified. We may define multiple input functions using the same port as long as their argument types/count are not the same.  
-Input functions cannot be called directly by the user. They can only be defined.  
+Input functions are like user-defined functions, containing arguments, but no return value, and also we must specify a port index.  
+The port index must be specified after the input keyword and a trail operator `.`  
+The port index may be specified via a constant as well (must be known at compile time).  
+Function arguments must be surrounded with parenthesis and their types must be specified.  
+Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them as data is received.  
 ```
 input.1 ($arg1:number, $arg2:text)
     $stuff = $arg1
@@ -234,9 +245,9 @@ input.$myPortIndex ($arg1:number, $arg2:text)
 ```
 
 ## Output
-The output function is how we send data to another device. This function is meant to be called in a statement, and cannot be defined in the global scope like the input functions are.  
-We must also pass in the port index as we do with the input function, and it can also be specified via a constant.  
-We must pass a list of arguments surrounded with parenthesis (or an empty set of parenthesis) and the matching input function on the other device will be executed.  
+The output function is how we send data to another device. This function is meant to be called as a statement, and cannot be used in the global scope like the input functions are.  
+We must also pass in the port index as we do with the input function, and it can also be specified via a constant that is known at compile-time.  
+We must pass a list of arguments surrounded with parenthesis (or an empty set of parenthesis).  
 `output.1 ($stuff, $moreStuff)`
 
 ## If Elseif Else
@@ -285,7 +296,7 @@ while $stuff < 5
 ```
 
 ## Loop
-This keyword is used to stop this iteration of a loop here and run the next iteration immediately
+This keyword is used to stop this iteration of a loop here and run the next iteration immediately, just like the `continue` keyword does in other programming languages
 ```
 while $stuff < 5
     $stuff++
@@ -307,14 +318,16 @@ while $stuff < 5
 - `!!` reverses the variable's value
 
 ## Assignment operators
-These operators will compute the appropriate math operation and assign the result to the leading variable.  
-- `+=`
-- `-=`
-- `*=`
-- `/=`
-- `%=`
-- `^=`
-- `&=`
+- `=` just assign the following value directly
+
+The following operators will compute the appropriate math operation and assign the result to the leading variable.  
+- `+=` addition
+- `-=` substraction
+- `*=` multiplication
+- `/=` division
+- `%=` modulo
+- `^=` to the power
+- `&=` concatenate text
 
 ## Conditional Operators
 - `==` equal to
@@ -394,10 +407,17 @@ function @func1 ($var1:number, $var2:number) : number
 ### Call
 
 Calling a function will run the operation in its body. 
-To call a function, simply write the name of the function starting with `@`, then its arguments within parenthesis and separated by a comma, like so:  
+To call a function, simply write the name of the function (starting with `@` for user-defined functions), then its arguments within parenthesis and separated by a comma, like so:  
 ```@func1(4, 6)```
-Here we have passed two number arguments, thus this call execute the body of the second declaration above.  
+Here we have passed two number arguments, thus this call execute the body of the declaration above.  
 It is of course also possible to use variables instead of just literal numbers as the function arguments.  
+
+#### NOTE:
+Omitted arguments are legal.  
+Their value initially takes the default empty ("" or 0) then persists with what is passed in or assigned to them for the following calls to that function.  
+Changing the value of an argument within that function will also be persistent for the next call to that function, if that argument is omitted. 
+Hence, if a concept of a default argument value is needed, they can be assigned to the argument in the body of that function after their use.  
+This omitted argument concept can also be thought of as a concept similar to static local variables in C++.  
 
 ### Return value
 
@@ -407,8 +427,8 @@ This returned value may be assigned to a variable like so :
 
 # Trailing functions
 Any function may be called as a trailing function, even user-defined functions.  
-The way this works is that it uses the leading variable as the first argument, and assigns the returning value to that leading variable.  
-When calling a trailing function, we must ommit the first argument as it already uses the leading variable as its first argument.  
+The way they work is that under the hood the leading variable is passed as the first argument to that function, and then assigned the returning value.  
+When calling a trailing function, we must ommit the first argument as it automatically sends the leading variable as its first argument under the hood.  
 If the function definition does not have any arguments, this is still valid, although we simply don't care about the current value of the leading variable, but we'll assign a new value to it.  
 If the function definition does not have a return type, the value of the leading variable may be assigned the default generic value of 0 or "".  
 Since we cannot pass Arrays as function arguments, arrays can only take their own specifically defined trailing functions.  
@@ -419,7 +439,7 @@ Since we cannot pass Arrays as function arguments, arrays can only take their ow
 
 ### Math
 These functions are defined in the base language and they take one or more arguments.  
-Trailing math functions will use the leading variable as its first argument and modify that variable with the return value.  
+Trailing math functions will use the leading variable as its first argument and modify that variable by assigning it the return value.  
 - `floor`(number)
 - `ceil`(number)
 - `round`(number)
@@ -450,7 +470,24 @@ Trailing math functions will use the leading variable as its first argument and 
 
 ### Text functions
 - `substring`(inputText, start, length) // returns a new string
-- `text`(inputTextWithFormatting, vars ...) // Formatting specs coming soon
+- `text`(inputTextWithFormatting, vars ...)
+
+#### Formatting
+The `text` function takes a format as the first argument.  
+The format is basically a text that may contain enclosing braces that will be replaced by the value of some variables or expressions.  
+Exemple: 
+```
+$formattedText = text("My name is {} and I am {} years old.", $name, $age)
+```
+Empty braces above will be replaced by the corresponding variables in the following arguments in the same order.  
+It is also possible to format number variables in a specific way by providing some pseudo-values within the braces like so:  
+- `{}` automatically display only the necessary digits based on the value (ex: `3` or `123.456`)
+- `{0}` round to nearest integer value (ex: `3` or `123`)
+- `{00}` round to nearest integer value but also display at least two digits (ex: `03` or `123`)
+- `{0e}` display the rounded integral value as a scientific notation (ex: `3e+00` or `1e+02`)
+- `{0e.00}` display the value as a scientific notation with two digits after the decimal (ex: `3.00e+00` or `1.23e+02`)
+- `{0.0}` round to one digit after the decimal (ex: `3.0` or `123.5`)
+- `{0000.00}` display at least 4 integral digits and round to two digit after the decimal (ex: `0003.00` or `0123.46`)
 
 ### Trailing functions for Arrays
 These functions MUST be called as trailing functions, and they do not return anything, instead they modify the array
@@ -477,8 +514,8 @@ Using the trail operator `.`, we can also return a specific information about ce
 
 ### Device functions
 An implementation should define application-specific device functions.  
-Here are examples of basic device functions:  
-- `delta`() // returns the time difference in seconds from the last execution of this function  
+Here are examples of basic device functions that MAY or MAY NOT be defined:  
+- `delta`() // returns the time difference in seconds from the last execution of this `delta` function  
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game.  

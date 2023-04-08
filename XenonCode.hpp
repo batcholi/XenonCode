@@ -2280,8 +2280,12 @@ public:
 				for (auto arg : args) {
 					string argVarName = "@"+funcName+"."+to_string(++i);
 					if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(argVarName)) {
+						ByteCode param = userVars.at(funcName).at(0).at(argVarName);
+						if (IsArray(arg)) { // Don't allow arrays to be passed as arguments
+							throw CompileError("Cannot pass an array to function", func, "in arg " + std::to_string(i));
+						}
 						write(SET);
-						write(userVars.at(funcName).at(0).at(argVarName));
+						write(param);
 						write(arg);
 						write(VOID);
 					} else break;
@@ -2305,6 +2309,9 @@ public:
 					}
 				} else if (isTrailingFunction) {
 					validate(args.size() > 0);
+					if (IsArray(args[0])) { // Don't allow arrays to be passed as arguments
+						throw CompileError("Cannot pass an array to function", func, "in arg 1");
+					}
 					write(SET);
 					write(args[0]);
 					write(getReturnVar(funcName));
@@ -4640,6 +4647,7 @@ private:
 								} else throw RuntimeError("Invalid operation");
 							}break;
 							case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
+								//TODO: support C++20 format specifiers in the future: https://en.cppreference.com/w/cpp/utility/format/formatter#Standard_format_specification
 								ByteCode dst = nextCode();
 								ByteCode src = nextCode();
 								vector<ByteCode> args {};
@@ -4663,7 +4671,7 @@ private:
 											if (format == "") {
 												txt = before + (IsNumeric(c)? ToString(MemGetNumeric(c)) : MemGetText(c)) + after;
 											}
-											// {0} {0e} {00} {0.} {0.00}
+											// {0} {00} {0e} {0e.00} {0.0} {0000.00}
 											else if (format[0] == '0') {
 												if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 												if (format.length() == 1) {
