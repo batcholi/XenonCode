@@ -581,6 +581,7 @@ Using the trail operator `.`, we can also return a specific information about ce
 An implementation should define application-specific device functions.  
 Here are examples of basic device functions that MAY or MAY NOT be defined:  
 - `delta`() // returns the time difference in seconds from the last execution of this `delta` function  
+Device functions that do not require any arguments may be used without parenthesis when called from within an expression.  
 
 # Compiler Specifications
 This section is intented for game developers who want to use this in their game.  

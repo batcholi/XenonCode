@@ -397,7 +397,14 @@ using namespace std;
 				// Operators
 				if (isoperator(c)) {
 					word += c;
-					if (isoperator(s.peek())) {
+					// Prefixed numbers
+					if ((c == '-' || c == '+') && isdigit(s.peek())) {
+						c = s.get();
+						goto Numeric;
+					}
+					// multi char operators
+					int c2 = s.peek();
+					if (isoperator(c2) && (c2 == c || c2 == '=')) {
 						word += s.get();
 					}
 					type = Operator;
@@ -405,6 +412,7 @@ using namespace std;
 				}
 				// Numeric
 				if (isdigit(c)) {
+				Numeric:
 					word += c;
 					bool hasDecimal = false;
 					while (!s.eof()) {
@@ -1656,12 +1664,13 @@ using namespace std;
 		
 		Var() : type(Void), textValue(""), numericValue(0.0) {}
 		Var(bool value) : type(Numeric), textValue(""), numericValue(value) {}
+		Var(int32_t value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(int64_t value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(double value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(const char* value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const string& value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
-		Var(Type type, uint64_t objAddr) : type(type), textValue(""), addrValue(objAddr) {}
+		Var(Type type_, uint64_t objAddr) : type(type_), textValue(""), addrValue(objAddr) {}
 		
 		operator bool() const {
 			if (type == Numeric) return numericValue;
@@ -1675,12 +1684,42 @@ using namespace std;
 			return 0.0;
 		}
 		operator int64_t() const {
-			if (type == Numeric) return numericValue;
+			if (type == Numeric) return (int64_t)std::round(numericValue);
 			else if (type == Text) return stol(textValue);
 			return 0;
 		}
 		operator uint64_t() const {
-			if (type == Numeric) return numericValue;
+			if (type == Numeric) return (uint64_t)std::round(numericValue);
+			else if (type == Text) return stoul(textValue);
+			return 0;
+		}
+		operator int32_t() const {
+			if (type == Numeric) return (int32_t)std::round(numericValue);
+			else if (type == Text) return stol(textValue);
+			return 0;
+		}
+		operator uint32_t() const {
+			if (type == Numeric) return (uint32_t)std::round(numericValue);
+			else if (type == Text) return stoul(textValue);
+			return 0;
+		}
+		operator int16_t() const {
+			if (type == Numeric) return (int16_t)std::round(numericValue);
+			else if (type == Text) return stol(textValue);
+			return 0;
+		}
+		operator uint16_t() const {
+			if (type == Numeric) return (uint16_t)std::round(numericValue);
+			else if (type == Text) return stoul(textValue);
+			return 0;
+		}
+		operator int8_t() const {
+			if (type == Numeric) return (int8_t)std::round(numericValue);
+			else if (type == Text) return stol(textValue);
+			return 0;
+		}
+		operator uint8_t() const {
+			if (type == Numeric) return (uint8_t)std::round(numericValue);
 			else if (type == Text) return stoul(textValue);
 			return 0;
 		}
@@ -2632,22 +2671,25 @@ using namespace std;
 					case Word::Funcname:
 					case Word::Name:{
 						vector<ByteCode> args {};
-						validate(words[startIndex+1] == Word::ExpressionBegin);
-						int argBegin = startIndex+2;
-						while (argBegin <= endIndex) {
-							int argEnd = GetArgEnd(words, argBegin, endIndex);
-							if (argEnd == -1) {
-								++argBegin;
-								break;
+						if (words[startIndex+1] == Word::ExpressionBegin) {
+							int argIndex = startIndex+2;
+							while (argIndex <= endIndex) {
+								int argEnd = GetArgEnd(words, argIndex, endIndex);
+								if (argEnd == -1) {
+									++argIndex;
+									break;
+								}
+								args.push_back(compileExpression(words, argIndex, argEnd));
+								argIndex = argEnd + 2;
+								if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
+									break;
+								}
 							}
-							args.push_back(compileExpression(words, argBegin, argEnd));
-							argBegin = argEnd + 2;
-							if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
-								break;
-							}
+							opIndex = argIndex;
+						} else {
+							opIndex = startIndex + 1;
 						}
 						ref1 = compileFunctionCall(word1, args, true);
-						opIndex = argBegin;
 						if (opIndex > endIndex) return ref1;
 						validate(opIndex != endIndex);
 					}break;
@@ -3948,6 +3990,9 @@ using namespace std;
 					}
 				}
 
+				// Discard the \n
+				s.get();
+				
 				// Read Rom data (constants)
 				for (size_t i = 0; i < rom_numericConstantsSize; ++i) {
 					double value;
