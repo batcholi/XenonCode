@@ -15,6 +15,14 @@
 #include <filesystem>
 #include <functional>
 
+// Microsoft's C++ not respecting the standard again...
+#ifdef VOID
+	#undef VOID
+#endif
+#ifdef OUT
+	#undef OUT
+#endif
+
 namespace XenonCode {
 
 // Version
