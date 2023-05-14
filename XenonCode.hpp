@@ -22,8 +22,6 @@ const int VERSION_MAJOR = 0; // Requires assembly compiled with the same major v
 const int VERSION_MINOR = 1; // Requires assembly compiled with a version <= than interpreter's minor version
 const int VERSION_PATCH = 0;
 
-using namespace std;
-
 #pragma region Limitations/Settings // these are default values, may be overridden by the implementation
 
 	#ifndef XC_APP_NAME
@@ -83,7 +81,7 @@ using namespace std;
 	
 	inline static double smoothstep(double edge1, double edge2, double val) {
 		if (edge1 == edge2) return 0.0;
-		val = clamp((val - edge1) / (edge2 - edge1), 0.0, 1.0);
+		val = std::clamp((val - edge1) / (edge2 - edge1), 0.0, 1.0);
 		return val * val * val * (val * (val * 6 - 15) + 10);
 	}
 	
@@ -91,20 +89,20 @@ using namespace std;
 
 #pragma region Errors
 
-	struct ParseError : public runtime_error {
-		using runtime_error::runtime_error;
-		ParseError(const string& pre, const string& word) : runtime_error(pre + " '" + word + "'") {}
-		ParseError(const string& pre, const string& word, const string& post) : runtime_error(pre + " '" + word + "' " + post) {}
+	struct ParseError : public std::runtime_error {
+		using std::runtime_error::runtime_error;
+		ParseError(const std::string& pre, const std::string& word) : runtime_error(pre + " '" + word + "'") {}
+		ParseError(const std::string& pre, const std::string& word, const std::string& post) : runtime_error(pre + " '" + word + "' " + post) {}
 	};
 
-	struct CompileError : public runtime_error {
-		using runtime_error::runtime_error;
-		CompileError(const string& pre, const string& word) : runtime_error(pre + " '" + word + "'") {}
-		CompileError(const string& pre, const string& word, const string& post) : runtime_error(pre + " '" + word + "' " + post) {}
+	struct CompileError : public std::runtime_error {
+		using std::runtime_error::runtime_error;
+		CompileError(const std::string& pre, const std::string& word) : runtime_error(pre + " '" + word + "'") {}
+		CompileError(const std::string& pre, const std::string& word, const std::string& post) : runtime_error(pre + " '" + word + "' " + post) {}
 	};
 
-	struct RuntimeError : public runtime_error {
-		using runtime_error::runtime_error;
+	struct RuntimeError : public std::runtime_error {
+		using std::runtime_error::runtime_error;
 	};
 
 #pragma endregion
@@ -141,8 +139,8 @@ using namespace std;
 		return isalnum(c) || c == '_';
 	}
 
-	inline static string ToString(double val) {
-		stringstream str;
+	inline static std::string ToString(double val) {
+		std::stringstream str;
 		str << val;
 		return str.str();
 	}
@@ -151,7 +149,7 @@ using namespace std;
 	inline static const int WORD_ENUM_OPERATOR_START = 101;
 
 	struct Word {
-		string word = "";
+		std::string word = "";
 		
 		enum Type : int {
 			// Intermediate types
@@ -205,24 +203,24 @@ using namespace std;
 				return stod(word);
 			return 0;
 		}
-		operator const string&() const {
+		operator const std::string&() const {
 			return word;
 		}
 		
 		bool operator == (Type t) const {
 			return type == t;
 		}
-		bool operator == (const string& str) const {
+		bool operator == (const std::string& str) const {
 			return word == str;
 		}
 		bool operator == (const char* str) const {
 			return word == str;
 		}
 		bool operator != (Type t) const {return !(*this == t);}
-		bool operator != (const string& str) const {return !(*this == str);}
+		bool operator != (const std::string& str) const {return !(*this == str);}
 		bool operator != (const char* str) const {return !(*this == str);}
 		
-		Word(Type type, string word = "") : word(word), type(type) {
+		Word(Type type_, std::string word_ = "") : word(word_), type(type_) {
 			// Automatically assign a string word when constructed only via the type
 			if (word == "") {
 				switch (type) {
@@ -301,13 +299,13 @@ using namespace std;
 				}
 			}
 		}
-		explicit Word(const string& value) : word(value), type(Text) {}
+		explicit Word(const std::string& value) : word(value), type(Text) {}
 		explicit Word(double value) : word(ToString(value)), type(Numeric) {}
 		Word(const Word& other) = default;
 		Word(Word&& other) = default;
 		Word& operator= (const Word& other) = default;
 		Word& operator= (Word&& other) = default;
-		Word& operator= (const string& value) {
+		Word& operator= (const std::string& value) {
 			word = value;
 			type = Text;
 			return *this;
@@ -318,7 +316,7 @@ using namespace std;
 			return *this;
 		}
 		
-		Word(istringstream& s) {
+		Word(std::istringstream& s) {
 			for (int c; (c = s.get()) != -1; ) if (c != ' ') {
 				switch (c) {
 					case '\t':{
@@ -444,13 +442,13 @@ using namespace std;
 		}
 	};
 
-	inline static ostream& operator << (ostream& s, const Word& w) {
-		return s << string(w);
+	inline static std::ostream& operator << (std::ostream& s, const Word& w) {
+		return s << std::string(w);
 	}
 
 	// Parses one or more words from given string (including expressions done recursively), and assign final types to words. Sets resulting words in given words ref. This will NOT add expressions according to operator precedence. 
-	inline static void ParseWords(const string& str, vector<Word>& words, int& scope) {
-		istringstream line(str);
+	inline static void ParseWords(const std::string& str, std::vector<Word>& words, int& scope) {
+		std::istringstream line(str);
 		while (Word word {line}) {
 			if (word == Word::Tab) {
 				if (words.size() == 0) {
@@ -507,7 +505,7 @@ using namespace std;
 	}
 
 	// From a given index of an opening parenthesis, returns the index of the corresponsing closing parenthesis, or -1 if not found. 
-	inline static int GetExpressionEnd(const vector<Word>& words, int begin, int end = -1) {
+	inline static int GetExpressionEnd(const std::vector<Word>& words, int begin, int end = -1) {
 		int stack = 0;
 		if (end < 0) end += words.size();
 		while(++begin <= end) {
@@ -522,7 +520,7 @@ using namespace std;
 	}
 
 	// From a given index of a closing parenthesis (end), returns the index of the corresponsing opening parenthesis, or -1 if not found. This function will include a leading Name if there is one (for a function call)
-	inline static int GetExpressionBegin(const vector<Word>& words, int begin, int end) {
+	inline static int GetExpressionBegin(const std::vector<Word>& words, int begin, int end) {
 		int stack = 0;
 		while(--end >= 0) {
 			if (words[end] == Word::ExpressionBegin) {
@@ -543,7 +541,7 @@ using namespace std;
 	}
 
 	// From a given begin index for a function argument, returns the index of the last word before either the next comma or the argument list closing parenthesis, or -1 if not found.
-	inline static int GetArgEnd(const vector<Word>& words, int begin, int end = -1) {
+	inline static int GetArgEnd(const std::vector<Word>& words, int begin, int end = -1) {
 		int stack = 0;
 		if (end < 0) end += words.size();
 		if (words[begin] == Word::ExpressionBegin) ++stack;
@@ -562,80 +560,80 @@ using namespace std;
 	}
 
 	// Prints out the interpreted code after it's fully parsed (after ParseLine, or after a ParseExpression)
-	inline static void DebugWords(vector<Word>& words, int startIndex = 0, bool verbose = false) {
-		for (int i = startIndex; i < words.size(); ++i) {
+	inline static void DebugWords(std::vector<Word>& words, int startIndex = 0, bool verbose = false) {
+		for (unsigned int i = startIndex; i < words.size(); ++i) {
 			const auto& word = words[i];
 			if (verbose) {
 				switch (word.type) {
 					case Word::Numeric:
-						cout << "Numeric{" << word << "} ";
+						std::cout << "Numeric{" << word << "} ";
 						break;
 					case Word::Text:
-						cout << "Text{" << word << "} ";
+						std::cout << "Text{" << word << "} ";
 						break;
 					case Word::Varname:
-						cout << "Varname{" << word << "} ";
+						std::cout << "Varname{" << word << "} ";
 						break;
 					case Word::Funcname:
-						cout << "Funcname{" << word << "} ";
+						std::cout << "Funcname{" << word << "} ";
 						break;
 					case Word::ExpressionBegin:
-						cout << "Expression{ ";
+						std::cout << "Expression{ ";
 						break;
 					case Word::ExpressionEnd:
-						cout << "} ";
+						std::cout << "} ";
 						break;
 					case Word::Name:
-						cout << "Name{" << word << "} ";
+						std::cout << "Name{" << word << "} ";
 						break;
 					case Word::TrailOperator:
-						cout << "TrailOperator{" << word << "} ";
+						std::cout << "TrailOperator{" << word << "} ";
 						break;
 					case Word::NamespaceOperator:
-						cout << "NamespaceOperator{" << word << "} ";
+						std::cout << "NamespaceOperator{" << word << "} ";
 						break;
 					case Word::CastOperator:
-						cout << "CastOperator{" << word << "} ";
+						std::cout << "CastOperator{" << word << "} ";
 						break;
 					case Word::SuffixOperatorGroup:
-						cout << "SuffixOperatorGroup{" << word << "} ";
+						std::cout << "SuffixOperatorGroup{" << word << "} ";
 						break;
 					case Word::ConcatOperator:
-						cout << "ConcatOperator{" << word << "} ";
+						std::cout << "ConcatOperator{" << word << "} ";
 						break;
 					case Word::NotOperator:
-						cout << "NotOperator{" << word << "} ";
+						std::cout << "NotOperator{" << word << "} ";
 						break;
 					case Word::MulOperatorGroup:
-						cout << "MulOperatorGroup{" << word << "} ";
+						std::cout << "MulOperatorGroup{" << word << "} ";
 						break;
 					case Word::AddOperatorGroup:
-						cout << "AddOperatorGroup{" << word << "} ";
+						std::cout << "AddOperatorGroup{" << word << "} ";
 						break;
 					case Word::CompareOperatorGroup:
-						cout << "CompareOperatorGroup{" << word << "} ";
+						std::cout << "CompareOperatorGroup{" << word << "} ";
 						break;
 					case Word::EqualityOperatorGroup:
-						cout << "EqualityOperatorGroup{" << word << "} ";
+						std::cout << "EqualityOperatorGroup{" << word << "} ";
 						break;
 					case Word::AndOperator:
-						cout << "AndOperator{" << word << "} ";
+						std::cout << "AndOperator{" << word << "} ";
 						break;
 					case Word::OrOperator:
-						cout << "OrOperator{" << word << "} ";
+						std::cout << "OrOperator{" << word << "} ";
 						break;
 					case Word::AssignmentOperatorGroup:
-						cout << "AssignmentOperatorGroup{" << word << "} ";
+						std::cout << "AssignmentOperatorGroup{" << word << "} ";
 						break;
 					case Word::CommaOperator:
-						cout << "CommaOperator{" << word << "} ";
+						std::cout << "CommaOperator{" << word << "} ";
 						break;
 					case Word::Void:
-						cout << "void ";
+						std::cout << "void ";
 						break;
 						
 					case Word::FileInfo:
-						cout << "FileInfo{" << word << "} ";
+						std::cout << "FileInfo{" << word << "} ";
 						break;
 						
 					default: assert(!"Parse Error");
@@ -643,25 +641,25 @@ using namespace std;
 			} else {
 				switch (word.type) {
 					case Word::Numeric:
-						cout << word << " ";
+						std::cout << word << " ";
 						break;
 					case Word::Text:
-						cout << "\"" << word << "\" ";
+						std::cout << "\"" << word << "\" ";
 						break;
 					case Word::Varname:
-						cout << "$" << word << " ";
+						std::cout << "$" << word << " ";
 						break;
 					case Word::Funcname:
-						cout << "@" << word << " ";
+						std::cout << "@" << word << " ";
 						break;
 					case Word::ExpressionBegin:
-						cout << "( ";
+						std::cout << "( ";
 						break;
 					case Word::ExpressionEnd:
-						cout << ") ";
+						std::cout << ") ";
 						break;
 					case Word::Name:
-						cout << word << " ";
+						std::cout << word << " ";
 						break;
 					case Word::TrailOperator:
 					case Word::NamespaceOperator:
@@ -675,19 +673,19 @@ using namespace std;
 					case Word::EqualityOperatorGroup:
 					case Word::AssignmentOperatorGroup:
 					case Word::CommaOperator:
-						cout << word << " ";
+						std::cout << word << " ";
 						break;
 					case Word::AndOperator:
-						cout << "&& ";
+						std::cout << "&& ";
 						break;
 					case Word::OrOperator:
-						cout << "|| ";
+						std::cout << "|| ";
 						break;
 					case Word::Void:
 						break;
 						
 					case Word::FileInfo:
-						cout << "// <" << word << "> ";
+						std::cout << "// <" << word << "> ";
 						break;
 						
 					default: assert(!"Parse Error");
@@ -697,30 +695,30 @@ using namespace std;
 	}
 
 	// Parse an expression following an assignement or function call arguments excluding surrounding parenthesis. Returns true on success, false on error. This function may add words to the given vector, mostly to add parenthesis around operations based on operator precedence. 
-	inline static bool ParseExpression(vector<Word>& words, int startIndex, int endIndex = -1) {
+	inline static bool ParseExpression(std::vector<Word>& words, int startIndex, int endIndex = -1) {
 		auto lastWord = [&words, &endIndex]{
-			return endIndex == -1? words.size()-1 : min(size_t(endIndex), words.size()-1);
+			return endIndex == -1? words.size()-1 : std::min(size_t(endIndex), words.size()-1);
 		};
 		
 		// Handle single-word literal expressions (also includes single variable name)
-		if (startIndex == lastWord() && (words[startIndex] == Word::Numeric || words[startIndex] == Word::Text || words[startIndex] == Word::Varname)) {
+		if (startIndex == (int)lastWord() && (words[startIndex] == Word::Numeric || words[startIndex] == Word::Text || words[startIndex] == Word::Varname)) {
 			return true;
 		}
 		
 		// Any other type of single-word expression should be invalid
-		if (startIndex >= lastWord()) {
+		if (startIndex >= (int)lastWord()) {
 			return false;
 		}
 		
 		// Encapsulate operations within expressions, based on operator precedence
 		for (Word::Type op = Word::Type(WORD_ENUM_OPERATOR_START); op < Word::CommaOperator; op = Word::Type(+op+1)) {
-			for (int opIndex = startIndex; opIndex <= lastWord(); ++opIndex) {
+			for (int opIndex = startIndex; opIndex <= (int)lastWord(); ++opIndex) {
 				if (words[opIndex] == op) {
 					auto word = words[opIndex];
 					int prevPos = opIndex-1;
 					int nextPos = opIndex+1;
 					Word prev = prevPos >= startIndex? words[prevPos] : Word::Empty;
-					Word next = nextPos <= lastWord()? words[nextPos] : Word::Empty;
+					Word next = nextPos <= (int)lastWord()? words[nextPos] : Word::Empty;
 					
 					// Suffix operators (INVALID IN EXPRESSIONS, for now at least...)
 					if (word == Word::SuffixOperatorGroup) {
@@ -738,11 +736,11 @@ using namespace std;
 						// Find expression boundaries
 						if (next == Word::AddOperatorGroup || next == Word::NotOperator) {
 							++nextPos;
-							next = nextPos <= lastWord()? words[nextPos] : Word::Empty;
+							next = nextPos <= (int)lastWord()? words[nextPos] : Word::Empty;
 						}
 						if (next == Word::ExpressionBegin) {
 							nextPos = GetExpressionEnd(words, nextPos);
-							if (nextPos == -1 || nextPos > lastWord()) {
+							if (nextPos == -1 || nextPos > (int)lastWord()) {
 								return false;
 							}
 						}
@@ -754,13 +752,13 @@ using namespace std;
 						}
 						// Handle function calls (and cast) within expressions
 						if (next == Word::Name || next == Word::Funcname) {
-							Word after = nextPos+1 <= lastWord()? words[nextPos+1] : Word::Empty;
+							Word after = nextPos+1 <= (int)lastWord()? words[nextPos+1] : Word::Empty;
 							if (word != Word::CastOperator && word != Word::TrailOperator && after != Word::ExpressionBegin) {
 								return false;
 							}
 							if (after == Word::ExpressionBegin) {
 								nextPos = GetExpressionEnd(words, nextPos+1);
-								if (nextPos == -1 || nextPos > lastWord()) {
+								if (nextPos == -1 || nextPos > (int)lastWord()) {
 									return false;
 								}
 							}
@@ -768,7 +766,7 @@ using namespace std;
 						// Middle operators
 						if (prev && next && prev != Word::ExpressionBegin && next != Word::ExpressionEnd && prev.type < WORD_ENUM_OPERATOR_START && next.type < WORD_ENUM_OPERATOR_START) {
 							Word before = prevPos >= startIndex && prevPos > 0? words[prevPos-1] : Word::Empty;
-							Word after = nextPos+1 <= lastWord()? words[nextPos+1] : Word::Empty;
+							Word after = nextPos+1 <= (int)lastWord()? words[nextPos+1] : Word::Empty;
 							// Check if not already between parenthesis
 							if (before != Word::ExpressionBegin || after != Word::ExpressionEnd) {
 								if (word == Word::TrailOperator) {
@@ -823,7 +821,7 @@ using namespace std;
 		}
 		
 		// Key can be followed by any from set
-		const map<Word::Type, set<Word::Type>> authorizedSemantics {
+		const std::map<Word::Type, std::set<Word::Type>> authorizedSemantics {
 			{Word::Numeric, {
 				Word::ExpressionEnd,
 				Word::CastOperator,
@@ -962,7 +960,7 @@ using namespace std;
 		};
 		
 		// Left Key can be followed by any from set if preceeded by Right key (may have multiple sets per left key with different right keys)
-		const map<Word::Type, map<Word::Type, set<Word::Type>>> authorizedSemanticsWhenPreceeded {
+		const std::map<Word::Type, std::map<Word::Type, std::set<Word::Type>>> authorizedSemanticsWhenPreceeded {
 			{Word::Name, {{Word::CastOperator, {
 				Word::ConcatOperator,
 				Word::ExpressionEnd,
@@ -985,7 +983,7 @@ using namespace std;
 		};
 		
 		// Validate expression semantics using the above rules
-		for (int index = startIndex; index < lastWord(); ++index) {
+		for (int index = startIndex; index < (int)lastWord(); ++index) {
 			Word::Type a = words[index].type;
 			Word::Type b = words[index+1].type;
 			if (!authorizedSemantics.contains(a) || !authorizedSemantics.at(a).contains(b)) {
@@ -1004,7 +1002,7 @@ using namespace std;
 	}
 
 	// This is for function and input declarations. Returns the position to continue, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
-	inline static int ParseDeclarationArgs(vector<Word>& words, int index) {
+	inline static int ParseDeclarationArgs(std::vector<Word>& words, int index) {
 		// Args MUST be surrounded by parenthesis already, thus the initial index MUST be an opening parenthesis
 		if (words[index] != Word::ExpressionBegin) {
 			throw ParseError("Arguments must be between parenthesis");
@@ -1046,13 +1044,13 @@ using namespace std;
 		
 		// Go to the end and return the next thing to parse or -1
 		++end;
-		if (end+1 >= words.size()) return -1;
+		if (end+1 >= (int)words.size()) return -1;
 		return end + 1;
 		Error: throw ParseError("Invalid arguments in function declaration");
 	}
 
 	// Returns the position at which to continue parsing after the closing parenthesis, or -1 if reached the end of the line. This function also ensures that the returned value is less than the word count.
-	inline static int ParseArgs(vector<Word>& words, int index) {
+	inline static int ParseArgs(std::vector<Word>& words, int index) {
 		// Args MUST be surrounded by parenthesis already, thus the initial index MUST be an opening parenthesis
 		if (words[index] != Word::ExpressionBegin) {
 			throw ParseError("Arguments must be between parenthesis");
@@ -1074,7 +1072,7 @@ using namespace std;
 			if (end == -1) {
 				throw ParseError("Invalid expression within function arguments");
 			}
-			if (end == words.size()-1) return -1;
+			if (end == int(words.size())-1) return -1;
 			return end + 1;
 		} else {
 			throw ParseError("Invalid expression within function arguments");
@@ -1083,7 +1081,7 @@ using namespace std;
 	}
 
 	// Valid first words for the possible statements in the global scope
-	static inline const vector<string> globalScopeFirstWords {
+	static inline const std::vector<std::string> globalScopeFirstWords {
 		"include",
 		"const",
 		"var",
@@ -1097,11 +1095,11 @@ using namespace std;
 	};
 	
 	struct Implementation {
-		static std::vector<string> entryPoints;
+		static std::vector<std::string> entryPoints;
 	};
 
 	// Valid first words for the possible statements in a function scope
-	static const vector<string> functionScopeFirstWords {
+	static const std::vector<std::string> functionScopeFirstWords {
 		"var",
 		"array",
 		"output",
@@ -1120,13 +1118,13 @@ using namespace std;
 	struct ParsedLine {
 		int scope = 0;
 		int line = 0;
-		vector<Word> words {};
+		std::vector<Word> words {};
 		
 		operator bool () const {
 			return words.size() > 0;
 		}
 		
-		ParsedLine(const string& str, int line = 0) : line(line) {
+		ParsedLine(const std::string& str, int line_ = 0) : line(line_) {
 			ParseWords(str, words, scope);
 			
 			if (words.size() > 0) {
@@ -1196,7 +1194,7 @@ using namespace std;
 							if (words.size() < 4) throw ParseError("Too few words");
 							int next = ParseDeclarationArgs(words, 2);
 							if (next != -1) {
-								if (words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
+								if ((int)words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
 									// Valid
 								} else {
 									throw ParseError("The only thing that can follow a function's argument list is a colon and its return type, which must be either 'number' or 'text'");
@@ -1235,8 +1233,8 @@ using namespace std;
 							if (words.size() > 1 && words[1] != "var" && words[1] != "array") {
 								throw ParseError("Second word must be either 'var' or 'array'");
 							}
-							if (words.size() > 2 && words[2] != Word::Varname
-							|| words.size() > 3 && words[3] != Word::CastOperator
+							if ((words.size() > 2 && words[2] != Word::Varname)
+							 || (words.size() > 3 && words[3] != Word::CastOperator)
 							) {
 								throw ParseError("Third word must be a variable name (starting with $) followed by a colon and the storage type (number or text)");
 							}
@@ -1259,11 +1257,11 @@ using namespace std;
 					
 					// var
 						if (words[0] == "var") {
-							if (words.size() > 1 && words[1] != Word::Varname
-							|| words.size() < 4
-							|| words[2] != "=" && words[2] != Word::CastOperator
-							|| words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text"
-							|| words[2] == Word::CastOperator && words.size() > 4
+							if ((words.size() > 1 && words[1] != Word::Varname)
+							 || (words.size() < 4)
+							 || (words[2] != "=" && words[2] != Word::CastOperator)
+							 || (words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text")
+							 || (words[2] == Word::CastOperator && words.size() > 4)
 							) {
 								throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
 							}
@@ -1276,9 +1274,9 @@ using namespace std;
 						
 					// array
 						if (words[0] == "array") {
-							if (words.size() > 1 && words[1] != Word::Varname
-							|| words.size() > 2 && words[2] != Word::CastOperator && words[2] != "="
-							|| words[2] == "=" && words.size() > 3 && words[3] != Word::Varname
+							if ((words.size() > 1 && words[1] != Word::Varname)
+							 || (words.size() > 2 && words[2] != Word::CastOperator && words[2] != "=")
+							 || (words[2] == "=" && words.size() > 3 && words[3] != Word::Varname)
 							) {
 								throw ParseError("Second word must be a variable name (starting with $) followed by either a colon and the array type (number or text) or an assignment to another array variable");
 							}
@@ -1318,11 +1316,11 @@ using namespace std;
 							if (words.size() > 1 && words[1] != Word::Varname) {
 								throw ParseError("Foreach must be followed by an array variable name starting with $");
 							}
-							if (words.size() > 2 && words[2] != Word::ExpressionBegin
-							|| words.size() > 3 && words[3] != Word::Varname
-							|| words.size() > 4 && words[4] != Word::ExpressionEnd && words[4] != Word::CommaOperator
-							|| words.size() > 5 && words[5] != Word::Varname
-							|| words.size() > 6 && words[6] != Word::ExpressionEnd
+							if ((words.size() > 2 && words[2] != Word::ExpressionBegin)
+							 || (words.size() > 3 && words[3] != Word::Varname)
+							 || (words.size() > 4 && words[4] != Word::ExpressionEnd && words[4] != Word::CommaOperator)
+							 || (words.size() > 5 && words[5] != Word::Varname)
+							 || (words.size() > 6 && words[6] != Word::ExpressionEnd)
 							) {
 								throw ParseError("Foreach must be followed by an array name and a set of parenthesis containing one or two parameters (the item and optionally the index)");
 							}
@@ -1339,9 +1337,9 @@ using namespace std;
 							if (words.size() > 1 && words[1] != Word::Numeric && words[1] != Word::Varname) {
 								throw ParseError("Repeat must be followed by either a literal number or a variable name starting with $");
 							}
-							if (words.size() > 2 && words[2] != Word::ExpressionBegin
-							|| words.size() > 3 && words[3] != Word::Varname
-							|| words.size() > 4 && words[4] != Word::ExpressionEnd
+							if ((words.size() > 2 && words[2] != Word::ExpressionBegin)
+							 || (words.size() > 3 && words[3] != Word::Varname)
+							 || (words.size() > 4 && words[4] != Word::ExpressionEnd)
 							) {
 								throw ParseError("Repeat must be followed by a number and a set of parenthesis containing one parameter (the index)");
 							}
@@ -1407,7 +1405,7 @@ using namespace std;
 				
 				// Varname
 					if (words[0] == Word::Varname) {
-						if (words.size() < 2 || words[1] != Word::TrailOperator && words[1] != Word::AssignmentOperatorGroup && words[1] != Word::SuffixOperatorGroup) {
+						if (words.size() < 2 || (words[1] != Word::TrailOperator && words[1] != Word::AssignmentOperatorGroup && words[1] != Word::SuffixOperatorGroup)) {
 							throw ParseError("A leading variable name must be followed either by a trailing function, an assignment or a suffix operator");
 						}
 						if (words[1] == Word::AssignmentOperatorGroup) {
@@ -1470,7 +1468,7 @@ using namespace std;
 			}
 		}
 		
-		ParsedLine(const vector<Word>& words) : words(words) {}
+		ParsedLine(const std::vector<Word>& words_) : words(words_) {}
 		ParsedLine(const Word& word) {
 			words.emplace_back(word);
 		}
@@ -1478,11 +1476,11 @@ using namespace std;
 
 	// Upon construction, it will parse all lines from the given stream, and may throw ParseError
 	struct SourceFile {
-		string filepath;
-		vector<ParsedLine> lines;
+		std::string filepath;
+		std::vector<ParsedLine> lines;
 
-		SourceFile(const string& filepath) : filepath(filepath) {
-			ifstream stream{filepath};
+		SourceFile(const std::string& filepath_) : filepath(filepath_) {
+			std::ifstream stream{filepath};
 			
 			if (stream.fail()) {
 				throw ParseError("File not found '" + filepath + "'");
@@ -1494,12 +1492,12 @@ using namespace std;
 			int scope = 0;
 			
 			// Parse all lines
-			for (string lineStr; getline(stream, lineStr); lineNumber++) {
+			for (std::string lineStr; getline(stream, lineStr); lineNumber++) {
 				try {
 					auto& line = lines.emplace_back(lineStr, lineNumber);
 					scope = line.scope;
 				} catch (ParseError& e) {
-					stringstream err {};
+					std::stringstream err {};
 					err << e.what() << " at line " << lineNumber << " in " << filepath;
 					throw ParseError(err.str());
 				}
@@ -1509,23 +1507,23 @@ using namespace std;
 		void DebugParsedLines() {
 			for (auto& line : lines) {
 				if (line) {
-					cout << setw(8) << line.line << ": " << string(line.scope,'\t');
+					std::cout << std::setw(8) << line.line << ": " << std::string(line.scope,'\t');
 					DebugWords(line.words);
-					cout << endl;
+					std::cout << std::endl;
 				}
 			}
-			cout << "\nParsing Success!\n" << endl;
+			std::cout << "\nParsing Success!\n" << std::endl;
 		}
 	};
 
 	// This function recursively parses the given file and all included files and returns all lines joined
-	inline static SourceFile GetParsedFile(const string& filedir, const string& filename) {
+	inline static SourceFile GetParsedFile(const std::string& filedir, const std::string& filename) {
 		SourceFile src(filedir + "/" + filename);
 		// Include other files (and replace the include statement by the lines of the other file, recursively)
-		for (int i = 0; i < src.lines.size(); ++i) {
+		for (unsigned int i = 0; i < src.lines.size(); ++i) {
 			if (auto& line = src.lines[i]; line) {
 				if (line.scope == 0 && line.words[0] == "include") {
-					string includeFilename = line.words[1];
+					std::string includeFilename = line.words[1];
 					line.words.clear();
 					auto includeSrc = GetParsedFile(filedir, includeFilename);
 					src.lines.insert(src.lines.begin()+i, includeSrc.lines.begin(), includeSrc.lines.end());
@@ -1656,7 +1654,7 @@ using namespace std;
 			Object = 128
 		} type;
 		
-		string textValue;
+		std::string textValue;
 		union {
 			double numericValue;
 			uint64_t addrValue;
@@ -1668,7 +1666,7 @@ using namespace std;
 		Var(int64_t value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(double value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(const char* value) : type(Text), textValue(value), numericValue(0) {}
-		Var(const string& value) : type(Text), textValue(value), numericValue(0) {}
+		Var(const std::string& value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
 		Var(Type type_, uint64_t objAddr) : type(type_), textValue(""), addrValue(objAddr) {}
 		
@@ -1723,43 +1721,43 @@ using namespace std;
 			else if (type == Text) return stoul(textValue);
 			return 0;
 		}
-		operator string() const {
-			if (type == Numeric) return to_string(numericValue);
+		operator std::string() const {
+			if (type == Numeric) return std::to_string(numericValue);
 			else if (type == Text) return textValue;
 			return "";
 		}
 	};
 
-	using DeviceFunction = function<Var(const vector<Var>& args)>;
-	using DeviceObjectMember = function<Var(const Var& obj, const vector<Var>& args)>;
-	using OutputFunction = function<void(uint32_t ioNumber, const vector<Var>& args)>;
+	using DeviceFunction = std::function<Var(const std::vector<Var>& args)>;
+	using DeviceObjectMember = std::function<Var(const Var& obj, const std::vector<Var>& args)>;
+	using OutputFunction = std::function<void(uint32_t ioNumber, const std::vector<Var>& args)>;
 
 	struct ObjectType {
 		uint8_t id;
-		string name;
+		std::string name;
 	};
 
 	struct Device {
-		static unordered_map<string, ObjectType> objectTypesByName;
-		static unordered_map<uint8_t, string> objectNamesById;
+		static std::unordered_map<std::string, ObjectType> objectTypesByName;
+		static std::unordered_map<uint8_t, std::string> objectNamesById;
 
 		struct FunctionInfo {
 			struct Arg {
-				string name;
-				string type;
+				std::string name;
+				std::string type;
 			};
 			
 			uint32_t id;
-			string name = "";
-			vector<Arg> args {};
-			string returnType = "";
+			std::string name = "";
+			std::vector<Arg> args {};
+			std::string returnType = "";
 			
-			FunctionInfo(uint32_t id, const string& line) : id(id) {
-				vector<Word> words;
+			FunctionInfo(uint32_t id_, const std::string& line) : id(id_) {
+				std::vector<Word> words;
 				
 				int nextWordIndex = 0;
 				auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
-					if (nextWordIndex < words.size()) {
+					if (nextWordIndex < (int)words.size()) {
 						assert(type == Word::Empty || type == words[nextWordIndex]);
 						return words[nextWordIndex++];
 					}
@@ -1795,11 +1793,11 @@ using namespace std;
 						++argN;
 						assert(word == Word::Varname);
 						readWord(Word::CastOperator);
-						string type = readWord(Word::Name);
+						std::string type = readWord(Word::Name);
 						if (type != "number" && type != "text" && !objectTypesByName.contains(type)) {
 							assert(!"Invalid argument type in device function prototype");
 						}
-						args.emplace_back(string(word), type);
+						args.emplace_back(std::string(word), type);
 					}
 					nextWord = readWord();
 				}
@@ -1810,27 +1808,27 @@ using namespace std;
 					if (type != "number" && type != "text" && !objectTypesByName.contains(type)) {
 						assert(!"Invalid return type in device function prototype");
 					}
-					returnType = string(type);
+					returnType = std::string(type);
 				}
 			}
 		};
 
-		static unordered_map<string, Device::FunctionInfo> deviceFunctionsByName;
-		static unordered_map<uint32_t/*24 least significant bits only*/, string> deviceFunctionNamesById;
-		static unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById;
+		static std::unordered_map<std::string, Device::FunctionInfo> deviceFunctionsByName;
+		static std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> deviceFunctionNamesById;
+		static std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById;
 		
 		static OutputFunction outputFunction;
 	};
 	
 	// Implementation SHOULD declare entry points
-	inline static void DeclareEntryPoint(const string& entryName) {
+	inline static void DeclareEntryPoint(const std::string& entryName) {
 		assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), entryName) == globalScopeFirstWords.end());
 		Implementation::entryPoints.emplace_back(entryName);
 	}
 
 	// Implementation SHOULD declare device functions
-	inline static Device::FunctionInfo& DeclareDeviceFunction(const string& prototype, DeviceFunction&& func, uint8_t base = 0) {
-		static map<uint8_t, uint32_t> nextID {};
+	inline static Device::FunctionInfo& DeclareDeviceFunction(const std::string& prototype, DeviceFunction&& func, uint8_t base = 0) {
+		static std::map<uint8_t, uint32_t> nextID {};
 		assert(nextID[base] < 65535);
 		uint32_t id = (++nextID[base]) | (uint32_t(base) << 16);
 		Device::FunctionInfo f {id, prototype};
@@ -1841,16 +1839,16 @@ using namespace std;
 	}
 
 	// Implementation SHOULD declare object types
-	inline static Var::Type DeclareObjectType(const string& name, const map<string, DeviceObjectMember>& members = {}) {
+	inline static Var::Type DeclareObjectType(const std::string& name, const std::map<std::string, DeviceObjectMember>& members = {}) {
 		static uint8_t nextID = 0;
 		assert(nextID < 127);
 		uint8_t id = ++nextID;
 		Device::objectTypesByName.emplace(name, ObjectType{id, name});
 		Device::objectNamesById.emplace(id, name);
 		for (auto&[prototype, method] : members) {
-			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](const vector<Var>& args) -> XenonCode::Var {
+			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](const std::vector<Var>& args) -> XenonCode::Var {
 				if (args.size() > 0) {
-					return method(args[0], vector<Var>(args.begin()+1, args.end()));
+					return method(args[0], std::vector<Var>(args.begin()+1, args.end()));
 				} else {
 					throw XenonCode::RuntimeError("Invalid object member arguments");
 				}
@@ -1867,9 +1865,9 @@ using namespace std;
 
 	struct Stack {
 		int id; // a unique id, at least per function
-		string type; // function, if, elseif, else, foreach, while, repeat
-		unordered_map<string, uint32_t> pointers;
-		Stack(int id, string type) : id(id), type(type), pointers() {}
+		std::string type; // function, if, elseif, else, foreach, while, repeat
+		std::unordered_map<std::string, uint32_t> pointers;
+		Stack(int id_, std::string type_) : id(id_), type(type_), pointers() {}
 	};
 
 	struct ByteCode {
@@ -1880,9 +1878,9 @@ using namespace std;
 				uint32_t type : 8; // 256 possible types
 			};
 		};
-		ByteCode(uint32_t rawValue = 0) : rawValue(rawValue) {}
-		ByteCode(CODE_TYPE type) : value(0), type(type) {}
-		ByteCode(uint8_t type, uint32_t value) : value(value), type(type) {}
+		ByteCode(uint32_t rawValue_ = 0) : rawValue(rawValue_) {}
+		ByteCode(CODE_TYPE type_) : value(0), type(type_) {}
+		ByteCode(uint8_t type_, uint32_t value_) : value(value_), type(type_) {}
 		bool operator == (uint32_t other) const {
 			return rawValue == other;
 		}
@@ -1919,7 +1917,7 @@ using namespace std;
 		}
 	}
 
-	inline static ByteCode GetOperator(string op) {
+	inline static ByteCode GetOperator(std::string op) {
 		if (op == "=") {
 			return SET;
 		} else if (op == "+" || op == "+=") {
@@ -1947,7 +1945,7 @@ using namespace std;
 		}
 	}
 
-	inline static ByteCode GetBuiltInFunctionOp(const string& func, CODE_TYPE& returnType) {
+	inline static ByteCode GetBuiltInFunctionOp(const std::string& func, CODE_TYPE& returnType) {
 		if (func == "floor") {returnType = RAM_VAR_NUMERIC; return FLR;}
 		if (func == "ceil") {returnType = RAM_VAR_NUMERIC; return CIL;}
 		if (func == "round") {returnType = RAM_VAR_NUMERIC; return RND;}
@@ -2048,22 +2046,22 @@ using namespace std;
 
 	struct InputFunction {
 		uint32_t addr = 0;
-		vector<uint32_t> args {};
+		std::vector<uint32_t> args {};
 	};
 
 	class Assembly {
-		static inline const string parserFiletype = "XenonCode!";
+		static inline const std::string parserFiletype = "XenonCode!";
 		static inline const uint32_t parserVersionMajor = VERSION_MAJOR;
 		static inline const uint32_t parserVersionMinor = VERSION_MINOR;
 		
 	public:
 		uint32_t varsInitSize = 0; // number of byte codes in the vars_init code (uint32_t)
 		uint32_t programSize = 0; // number of byte codes in the program code (uint32_t)
-		vector<string> storageRefs {}; // storage references (addr)
-		unordered_map<string, uint32_t> functionRefs {}; // function references (addr)
-		vector<TimerFunction> timers {};
-		map<uint32_t, InputFunction> inputs {};
-		vector<string> sourceFiles {};
+		std::vector<std::string> storageRefs {}; // storage references (addr)
+		std::unordered_map<std::string, uint32_t> functionRefs {}; // function references (addr)
+		std::vector<TimerFunction> timers {};
+		std::map<uint32_t, InputFunction> inputs {};
+		std::vector<std::string> sourceFiles {};
 		/* Function names:
 			system.init
 			system.tick
@@ -2076,10 +2074,10 @@ using namespace std;
 		*/
 		
 		// ROM
-		vector<ByteCode> rom_vars_init {}; // the bytecode of this computer's vars_init function
-		vector<ByteCode> rom_program {}; // the actual bytecode of this program
-		vector<double> rom_numericConstants {}; // the actual numeric constant values
-		vector<string> rom_textConstants {}; // the actual text constant values
+		std::vector<ByteCode> rom_vars_init {}; // the bytecode of this computer's vars_init function
+		std::vector<ByteCode> rom_program {}; // the actual bytecode of this program
+		std::vector<double> rom_numericConstants {}; // the actual numeric constant values
+		std::vector<std::string> rom_textConstants {}; // the actual text constant values
 		
 		// RAM size
 		uint32_t ram_numericVariables = 0;
@@ -2100,20 +2098,20 @@ using namespace std;
 		}
 		
 		// From Parsed lines of code
-		explicit Assembly(const vector<ParsedLine>& lines, bool verbose) {
+		explicit Assembly(const std::vector<ParsedLine>& lines, bool verbose) {
 			// Current context
-			string currentFile = "";
+			std::string currentFile = "";
 			uint32_t currentLine = 0;
 			int currentScope = 0;
-			string currentFunctionName = "";
+			std::string currentFunctionName = "";
 			double currentTimerInterval = 0;
-			double currentInputPort = 0;
+			uint32_t currentInputPort = 0;
 			uint32_t currentFunctionAddr = 0;
 			int currentStackId = 0;
-			vector<Stack> stack {};
+			std::vector<Stack> stack {};
 			
 			// Temporary user-defined symbol maps
-			unordered_map<string/*functionName*/, map<int/*stackId*/, unordered_map<string/*name*/, ByteCode>>> userVars {};
+			std::unordered_map<std::string/*functionName*/, std::map<int/*stackId*/, std::unordered_map<std::string/*name*/, ByteCode>>> userVars {};
 			
 			// Validation helper
 			auto validate = [](bool condition){
@@ -2123,7 +2121,7 @@ using namespace std;
 			};
 			
 			// Lambda functions to Get/Add user-defined symbols
-			auto getVar = [&](const string& name) -> ByteCode {
+			auto getVar = [&](const std::string& name) -> ByteCode {
 				for (int s = stack.size()-1; s >= -1; --s) {
 					if (userVars[currentFunctionName][s<0?0:stack[s].id].contains(name)) {
 						return userVars.at(currentFunctionName).at(s<0?0:stack[s].id).at(name);
@@ -2136,7 +2134,7 @@ using namespace std;
 				}
 				throw CompileError("$" + name + " is undefined");
 			};
-			auto declareVar = [&](const string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
+			auto declareVar = [&](const std::string& name, CODE_TYPE type, Word initialValue/*Only for Const*/ = Word::Empty) -> ByteCode {
 				if (name != "") {
 					for (int s = stack.size()-1; s >= -1; --s) {
 						if (userVars[currentFunctionName][s<0?0:stack[s].id].contains(name)) {
@@ -2233,15 +2231,15 @@ using namespace std;
 			};
 			auto declareTmpNumeric = [&] {return declareVar("", RAM_VAR_NUMERIC);};
 			auto declareTmpText = [&] {return declareVar("", RAM_VAR_TEXT);};
-			auto getReturnVar = [&](const string& funcName) -> ByteCode {
-				string retVarName = "@"+funcName+":";
+			auto getReturnVar = [&](const std::string& funcName) -> ByteCode {
+				std::string retVarName = "@"+funcName+":";
 				if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(retVarName)) {
 					return userVars.at(funcName).at(0).at(retVarName);
 				} else {
 					throw CompileError("Function", funcName, "does not have a return type");
 				}
 			};
-			auto getVarName = [&](ByteCode code) -> string {
+			auto getVarName = [&](ByteCode code) -> std::string {
 				for (const auto& [fun,stacks] : userVars) {
 					for (const auto& [s,vars] : stacks) {
 						for (const auto& [name,byteCode] : vars) {
@@ -2251,9 +2249,9 @@ using namespace std;
 						}
 					}
 				}
-				return to_string(code.value);
+				return std::to_string(code.value);
 			};
-			auto getFunctionName = [&](ByteCode code) -> string {
+			auto getFunctionName = [&](ByteCode code) -> std::string {
 				if (code.type == ADDR) {
 					for (const auto& [func,address] : functionRefs) {
 						if (code.value == address) {
@@ -2261,7 +2259,7 @@ using namespace std;
 						}
 					}
 				}
-				return to_string(code.value);
+				return std::to_string(code.value);
 			};
 			
 			// Compile helpers
@@ -2287,7 +2285,7 @@ using namespace std;
 			};
 			
 			// Function helpers
-			auto openFunction = [&](const string& name){
+			auto openFunction = [&](const std::string& name){
 				assert(currentScope == 0);
 				assert(currentFunctionName == "");
 				if (name != "system.timer" && name != "system.input" && functionRefs.contains(name)) {
@@ -2317,8 +2315,8 @@ using namespace std;
 				currentStackId = 0;
 			};
 			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
-			auto compileFunctionCall = [&](Word func, const vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false) -> ByteCode {
-				string funcName = func;
+			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false) -> ByteCode {
+				std::string funcName = func;
 				if (func == Word::Funcname) {
 					if (!functionRefs.contains(funcName)) {
 						throw CompileError("Function", func, "is not defined");
@@ -2327,7 +2325,7 @@ using namespace std;
 					// Set arguments
 					int i = 0;
 					for (auto arg : args) {
-						string argVarName = "@"+funcName+"."+to_string(++i);
+						std::string argVarName = "@"+funcName+"."+std::to_string(++i);
 						if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(argVarName)) {
 							ByteCode param = userVars.at(funcName).at(0).at(argVarName);
 							if (IsArray(arg)) { // Don't allow arrays to be passed as arguments
@@ -2372,7 +2370,7 @@ using namespace std;
 					ByteCode ret = VOID;
 					ByteCode f = VOID;
 					if (isTrailingFunction && args.size() > 0 && args[0].type >= RAM_OBJECT) {
-						string objType = Device::objectNamesById[args[0].type & (RAM_OBJECT-1)];
+						std::string objType = Device::objectNamesById[args[0].type & (RAM_OBJECT-1)];
 						if (Device::deviceFunctionsByName.contains(objType+"::"+funcName)) {
 							funcName = objType+"::"+funcName;
 							f = DEV;
@@ -2454,17 +2452,17 @@ using namespace std;
 			};
 			
 			// Stack helpers
-			auto addPointer = [&](string reg) -> uint32_t& {
-				if (reg == "") reg = to_string(stack.back().pointers.size()+1);
+			auto addPointer = [&](std::string reg) -> uint32_t& {
+				if (reg == "") reg = std::to_string(stack.back().pointers.size()+1);
 				return stack.back().pointers[reg];
 			};
-			auto getPointer = [&](const string& reg) -> ByteCode {
+			auto getPointer = [&](const std::string& reg) -> ByteCode {
 				assert(stack.size() > 0);
 				if (stack.back().pointers.contains(reg)) {
 					return rom_program[stack.back().pointers.at(reg)];
 				}
 			};
-			auto applyPointerAddr = [&](const string& reg){
+			auto applyPointerAddr = [&](const std::string& reg){
 				assert(stack.size() > 0);
 				if (stack.back().pointers.contains(reg)) {
 					rom_program[stack.back().pointers.at(reg)].value = addr();
@@ -2480,10 +2478,10 @@ using namespace std;
 				}
 				stack.back().pointers.clear();
 			};
-			auto pushStack = [&](const string& type) {
+			auto pushStack = [&](const std::string& type) {
 				++currentScope;
 				stack.emplace_back(++currentStackId, type);
-				assert(currentScope == stack.size());
+				assert(currentScope == (int)stack.size());
 			};
 			auto popStack = [&] {
 				assert(currentScope >= 0);
@@ -2496,11 +2494,11 @@ using namespace std;
 				stack.pop_back();
 				userVars[currentFunctionName][currentStackId].clear();
 				currentStackId = stack.size() > 0 ? stack.back().id : 0;
-				assert(currentScope == stack.size());
+				assert(currentScope == (int)stack.size());
 			};
 			
 			// Expression helpers
-			/*computeConstExpression*/ function<Word(const vector<Word>&, int, int)> computeConstExpression = [&](const vector<Word>& words, int startIndex, int endIndex = -1) -> Word {
+			/*computeConstExpression*/ std::function<Word(const std::vector<Word>&, int, int)> computeConstExpression = [&](const std::vector<Word>& words, int startIndex, int endIndex = -1) -> Word {
 				if (endIndex < 0) endIndex += words.size();
 				validate(startIndex+1 < endIndex); // Need at least 3 words here
 				int opIndex = startIndex + 1;
@@ -2558,7 +2556,7 @@ using namespace std;
 						word2 = double(value == 0.0);
 						return word2;
 					} else if (word2 == Word::Text) {
-						string value = word2;
+						std::string value = word2;
 						word2 = double(value == "");
 						return word2;
 					} else {
@@ -2578,12 +2576,12 @@ using namespace std;
 						}
 						return Word{double(word1) / double(word2)};
 					} else if (op == "^") {
-						return Word{pow(double(word1), double(word2))};
+						return Word{std::pow(double(word1), double(word2))};
 					} else if (op == "%") {
 						if (double(word2) == 0.0) {
 							throw CompileError("Division by zero in const expression");
 						}
-						return Word{double(long(round(double(word1))) % long(round(double(word2))))};
+						return Word{double(long(std::round(double(word1))) % long(std::round(double(word2))))};
 					} else {
 						validate(false);
 					}
@@ -2620,9 +2618,9 @@ using namespace std;
 						}
 					} else if (word1 == Word::Text && word2 == Word::Text) {
 						if (op == "==") {
-							return Word{double(string(word1) == string(word2))};
+							return Word{double(std::string(word1) == std::string(word2))};
 						} else if (op == "!=" || op == "<>") {
-							return Word{double(string(word1) != string(word2))};
+							return Word{double(std::string(word1) != std::string(word2))};
 						} else {
 							validate(false);
 						}
@@ -2638,7 +2636,7 @@ using namespace std;
 				}
 				throw CompileError("Invalid operator", op, "in const expression");
 			};
-			/*compileExpression*/ function<ByteCode(const vector<Word>&, int, int)> compileExpression = [&](const vector<Word>& words, int startIndex, int endIndex = -1) -> ByteCode {
+			/*compileExpression*/ std::function<ByteCode(const std::vector<Word>&, int, int)> compileExpression = [&](const std::vector<Word>& words, int startIndex, int endIndex = -1) -> ByteCode {
 				if (endIndex < 0) endIndex += words.size();
 				validate(startIndex <= endIndex);
 				
@@ -2670,7 +2668,7 @@ using namespace std;
 					}break;
 					case Word::Funcname:
 					case Word::Name:{
-						vector<ByteCode> args {};
+						std::vector<ByteCode> args {};
 						if (words[startIndex+1] == Word::ExpressionBegin) {
 							int argIndex = startIndex+2;
 							while (argIndex <= endIndex) {
@@ -2733,7 +2731,7 @@ using namespace std;
 						} else { // trailing function call, in an expression
 						
 							// validate(words[opIndex+2] == Word::ExpressionBegin);
-							// vector<ByteCode> args {};
+							// std::vector<ByteCode> args {};
 							// args.push_back(ref1);
 							// int argBegin = opIndex+3;
 							// while (argBegin <= endIndex) {
@@ -2765,7 +2763,7 @@ using namespace std;
 							write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 							write(ref2);
 						} else /*numeric*/{
-							write({ARRAY_INDEX, uint32_t(round(double(operand)))});
+							write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 						}
 						write(VOID);
 						return tmp;
@@ -2919,7 +2917,7 @@ using namespace std;
 					currentLine = line.line;
 					int nextWordIndex = 0;
 					auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
-						if (nextWordIndex < line.words.size()) {
+						if (nextWordIndex < (int)line.words.size()) {
 							validate(type == Word::Empty || type == line.words[nextWordIndex]);
 							return line.words[nextWordIndex++];
 						}
@@ -2948,7 +2946,7 @@ using namespace std;
 								
 								// const
 								if (firstWord == "const") {
-									string name = readWord(Word::Varname);
+									std::string name = readWord(Word::Varname);
 									validate(readWord() == "=");
 									Word value = readWord();
 									validate(value);
@@ -2988,7 +2986,7 @@ using namespace std;
 								}
 								// var
 								else if (firstWord == "var") {
-									string name = readWord(Word::Varname);
+									std::string name = readWord(Word::Varname);
 									Word op = readWord();
 									if (op == "=") {
 										Word value = readWord();
@@ -3005,7 +3003,7 @@ using namespace std;
 											}
 										} else if (value == Word::Text) {
 											ByteCode var = declareVar(name, RAM_VAR_TEXT);
-											if (string(value) != "") {
+											if (std::string(value) != "") {
 												ByteCode con = declareVar(name+".init", ROM_CONST_TEXT, value);
 												rom_vars_init.emplace_back(SET);
 												rom_vars_init.emplace_back(var);
@@ -3077,7 +3075,7 @@ using namespace std;
 								}
 								// array
 								else if (firstWord == "array") {
-									string name = readWord();
+									std::string name = readWord();
 									validate(name != "");
 									validate(readWord() == ":");
 									Word type = readWord();
@@ -3092,9 +3090,9 @@ using namespace std;
 								}
 								// storage
 								else if (firstWord == "storage") {
-									string what = readWord();
+									std::string what = readWord();
 									validate(what == "var" || what == "array");
-									string name = readWord();
+									std::string name = readWord();
 									validate(name != "");
 									validate(readWord() == ":");
 									Word type = readWord();
@@ -3131,7 +3129,7 @@ using namespace std;
 								}
 								// function
 								else if (firstWord == "function") {
-									string name = readWord(Word::Funcname);
+									std::string name = readWord(Word::Funcname);
 									openFunction(name);
 									readWord(Word::ExpressionBegin);
 									// Arguments
@@ -3146,7 +3144,7 @@ using namespace std;
 										++argN;
 										validate(word == Word::Varname);
 										readWord(Word::CastOperator);
-										string type = readWord(Word::Name);
+										std::string type = readWord(Word::Name);
 										ByteCode arg;
 										if (type == "number") {
 											arg = declareVar(word, RAM_VAR_NUMERIC);
@@ -3159,7 +3157,7 @@ using namespace std;
 												throw CompileError("Invalid argument type in function declaration");
 											}
 										}
-										userVars[currentFunctionName][0].emplace("@"+name+"."+to_string(argN), arg);
+										userVars[currentFunctionName][0].emplace("@"+name+"."+std::to_string(argN), arg);
 									}
 									// Return type
 									if (readWord() == Word::CastOperator) {
@@ -3180,7 +3178,7 @@ using namespace std;
 								}
 								// timer
 								else if (firstWord == "timer") {
-									string timerType = readWord(Word::Name);
+									std::string timerType = readWord(Word::Name);
 									Word timerValue = readWord();
 									if (timerValue == Word::Varname) {
 										timerValue = GetConstValue(getVar(timerValue));
@@ -3203,7 +3201,7 @@ using namespace std;
 									validate(inputPort == Word::Numeric);
 									currentInputPort = uint32_t(double(inputPort));
 									if (inputs.contains(currentInputPort)) {
-										throw CompileError("Input " + to_string(currentInputPort) + " is already defined");
+										throw CompileError("Input " + std::to_string(currentInputPort) + " is already defined");
 									}
 									auto& args = inputs[currentInputPort].args;
 									openFunction("system.input");
@@ -3216,7 +3214,7 @@ using namespace std;
 										++argN;
 										validate(word == Word::Varname);
 										readWord(Word::CastOperator);
-										string type = readWord(Word::Name);
+										std::string type = readWord(Word::Name);
 										ByteCode arg;
 										if (type == "number") {
 											arg = declareVar(word, RAM_VAR_NUMERIC);
@@ -3327,7 +3325,7 @@ using namespace std;
 													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 													write(idx);
 												} else /*numeric*/ {
-													write({ARRAY_INDEX, uint32_t(round(double(operand)))});
+													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 												}
 												write(VOID);
 												// Set tmp to the new value
@@ -3345,17 +3343,17 @@ using namespace std;
 												write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 												write(idx);
 											} else /*numeric*/ {
-												write({ARRAY_INDEX, uint32_t(round(double(operand)))});
+												write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 											}
 											write(dst);
 											write(ref);
 											write(VOID);
 										} else if (operand == Word::Funcname || operand == Word::Name) {
 											// Trailing function call statement
-											vector<ByteCode> args {};
+											std::vector<ByteCode> args {};
 											args.push_back(dst);
 											validate(readWord() == Word::ExpressionBegin);
-											while (nextWordIndex < line.words.size()) {
+											while (nextWordIndex < (int)line.words.size()) {
 												int argEnd = GetArgEnd(line.words, nextWordIndex);
 												if (argEnd == -1) {
 													break;
@@ -3381,9 +3379,9 @@ using namespace std;
 							}break;
 							case Word::Funcname: {
 								// Function call
-								vector<ByteCode> args {};
+								std::vector<ByteCode> args {};
 								validate(readWord() == Word::ExpressionBegin);
-								while (nextWordIndex < line.words.size()) {
+								while (nextWordIndex < (int)line.words.size()) {
 									int argEnd = GetArgEnd(line.words, nextWordIndex);
 									if (argEnd == -1) {
 										break;
@@ -3399,7 +3397,7 @@ using namespace std;
 							case Word::Name: {
 								// var
 								if (firstWord == "var") {
-									string name = readWord(Word::Varname);
+									std::string name = readWord(Word::Varname);
 									Word op = readWord(Word::AssignmentOperatorGroup);
 									validate(op == "=");
 									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
@@ -3415,11 +3413,11 @@ using namespace std;
 								// array
 								else if (firstWord == "array") {
 									// For now, the only possible assignment for an array is = another array. This will resize the array and copy all elements.
-									string name = readWord(Word::Varname);
+									std::string name = readWord(Word::Varname);
 									Word op = readWord();
 									if (op == "=") {
 										ByteCode ref = getVar(readWord(Word::Varname));
-										validate(nextWordIndex == line.words.size());
+										validate(nextWordIndex == (int)line.words.size());
 										ByteCode var = declareVar(name, GetRamVarType(ref.type));
 										validate(IsArray(ref));
 										write(SET);
@@ -3428,8 +3426,8 @@ using namespace std;
 										write(VOID);
 									} else {
 										validate(op == Word::CastOperator);
-										string type = readWord(Word::Name);
-										validate(nextWordIndex == line.words.size());
+										std::string type = readWord(Word::Name);
+										validate(nextWordIndex == (int)line.words.size());
 										if (type == "number") {
 											declareVar(name, RAM_ARRAY_NUMERIC);
 										} else if (type == "text") {
@@ -3441,7 +3439,7 @@ using namespace std;
 								}
 								// output
 								else if (firstWord == "output") {
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									validate(readWord() == Word::TrailOperator);
 									Word idx = readWord();
 									if (idx == Word::Numeric) {
@@ -3450,7 +3448,7 @@ using namespace std;
 										args.push_back(getVar(idx));
 									} else validate(false);
 									validate(readWord() == Word::ExpressionBegin);
-									while (nextWordIndex < line.words.size()) {
+									while (nextWordIndex < (int)line.words.size()) {
 										int argEnd = GetArgEnd(line.words, nextWordIndex);
 										if (argEnd == -1) {
 											break;
@@ -3479,7 +3477,7 @@ using namespace std;
 									} else {
 										validate(next == Word::ExpressionEnd);
 									}
-									validate(nextWordIndex == line.words.size());
+									validate(nextWordIndex == (int)line.words.size());
 									ByteCode itemRef, indexRef;
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:
@@ -3561,7 +3559,7 @@ using namespace std;
 									readWord(Word::ExpressionBegin);
 									Word index = readWord(Word::Varname);
 									validate(readWord() == Word::ExpressionEnd);
-									validate(nextWordIndex == line.words.size());
+									validate(nextWordIndex == (int)line.words.size());
 									ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
 									
 									// Set index to -1
@@ -3619,7 +3617,7 @@ using namespace std;
 									int s = stack.size();
 									while (s-- > 0) {
 										if (stack[s].type == "loop") {
-											stack[s].pointers[to_string(stack[s].pointers.size()+1)] = gotoAddr(0);
+											stack[s].pointers[std::to_string(stack[s].pointers.size()+1)] = gotoAddr(0);
 											break;
 										}
 									}
@@ -3674,9 +3672,9 @@ using namespace std;
 								}
 								else if (Device::deviceFunctionsByName.contains(firstWord.word)) {
 									// Device Function call
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									validate(readWord() == Word::ExpressionBegin);
-									while (nextWordIndex < line.words.size()) {
+									while (nextWordIndex < (int)line.words.size()) {
 										int argEnd = GetArgEnd(line.words, nextWordIndex);
 										if (argEnd == -1) {
 											break;
@@ -3703,7 +3701,7 @@ using namespace std;
 				}
 				closeCurrentFunction();
 			} catch (CompileError& e) {
-				stringstream err;
+				std::stringstream err;
 				err << e.what() << " at line " << currentLine << " in " << currentFile;
 				throw CompileError(err.str());
 			}
@@ -3716,121 +3714,121 @@ using namespace std;
 				uint32_t address = 0;
 				for (const ByteCode& code : rom_program) {
 					if (nextLine) {
-						cout << "\n" << getFunctionName({ADDR,address}) << endl;
+						std::cout << "\n" << getFunctionName({ADDR,address}) << std::endl;
 						nextLine = false;
 					}
 					++address;
 					switch (code.type) {
 						case RETURN:
-							cout << "RETURN"; if (code.value != 0) cout << "{" << code.value << "}";
+							std::cout << "RETURN"; if (code.value != 0) std::cout << "{" << code.value << "}";
 							nextLine = true;
 							break;
 						case VOID:
-							cout << "VOID"; if (code.value != 0) cout << "{" << code.value << "}";
+							std::cout << "VOID"; if (code.value != 0) std::cout << "{" << code.value << "}";
 							nextLine = true;
 							break;
 						case OP:{
-							cout << "> ";
+							std::cout << "> ";
 							char op[4];
 							op[0] = (code.value & 0x0000ff);
 							op[1] = (code.value & 0x00ff00) >> 8;
 							op[2] = (code.value & 0xff0000) >> 16;
 							op[3] = '\0';
-							cout << op;
-							cout << "  ";
+							std::cout << op;
+							std::cout << "  ";
 							}break;
 						case SOURCEFILE:{
-							cout << "FILE: " << sourceFiles[code.value] << "\n";
+							std::cout << "FILE: " << sourceFiles[code.value] << "\n";
 						}break;
 						case LINENUMBER:{
-							cout << "LINE: " << code.value << "\n";
+							std::cout << "LINE: " << code.value << "\n";
 						}break;
 						case ROM_CONST_NUMERIC:
-							cout << "ROM_CONST_NUMERIC{";
-							cout << "$" << getVarName(code);
-							try {cout << "{" << GetConstValue(code) << "}";}catch(...){}
-							cout << "} ";
+							std::cout << "ROM_CONST_NUMERIC{";
+							std::cout << "$" << getVarName(code);
+							try {std::cout << "{" << GetConstValue(code) << "}";}catch(...){}
+							std::cout << "} ";
 							break;
 						case ROM_CONST_TEXT:
-							cout << "ROM_CONST_TEXT{";
-							cout << "$" << getVarName(code);
-							try {cout << "{" << GetConstValue(code) << "}";}catch(...){}
-							cout << "} ";
+							std::cout << "ROM_CONST_TEXT{";
+							std::cout << "$" << getVarName(code);
+							try {std::cout << "{" << GetConstValue(code) << "}";}catch(...){}
+							std::cout << "} ";
 							break;
 						case STORAGE_VAR_NUMERIC:
-							cout << "STORAGE_VAR_NUMERIC{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "STORAGE_VAR_NUMERIC{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case STORAGE_VAR_TEXT:
-							cout << "STORAGE_VAR_TEXT{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "STORAGE_VAR_TEXT{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case STORAGE_ARRAY_NUMERIC:
-							cout << "STORAGE_ARRAY_NUMERIC{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "STORAGE_ARRAY_NUMERIC{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case STORAGE_ARRAY_TEXT:
-							cout << "STORAGE_ARRAY_TEXT{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "STORAGE_ARRAY_TEXT{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case RAM_VAR_NUMERIC:
-							cout << "RAM_VAR_NUMERIC{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "RAM_VAR_NUMERIC{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case RAM_VAR_TEXT:
-							cout << "RAM_VAR_TEXT{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "RAM_VAR_TEXT{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case RAM_ARRAY_NUMERIC:
-							cout << "RAM_ARRAY_NUMERIC{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "RAM_ARRAY_NUMERIC{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case RAM_ARRAY_TEXT:
-							cout << "RAM_ARRAY_TEXT{";
-							cout << "$" << getVarName(code);
-							cout << "} ";
+							std::cout << "RAM_ARRAY_TEXT{";
+							std::cout << "$" << getVarName(code);
+							std::cout << "} ";
 							break;
 						case ARRAY_INDEX:
-							cout << "ARRAY_INDEX{" << code.value << "} ";
+							std::cout << "ARRAY_INDEX{" << code.value << "} ";
 							break;
 						case DEVICE_FUNCTION_INDEX:
-							cout << "DEVICE_FUNCTION_INDEX{" << code.value << "} ";
+							std::cout << "DEVICE_FUNCTION_INDEX{" << code.value << "} ";
 							break;
 						case INTEGER:
-							cout << "INTEGER{" << code.value << "} ";
+							std::cout << "INTEGER{" << code.value << "} ";
 							break;
 						case ADDR:
-							cout << "ADDR{" << getFunctionName(code) << "} ";
+							std::cout << "ADDR{" << getFunctionName(code) << "} ";
 							break;
 						default:
 							if (code.type >= RAM_OBJECT && Device::objectNamesById.contains(code.type & (RAM_OBJECT-1))) {
-								cout << "RAM_OBJECT:" << Device::objectNamesById.at(code.type & (RAM_OBJECT-1)) << "{";
-								cout << "$" << getVarName(code);
-								cout << "} ";
+								std::cout << "RAM_OBJECT:" << Device::objectNamesById.at(code.type & (RAM_OBJECT-1)) << "{";
+								std::cout << "$" << getVarName(code);
+								std::cout << "} ";
 							} else {
-								cout << "UNKNOWN{" << code.value << "} ";
+								std::cout << "UNKNOWN{" << code.value << "} ";
 							}
 					}
 				}
-				cout << endl;
+				std::cout << std::endl;
 			}
 		}
 
 		// From ByteCode stream
-		explicit Assembly(istream& s) {
-			assert(XC_APP_NAME != "");
+		explicit Assembly(std::istream& s) {
+			assert(std::string(XC_APP_NAME) != "");
 			assert(XC_APP_VERSION != 0);
 			Read(s);
 		}
 		
-		void Write(ostream& s) {
+		void Write(std::ostream& s) {
 			{// Write Header
 				// Write assembly file info
 				s << parserFiletype << ' ' << parserVersionMajor << ' ' << parserVersionMinor << ' ' << XC_APP_NAME << ' ' << XC_APP_VERSION << '\n';
@@ -3896,9 +3894,9 @@ using namespace std;
 		}
 
 	private:
-		void Read(istream& s) {
-			string filetype;
-			string appName;
+		void Read(std::istream& s) {
+			std::string filetype;
+			std::string appName;
 			uint32_t versionMajor;
 			uint32_t versionMinor;
 			uint32_t appVersion;
@@ -3913,15 +3911,15 @@ using namespace std;
 			{// Read Header
 				// Read assembly file info
 				s >> filetype;
-				if (filetype != parserFiletype) throw runtime_error("Bad XenonCode assembly");
+				if (filetype != parserFiletype) throw std::runtime_error("Bad XenonCode assembly");
 				s >> versionMajor;
-				if (versionMajor != parserVersionMajor) throw runtime_error("This XenonCode file version is incompatible with this interpreter");
+				if (versionMajor != parserVersionMajor) throw std::runtime_error("This XenonCode file version is incompatible with this interpreter");
 				s >> versionMinor;
-				if (versionMinor > parserVersionMinor) throw runtime_error("This XenonCode file version is more recent than this interpreter");
+				if (versionMinor > parserVersionMinor) throw std::runtime_error("This XenonCode file version is more recent than this interpreter");
 				s >> appName;
-				if (appName != XC_APP_NAME) throw runtime_error("This XenonCode assembly is incompatible with this application");
+				if (appName != XC_APP_NAME) throw std::runtime_error("This XenonCode assembly is incompatible with this application");
 				s >> appVersion;
-				if (appVersion > XC_APP_VERSION) throw runtime_error("This XenonCode file version is more recent than this application");
+				if (appVersion > XC_APP_VERSION) throw std::runtime_error("This XenonCode file version is more recent than this application");
 				
 				// Read some sizes
 				s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
@@ -3949,21 +3947,21 @@ using namespace std;
 
 				// Read sourceFile references for debug
 				for (size_t i = 0; i < sourceFilesSize; ++i) {
-					string f;
+					std::string f;
 					s >> f;
 					sourceFiles.push_back(f);
 				}
 
 				// Read memory references
 				for (size_t i = 0; i < storageRefsSize; ++i) {
-					string name;
+					std::string name;
 					s >> name;
 					storageRefs.push_back(name);
 				}
 
 				// Read function references
 				for (size_t i = 0; i < functionRefsSize; ++i) {
-					string name;
+					std::string name;
 					uint32_t address;
 					s >> name >> address;
 					functionRefs.emplace(name, address);
@@ -4026,19 +4024,19 @@ using namespace std;
 
 	class Computer {
 		// Data
-		string directory;
+		std::string directory;
 		Assembly* assembly = nullptr;
-		vector<double> ram_numeric {};
-		vector<string> ram_text {};
-		vector<vector<double>> ram_numeric_arrays {};
-		vector<vector<string>> ram_text_arrays {};
-		vector<uint64_t> ram_objects {};
-		unordered_map<string, vector<string>> storageCache {};
+		std::vector<double> ram_numeric {};
+		std::vector<std::string> ram_text {};
+		std::vector<std::vector<double>> ram_numeric_arrays {};
+		std::vector<std::vector<std::string>> ram_text_arrays {};
+		std::vector<uint64_t> ram_objects {};
+		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
 		
 		// State
 		bool storageDirty = false;
 		uint64_t currentCycleInstructions = 0;
-		vector<double> timersLastRun {};
+		std::vector<double> timersLastRun {};
 		
 	public:
 		struct Capability {
@@ -4055,12 +4053,12 @@ using namespace std;
 			}
 		}
 		
-		bool LoadProgram(const string& directory) {
-			this->directory = directory;
+		bool LoadProgram(const std::string& directory_) {
+			directory = directory_;
 			
 			{// Load Assembly
 				if (assembly) delete assembly;
-				ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE};
+				std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE};
 				assembly = new Assembly(file);
 			}
 			
@@ -4099,10 +4097,10 @@ using namespace std;
 			for (const auto& name : assembly->storageRefs) {
 				auto& storage = storageCache[name];
 				storage.clear();
-				ifstream file{directory + "/storage/" + name};
+				std::ifstream file{directory + "/storage/" + name};
 				char value[XC_MAX_TEXT_LENGTH+1];
 				while (file.getline(value, XC_MAX_TEXT_LENGTH, '\0')) {
-					storage.emplace_back(string(value));
+					storage.emplace_back(std::string(value));
 				}
 			}
 			
@@ -4115,12 +4113,12 @@ using namespace std;
 		
 		void SaveStorage() {
 			if (storageDirty) {
-				string storagePath = directory + "/storage/";
-				filesystem::create_directories(storagePath);
+				std::string storagePath = directory + "/storage/";
+				std::filesystem::create_directories(storagePath);
 				for (const auto& name : assembly->storageRefs) {
 					const auto& storage = storageCache[name];
-					ofstream file{storagePath + name};
-					for (const string& value : storage) {
+					std::ofstream file{storagePath + name};
+					for (const std::string& value : storage) {
 						file << value << '\0';
 					}
 				}
@@ -4129,16 +4127,16 @@ using namespace std;
 		}
 		
 		void ClearStorage() {
-			string storagePath = directory + "/storage/";
-			filesystem::remove_all(storagePath);
+			std::string storagePath = directory + "/storage/";
+			std::filesystem::remove_all(storagePath);
 		}
 		
 	private:
-		vector<string>& GetStorage(ByteCode arr) {
+		std::vector<std::string>& GetStorage(ByteCode arr) {
 			if ((arr.type != STORAGE_ARRAY_NUMERIC && arr.type != STORAGE_ARRAY_TEXT && arr.type != STORAGE_VAR_NUMERIC && arr.type != STORAGE_VAR_TEXT) || arr.value >= assembly->storageRefs.size()) {
 				throw RuntimeError("Invalid storage reference");
 			}
-			string name = assembly->storageRefs[arr.value];
+			std::string name = assembly->storageRefs[arr.value];
 			if (!storageCache.contains(name)) {
 				throw RuntimeError("Invalid storage reference");
 			}
@@ -4148,12 +4146,12 @@ using namespace std;
 			return storageCache.at(name);
 		}
 		
-		vector<double>& GetNumericArray(ByteCode arr) {
+		std::vector<double>& GetNumericArray(ByteCode arr) {
 			if (arr.type != RAM_ARRAY_NUMERIC || arr.value >= ram_numeric_arrays.size()) throw RuntimeError("Invalid array reference");
 			return ram_numeric_arrays[arr.value];
 		}
 		
-		vector<string>& GetTextArray(ByteCode arr) {
+		std::vector<std::string>& GetTextArray(ByteCode arr) {
 			if (arr.type != RAM_ARRAY_TEXT || arr.value >= ram_text_arrays.size()) throw RuntimeError("Invalid array reference");
 			return ram_text_arrays[arr.value];
 		}
@@ -4170,7 +4168,7 @@ using namespace std;
 			}
 			storageDirty = true;
 		}
-		void StorageSet(const string& value, ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+		void StorageSet(const std::string& value, ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			auto& storage = GetStorage(arr);
 			if (arrIndex == ARRAY_INDEX_NONE) {
 				storage[0] = value;
@@ -4194,7 +4192,7 @@ using namespace std;
 				return storage[arrIndex]==""? 0.0 : stod(storage[arrIndex]);
 			}
 		}
-		const string& StorageGetText(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+		const std::string& StorageGetText(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			auto& storage = GetStorage(arr);
 			if (arrIndex == ARRAY_INDEX_NONE) {
 				return storage[0];
@@ -4224,7 +4222,7 @@ using namespace std;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
-		void MemSet(const string& value, ByteCode dst, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+		void MemSet(const std::string& value, ByteCode dst, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			if (value.length() > XC_MAX_TEXT_LENGTH) {
 				throw RuntimeError("Text too large");
 			}
@@ -4287,7 +4285,7 @@ using namespace std;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
-		const string& MemGetText(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+		const std::string& MemGetText(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			switch (ref.type) {
 				case ROM_CONST_TEXT: {
 					if (ref.value >= assembly->rom_textConstants.size()) {
@@ -4313,7 +4311,7 @@ using namespace std;
 					return arr[arrIndex];
 				}break;
 				case VOID: {
-					static const string empty = "";
+					static const std::string empty = "";
 					return empty;
 				}
 				default: throw RuntimeError("Invalid memory reference");
@@ -4327,13 +4325,13 @@ using namespace std;
 			return {Var::Type(Var::Object | (ref & (RAM_OBJECT-1))), ram_objects[ref.value]};
 		}
 		
-		void RunCode(const vector<ByteCode>& program, uint32_t index = 0);
+		void RunCode(const std::vector<ByteCode>& program, uint32_t index = 0);
 		
 	public:
 		bool HasTick() {
 			return assembly && assembly->functionRefs.contains("system.tick");
 		}
-		bool HasEntryPoint(const string& name) {
+		bool HasEntryPoint(const std::string& name) {
 			return assembly && assembly->functionRefs.contains("system." + name);
 		}
 		bool HasTimers() {
@@ -4379,7 +4377,7 @@ using namespace std;
 			}
 		}
 		
-		void RunInput(uint32_t port, const vector<Var>& args) {
+		void RunInput(uint32_t port, const std::vector<Var>& args) {
 			if (assembly->inputs.contains(port)) {
 				auto& input = assembly->inputs[port];
 				
@@ -4403,7 +4401,7 @@ using namespace std;
 			}
 		}
 		
-		void RunEntryPoint(const string& name) {
+		void RunEntryPoint(const std::string& name) {
 			if (HasEntryPoint(name)) {
 				RunCode(assembly->rom_program, assembly->functionRefs.at("system." + name));
 			}
@@ -4419,19 +4417,19 @@ using namespace std;
 
 	namespace XenonCode {
 		
-		vector<string> Implementation::entryPoints {};
-		unordered_map<string, ObjectType> Device::objectTypesByName {};
-		unordered_map<uint8_t, string> Device::objectNamesById {};
-		unordered_map<string, Device::FunctionInfo> Device::deviceFunctionsByName {};
-		unordered_map<uint32_t/*24 least significant bits only*/, string> Device::deviceFunctionNamesById {};
-		unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
-		OutputFunction Device::outputFunction = [](uint32_t, const vector<Var>&){};
+		std::vector<std::string> Implementation::entryPoints {};
+		std::unordered_map<std::string, ObjectType> Device::objectTypesByName {};
+		std::unordered_map<uint8_t, std::string> Device::objectNamesById {};
+		std::unordered_map<std::string, Device::FunctionInfo> Device::deviceFunctionsByName {};
+		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
+		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
+		OutputFunction Device::outputFunction = [](uint32_t, const std::vector<Var>&){};
 	
-		void Computer::RunCode(const vector<ByteCode>& program, uint32_t index) {
+		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
 			if (program.size() <= index) return;
 			
 			// Find current file and line for debug
-			string currentFile = "";
+			std::string currentFile = "";
 			uint32_t currentLine = 0;
 			for (int32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
 				if (currentLine == 0 && program[tmpIndex].type == LINENUMBER) {
@@ -4481,20 +4479,20 @@ using namespace std;
 							switch (code.rawValue) {
 								case SET: {// [ARRAY_INDEX ifindexnone[REF_NUM]] REF_DST [REF_VALUE]orZero
 									ByteCode dst = nextCode();
-									uint32_t index = ARRAY_INDEX_NONE;
+									uint32_t arr_index = ARRAY_INDEX_NONE;
 									if (dst.type == ARRAY_INDEX) {
-										index = dst.value;
-										if (index == ARRAY_INDEX_NONE) {
-											index = uint32_t(MemGetNumeric(nextCode()));
+										arr_index = dst.value;
+										if (arr_index == ARRAY_INDEX_NONE) {
+											arr_index = uint32_t(MemGetNumeric(nextCode()));
 										}
 										dst = nextCode();
 									}
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) || (index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_NUMERIC || dst.type == RAM_ARRAY_NUMERIC))) {
-										MemSet(MemGetNumeric(val), dst, index);
-									} else if (IsText(dst) || (index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_TEXT || dst.type == RAM_ARRAY_TEXT))) {
-										MemSet(MemGetText(val), dst, index);
-									} else if (IsObject(dst) && IsObject(val) && index == ARRAY_INDEX_NONE) {
+									if (IsNumeric(dst) || (arr_index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_NUMERIC || dst.type == RAM_ARRAY_NUMERIC))) {
+										MemSet(MemGetNumeric(val), dst, arr_index);
+									} else if (IsText(dst) || (arr_index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_TEXT || dst.type == RAM_ARRAY_TEXT))) {
+										MemSet(MemGetText(val), dst, arr_index);
+									} else if (IsObject(dst) && IsObject(val) && arr_index == ARRAY_INDEX_NONE) {
 										MemSetObject(MemGetObject(val).addrValue, dst); // Reference assignment for objects
 									} else {
 										throw RuntimeError("Invalid operation");
@@ -4541,7 +4539,7 @@ using namespace std;
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
 										double operand = MemGetNumeric(b);
 										if (operand == 0) throw RuntimeError("Division by zero");
-										MemSet(double(int64_t(round(MemGetNumeric(a))) % int64_t(round(operand))), dst);
+										MemSet(double(int64_t(std::round(MemGetNumeric(a))) % int64_t(std::round(operand))), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case POW: {
@@ -4549,7 +4547,7 @@ using namespace std;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
+										MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case CCT: {
@@ -4635,13 +4633,13 @@ using namespace std;
 								case INC: {// REF_NUM
 									ByteCode ref = nextCode();
 									if (IsNumeric(ref)) {
-										MemSet(round(MemGetNumeric(ref)) + 1.0, ref);
+										MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case DEC: {
 									ByteCode ref = nextCode();
 									if (IsNumeric(ref)) {
-										MemSet(round(MemGetNumeric(ref)) - 1.0, ref);
+										MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case NOT: {// REF_DST REF_VAL
@@ -4657,70 +4655,70 @@ using namespace std;
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(floor(MemGetNumeric(val)), dst);
+										MemSet(std::floor(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case CIL: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(ceil(MemGetNumeric(val)), dst);
+										MemSet(std::ceil(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case RND: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(round(MemGetNumeric(val)), dst);
+										MemSet(std::round(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case SIN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(sin(MemGetNumeric(val)), dst);
+										MemSet(std::sin(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case COS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(cos(MemGetNumeric(val)), dst);
+										MemSet(std::cos(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case TAN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(tan(MemGetNumeric(val)), dst);
+										MemSet(std::tan(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case ASI: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(asin(MemGetNumeric(val)), dst);
+										MemSet(std::asin(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case ACO: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(acos(MemGetNumeric(val)), dst);
+										MemSet(std::acos(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case ATA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(atan(MemGetNumeric(val)), dst);
+										MemSet(std::atan(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case ABS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(abs(MemGetNumeric(val)), dst);
+										MemSet(std::abs(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case FRA: {
@@ -4728,14 +4726,14 @@ using namespace std;
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
 										double intpart;
-										MemSet(modf(MemGetNumeric(val), &intpart), dst);
+										MemSet(std::modf(MemGetNumeric(val), &intpart), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case SQR: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(sqrt(MemGetNumeric(val)), dst);
+										MemSet(std::sqrt(MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case SIG: {
@@ -4744,7 +4742,7 @@ using namespace std;
 									if (IsNumeric(dst) && IsNumeric(val)) {
 										double num = MemGetNumeric(val);
 										if (num > 0.0) num = 1.0;
-										else if (num < 0.0) num == -1.0;
+										else if (num < 0.0) num = -1.0;
 										MemSet(num, dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -4755,7 +4753,7 @@ using namespace std;
 									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(base)) {
 										double b = MemGetNumeric(base);
 										if (b == 0) b = 10.0;
-										MemSet(log(MemGetNumeric(val)) / log(b), dst);
+										MemSet(std::log(MemGetNumeric(val)) / std::log(b), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
@@ -4764,7 +4762,7 @@ using namespace std;
 									ByteCode min = nextCode();
 									ByteCode max = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(min) && IsNumeric(max)) {
-										MemSet(clamp(MemGetNumeric(val), MemGetNumeric(min), MemGetNumeric(max)), dst);
+										MemSet(std::clamp(MemGetNumeric(val), MemGetNumeric(min), MemGetNumeric(max)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
@@ -4796,14 +4794,14 @@ using namespace std;
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(t1) && IsNumeric(t2)) {
-										MemSet(lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+										MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case NUM: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
-										string str = MemGetText(val);
+										std::string str = MemGetText(val);
 										MemSet(str==""? 0.0 : stod(str), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -4811,7 +4809,7 @@ using namespace std;
 									//TODO: support C++20 format specifiers in the future: https://en.cppreference.com/w/cpp/utility/format/formatter#Standard_format_specification
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
@@ -4820,14 +4818,14 @@ using namespace std;
 										if (IsNumeric(src)) {
 											MemSet(ToString(MemGetNumeric(src)), dst);
 										} else {
-											string txt = MemGetText(src);
+											std::string txt = MemGetText(src);
 											for (ByteCode c : args) {
 												size_t p1 = txt.find('{');
 												size_t p2 = txt.find('}');
-												if (p1 == string::npos || p2 == string::npos || p1 > p2) break;
-												string format = txt.substr(p1+1, p2-p1-1);
-												string before = txt.substr(0, p1);
-												string after = txt.substr(p2+1, txt.length()-p2-1);
+												if (p1 == std::string::npos || p2 == std::string::npos || p1 > p2) break;
+												std::string format = txt.substr(p1+1, p2-p1-1);
+												std::string before = txt.substr(0, p1);
+												std::string after = txt.substr(p2+1, txt.length()-p2-1);
 												// {}
 												if (format == "") {
 													txt = before + (IsNumeric(c)? ToString(MemGetNumeric(c)) : MemGetText(c)) + after;
@@ -4837,13 +4835,13 @@ using namespace std;
 													if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 													if (format.length() == 1) {
 														// rounded to int
-														txt = before + ToString(int64_t(round(MemGetNumeric(c)))) + after;
+														txt = before + ToString(int64_t(std::round(MemGetNumeric(c)))) + after;
 													} else {
-														stringstream str;
+														std::stringstream str;
 														size_t ePos = format.find('e');
-														bool e = ePos != string::npos;
+														bool e = ePos != std::string::npos;
 														size_t dotPos = format.find('.');
-														bool hasDecimal = dotPos != string::npos;
+														bool hasDecimal = dotPos != std::string::npos;
 														int beforeDecimal = hasDecimal? dotPos : (format.length() - e);
 														int afterDecimal = hasDecimal? (format.length() - dotPos - 1) : 0;
 														if (e && hasDecimal) {
@@ -4855,10 +4853,10 @@ using namespace std;
 																--beforeDecimal;
 															}
 														}
-														str << setfill('0');
-														if (!e) str << setw(beforeDecimal + hasDecimal + afterDecimal);
-														str << setprecision(afterDecimal);
-														str << (e? scientific : fixed);
+														str << std::setfill('0');
+														if (!e) str << std::setw(beforeDecimal + hasDecimal + afterDecimal);
+														str << std::setprecision(afterDecimal);
+														str << (e? std::scientific : std::fixed);
 														str << MemGetNumeric(c);
 														txt = before + str.str() + after;
 													}
@@ -4877,7 +4875,7 @@ using namespace std;
 									if (Device::deviceFunctionsByName.at(Device::deviceFunctionNamesById.at(dev.value)).returnType != "") {
 										dst = nextCode();
 									}
-									vector<Var> args {};
+									std::vector<Var> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
 										else if (IsText(c)) args.emplace_back(MemGetText(c));
@@ -4904,16 +4902,16 @@ using namespace std;
 									if (!IsNumeric(io)) {
 										throw RuntimeError("Invalid output index");
 									}
-									vector<Var> args {};
+									std::vector<Var> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
 										else args.emplace_back(MemGetText(c));
 									}
-									Device::outputFunction(MemGetNumeric(io), args);
+									Device::outputFunction((uint32_t)MemGetNumeric(io), args);
 								}break;
 								case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
@@ -4930,7 +4928,7 @@ using namespace std;
 											array.reserve(args.size());
 											for (const auto& c : args) {
 												if (IsNumeric(c)) {
-													array.push_back(to_string(MemGetNumeric(c)));
+													array.push_back(std::to_string(MemGetNumeric(c)));
 												} else {
 													array.push_back(MemGetText(c));
 												}
@@ -5002,12 +5000,12 @@ using namespace std;
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											ipcCheck(array.size());
-											vector<double> values {};
+											std::vector<double> values {};
 											values.reserve(array.size());
 											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
 											sort(values.begin(), values.end());
 											array.clear();
-											for (const auto& val : values) array.push_back(to_string(val));
+											for (const auto& val : values) array.push_back(std::to_string(val));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
@@ -5035,44 +5033,44 @@ using namespace std;
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											ipcCheck(array.size());
-											vector<double> values {};
+											std::vector<double> values {};
 											values.reserve(array.size());
 											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
-											sort(values.begin(), values.end(), greater<double>());
+											sort(values.begin(), values.end(), std::greater<double>());
 											array.clear();
-											for (const auto& val : values) array.push_back(to_string(val));
+											for (const auto& val : values) array.push_back(std::to_string(val));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(arr);
 											ipcCheck(array.size());
-											sort(array.begin(), array.end(), greater<string>());
+											sort(array.begin(), array.end(), std::greater<std::string>());
 											storageDirty = true;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
 											ipcCheck(array.size());
-											sort(array.begin(), array.end(), greater<double>());
+											sort(array.begin(), array.end(), std::greater<double>());
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
 											ipcCheck(array.size());
-											sort(array.begin(), array.end(), greater<string>());
+											sort(array.begin(), array.end(), std::greater<std::string>());
 										}break;
 									}
 								}break;
 								case INS: {// REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
-									int32_t index = MemGetNumeric(idx);
-									if (index < 0) throw RuntimeError("Invalid array index");
+									int32_t arr_index = (int)std::round(MemGetNumeric(idx));
+									if (arr_index < 0) throw RuntimeError("Invalid array index");
 									ipcCheck(args.size());
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:
@@ -5081,17 +5079,17 @@ using namespace std;
 											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											vector<string> values{};
+											std::vector<std::string> values{};
 											values.reserve(args.size());
 											for (const auto& c : args) {
 												if (IsNumeric(c)) {
-													values.push_back(to_string(MemGetNumeric(c)));
+													values.push_back(std::to_string(MemGetNumeric(c)));
 												} else {
 													values.push_back(MemGetText(c));
 												}
 											}
-											if (index >= array.size()) throw RuntimeError("Invalid array index");
-											array.insert(array.begin()+index, values.begin(), values.end());
+											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											array.insert(array.begin()+arr_index, values.begin(), values.end());
 											storageDirty = true;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
@@ -5099,22 +5097,22 @@ using namespace std;
 											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											vector<double> values{};
+											std::vector<double> values{};
 											values.reserve(args.size());
 											for (const auto& c : args) values.push_back(MemGetNumeric(c));
-											if (index >= array.size()) throw RuntimeError("Invalid array index");
-											array.insert(array.begin()+index, values.begin(), values.end());
+											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											array.insert(array.begin()+arr_index, values.begin(), values.end());
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
 											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											vector<string> values{};
+											std::vector<std::string> values{};
 											values.reserve(args.size());
 											for (const auto& c : args) values.push_back(MemGetText(c));
-											if (index >= array.size()) throw RuntimeError("Invalid array index");
-											array.insert(array.begin()+index, values.begin(), values.end());
+											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											array.insert(array.begin()+arr_index, values.begin(), values.end());
 										}break;
 									}
 								}break;
@@ -5124,40 +5122,40 @@ using namespace std;
 									ByteCode idx2 = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
-									int32_t index = MemGetNumeric(idx);
-									int32_t index2 = idx2.type != VOID? MemGetNumeric(idx2) : index;
-									if (index < 0 || index2 < 0) throw RuntimeError("Invalid array index");
+									int32_t arr_index = (int)std::round(MemGetNumeric(idx));
+									int32_t index2 = idx2.type != VOID? (int)std::round(MemGetNumeric(idx2)) : arr_index;
+									if (arr_index < 0 || index2 < 0) throw RuntimeError("Invalid array index");
 									++index2;
-									if (index2 <= index) throw RuntimeError("Invalid array index");
+									if (index2 <= arr_index) throw RuntimeError("Invalid array index");
 									ipcCheck();
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(arr);
-											if (index2 > array.size()) throw RuntimeError("Invalid array index");
-											if (index2 == index+1) {
-												array.erase(array.begin()+index);
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 == arr_index+1) {
+												array.erase(array.begin()+arr_index);
 											} else {
-												array.erase(array.begin()+index, array.begin()+index2);
+												array.erase(array.begin()+arr_index, array.begin()+index2);
 											}
 											storageDirty = true;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
-											if (index2 > array.size()) throw RuntimeError("Invalid array index");
-											if (index2 == index+1) {
-												array.erase(array.begin()+index);
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 == arr_index+1) {
+												array.erase(array.begin()+arr_index);
 											} else {
-												array.erase(array.begin()+index, array.begin()+index2);
+												array.erase(array.begin()+arr_index, array.begin()+index2);
 											}
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
-											if (index2 > array.size()) throw RuntimeError("Invalid array index");
-											if (index2 == index+1) {
-												array.erase(array.begin()+index);
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 == arr_index+1) {
+												array.erase(array.begin()+arr_index);
 											} else {
-												array.erase(array.begin()+index, array.begin()+index2);
+												array.erase(array.begin()+arr_index, array.begin()+index2);
 											}
 										}break;
 									}
@@ -5168,7 +5166,7 @@ using namespace std;
 									ByteCode val = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									if (!IsNumeric(qty)) throw RuntimeError("Invalid qty");
-									size_t count = MemGetNumeric(qty);
+									size_t count = (size_t)std::round(MemGetNumeric(qty));
 									if (count > XC_MAX_ARRAY_SIZE) {
 										throw RuntimeError("Maximum array size exceeded");
 									}
@@ -5177,7 +5175,7 @@ using namespace std;
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											array.clear();
-											array.resize(count, to_string(MemGetNumeric(val)));
+											array.resize(count, std::to_string(MemGetNumeric(val)));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
@@ -5189,7 +5187,7 @@ using namespace std;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
 											array.clear();
-											array.resize(count, MemGetNumeric(val));
+											array.resize(count, std::round(MemGetNumeric(val)));
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
@@ -5231,7 +5229,7 @@ using namespace std;
 										switch (ref.type) {
 											case STORAGE_ARRAY_NUMERIC:{
 												auto& array = GetStorage(ref);
-												string last = array.back();
+												std::string last = array.back();
 												MemSet(last==""? 0.0 : stod(last), dst);
 											}break;
 											case STORAGE_ARRAY_TEXT:{
@@ -5248,19 +5246,19 @@ using namespace std;
 											}break;
 										}
 									} else {
-										MemSet(string(1, MemGetText(ref).back()), dst);
+										MemSet(std::string(1, MemGetText(ref).back()), dst);
 									}
 								}break;
 								case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
 									ByteCode dst = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
 									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
-									double min = numeric_limits<double>::max();
+									double min = std::numeric_limits<double>::max();
 									if (IsArray(arr)) {
 										switch (arr.type) {
 											case STORAGE_ARRAY_NUMERIC:{
@@ -5297,14 +5295,14 @@ using namespace std;
 								}break;
 								case MAX: {
 									ByteCode dst = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
 									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
-									double max = numeric_limits<double>::min();
+									double max = std::numeric_limits<double>::min();
 									if (IsArray(arr)) {
 										switch (arr.type) {
 											case STORAGE_ARRAY_NUMERIC:{
@@ -5341,7 +5339,7 @@ using namespace std;
 								}break;
 								case AVG: {
 									ByteCode dst = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
@@ -5388,7 +5386,7 @@ using namespace std;
 								}break;
 								case SUM: {
 									ByteCode dst = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
@@ -5429,7 +5427,7 @@ using namespace std;
 								}break;
 								case MED: {
 									ByteCode dst = nextCode();
-									vector<ByteCode> args {};
+									std::vector<ByteCode> args {};
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
@@ -5443,7 +5441,7 @@ using namespace std;
 												auto& array = GetStorage(arr);
 												ipcCheck(array.size());
 												if (array.size() > 0) {
-													string val = array[array.size()/2];
+													std::string val = array[array.size()/2];
 													med = val==""? 0.0 : stod(val);
 												}
 											}break;
@@ -5469,9 +5467,9 @@ using namespace std;
 									ByteCode src = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									string text = MemGetText(src);
-									int start = MemGetNumeric(a);
-									int len = b.type != VOID? MemGetNumeric(b) : (text.length()-start);
+									std::string text = MemGetText(src);
+									int start = (int)std::round(MemGetNumeric(a));
+									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(text.length()-start);
 									if (!IsText(dst)) throw RuntimeError("Invalid operation");
 									MemSet(text.substr(start, len), dst);
 								}break;
@@ -5480,20 +5478,20 @@ using namespace std;
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
 									if (idx.type != ARRAY_INDEX) throw RuntimeError("Invalid array index type");
-									uint32_t index = idx.value;
-									if (index == ARRAY_INDEX_NONE) {
+									uint32_t arr_index = idx.value;
+									if (arr_index == ARRAY_INDEX_NONE) {
 										idx = nextCode();
 										if (!IsNumeric(idx)) throw RuntimeError("Invalid array index type");
-										index = MemGetNumeric(idx);
+										arr_index = (int)std::round(MemGetNumeric(idx));
 									}
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:
 										case RAM_ARRAY_NUMERIC:
-											MemSet(MemGetNumeric(arr, index), dst);
+											MemSet(MemGetNumeric(arr, arr_index), dst);
 										break;
 										case STORAGE_ARRAY_TEXT:
 										case RAM_ARRAY_TEXT:
-											MemSet(MemGetText(arr, index), dst);
+											MemSet(MemGetText(arr, arr_index), dst);
 										break;
 										default: throw RuntimeError("Not an array");
 									}
@@ -5532,10 +5530,10 @@ using namespace std;
 					++index;
 				}
 			} catch (RuntimeError& err) {
-				stringstream str;
+				std::stringstream str;
 				str << err.what();
 				if (currentFile != "" && currentLine) {
-					str << " on bytecode " << index << " at line " << currentLine << " in " << currentFile << endl;
+					str << " on bytecode " << index << " at line " << currentLine << " in " << currentFile << std::endl;
 				}
 				throw RuntimeError(str.str());
 			}
