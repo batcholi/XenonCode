@@ -15,7 +15,7 @@
 #include <filesystem>
 #include <functional>
 
-// Microsoft's C++ not respecting the standard again...
+#pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
 #endif
@@ -214,6 +214,7 @@
 #ifdef CND
 	#undef CND
 #endif
+#pragma endregion
 
 namespace XenonCode {
 
@@ -1948,6 +1949,7 @@ const int VERSION_PATCH = 0;
 	struct Device {
 		static std::unordered_map<std::string, ObjectType> objectTypesByName;
 		static std::unordered_map<uint8_t, std::string> objectNamesById;
+		static std::vector<std::string> objectTypesList;
 
 		struct FunctionInfo {
 			struct Arg {
@@ -1959,6 +1961,7 @@ const int VERSION_PATCH = 0;
 			std::string name = "";
 			std::vector<Arg> args {};
 			std::string returnType = "";
+			std::string key = "";
 			
 			FunctionInfo(uint32_t id_, const std::string& line) : id(id_) {
 				std::vector<Word> words;
@@ -1978,13 +1981,14 @@ const int VERSION_PATCH = 0;
 				assert(words.size() > 0);
 				assert(scope == 0);
 				
-				name = readWord(Word::Name).word;
+				key = name = readWord(Word::Name).word;
 				
 				if (words.size() == 1) return;
 				
 				auto nextWord = readWord();
 				if (nextWord == Word::NamespaceOperator) {
-					name += "::" + readWord().word;
+					key = readWord().word;
+					name += "::" + key;
 					nextWord = readWord();
 				}
 				
@@ -2024,6 +2028,7 @@ const int VERSION_PATCH = 0;
 		static std::unordered_map<std::string, Device::FunctionInfo> deviceFunctionsByName;
 		static std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> deviceFunctionNamesById;
 		static std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById;
+		static std::unordered_map<uint8_t/*objectId*/, std::vector<std::string>> deviceFunctionsList;
 		
 		static OutputFunction outputFunction;
 	};
@@ -2043,6 +2048,8 @@ const int VERSION_PATCH = 0;
 		Device::deviceFunctionsByName.emplace(f.name, f);
 		Device::deviceFunctionNamesById.emplace(id, f.name);
 		Device::deviceFunctionsById.emplace(id, forward<DeviceFunction>(func));
+		Device::deviceFunctionsList[base].emplace_back(f.key);
+		assert(Device::deviceFunctionsList[base].size() == size_t(nextID[base]));
 		return Device::deviceFunctionsByName.at(f.name);
 	}
 
@@ -2053,6 +2060,8 @@ const int VERSION_PATCH = 0;
 		uint8_t id = ++nextID;
 		Device::objectTypesByName.emplace(name, ObjectType{id, name});
 		Device::objectNamesById.emplace(id, name);
+		Device::objectTypesList.emplace_back(name);
+		assert(Device::objectTypesList.size() == size_t(id));
 		for (auto&[prototype, method] : members) {
 			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](const std::vector<Var>& args) -> XenonCode::Var {
 				if (args.size() > 0) {
@@ -2261,6 +2270,22 @@ const int VERSION_PATCH = 0;
 		static inline const std::string parserFiletype = "XenonCode!";
 		static inline const uint32_t parserVersionMajor = VERSION_MAJOR;
 		static inline const uint32_t parserVersionMinor = VERSION_MINOR;
+		
+		static inline std::string GetDeviceObjectsList() {
+			std::string str{"OBJ"};
+			for (const auto& name : Device::objectTypesList) {
+				str += ' ' + name;
+			}
+			return str;
+		}
+		
+		static inline std::string GetDeviceFunctionsList(uint8_t base) {
+			std::string str{"FN"};
+			for (const auto& name : Device::deviceFunctionsList[base]) {
+				str += ' ' + name;
+			}
+			return str;
+		}
 		
 	public:
 		uint32_t varsInitSize = 0; // number of byte codes in the vars_init code (uint32_t)
@@ -4041,6 +4066,13 @@ const int VERSION_PATCH = 0;
 				// Write assembly file info
 				s << parserFiletype << ' ' << parserVersionMajor << ' ' << parserVersionMinor << ' ' << XC_APP_NAME << ' ' << XC_APP_VERSION << '\n';
 				
+				// Write device compatibility info
+				s << GetDeviceObjectsList() << '\n';
+				for (auto&[name, o] : Device::objectTypesByName) {
+					s << std::to_string(uint32_t(o.id)) << ' ' << GetDeviceFunctionsList(o.id) << '\n';
+				}
+				s << "0 " << GetDeviceFunctionsList(0) << '\n';
+				
 				// Write some sizes
 				s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << sourceFiles.size() << '\n';
 				s << rom_numericConstants.size() << ' ';
@@ -4128,6 +4160,23 @@ const int VERSION_PATCH = 0;
 				if (appName != XC_APP_NAME) throw std::runtime_error("This XenonCode assembly is incompatible with this application");
 				s >> appVersion;
 				if (appVersion > XC_APP_VERSION) throw std::runtime_error("This XenonCode file version is more recent than this application");
+				
+				// Discard the \n
+				s.get();
+				
+				// Read device compatibility info
+				std::string deviceObjectsList;
+				std::getline(s, deviceObjectsList, '\n');
+				if (!deviceObjectsList.starts_with("OBJ") || !GetDeviceObjectsList().starts_with(deviceObjectsList)) throw std::runtime_error("This XenonCode assembly is incompatible with this device (objects do not match)");
+				uint32_t objId;
+				do {
+					s >> objId;
+					s.get(); // ignore space
+					assert(objId < 128);
+					std::string deviceFunctionsList;
+					std::getline(s, deviceFunctionsList, '\n');
+					if (!deviceFunctionsList.starts_with("FN") || !GetDeviceFunctionsList((uint8_t)objId).starts_with(deviceFunctionsList)) throw std::runtime_error("This XenonCode assembly is incompatible with this device (functions do not match)");
+				} while (objId != 0);
 				
 				// Read some sizes
 				s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
@@ -4628,9 +4677,11 @@ const int VERSION_PATCH = 0;
 		std::vector<std::string> Implementation::entryPoints {};
 		std::unordered_map<std::string, ObjectType> Device::objectTypesByName {};
 		std::unordered_map<uint8_t, std::string> Device::objectNamesById {};
+		std::vector<std::string> Device::objectTypesList {};
 		std::unordered_map<std::string, Device::FunctionInfo> Device::deviceFunctionsByName {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
+		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
 		OutputFunction Device::outputFunction = [](uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
