@@ -595,14 +595,7 @@ const int VERSION_PATCH = 0;
 				// Operators
 				if (isoperator(c)) {
 					word += c;
-					// Prefixed numbers
-					if ((c == '-' || c == '+') && isdigit(s.peek())) {
-						c = s.get();
-						goto Numeric;
-					}
-					// multi char operators
-					int c2 = s.peek();
-					if (isoperator(c2) && (c2 == c || c2 == '=')) {
+					if (isoperator(s.peek())) {
 						word += s.get();
 					}
 					type = Operator;
@@ -610,7 +603,6 @@ const int VERSION_PATCH = 0;
 				}
 				// Numeric
 				if (isdigit(c)) {
-				Numeric:
 					word += c;
 					bool hasDecimal = false;
 					while (!s.eof()) {
@@ -901,7 +893,7 @@ const int VERSION_PATCH = 0;
 		};
 		
 		// Handle single-word literal expressions (also includes single variable name)
-		if (startIndex == (int)lastWord() && (words[startIndex] == Word::Numeric || words[startIndex] == Word::Text || words[startIndex] == Word::Varname)) {
+		if (startIndex == (int)lastWord() && (words[startIndex] == Word::Numeric || words[startIndex] == Word::Text || words[startIndex] == Word::Varname || words[startIndex] == Word::Name)) {
 			return true;
 		}
 		
@@ -953,7 +945,7 @@ const int VERSION_PATCH = 0;
 						// Handle function calls (and cast) within expressions
 						if (next == Word::Name || next == Word::Funcname) {
 							Word after = nextPos+1 <= (int)lastWord()? words[nextPos+1] : Word::Empty;
-							if (word != Word::CastOperator && word != Word::TrailOperator && after != Word::ExpressionBegin) {
+							if (word != Word::CastOperator && word != Word::TrailOperator && after != Word::ExpressionBegin && (next == Word::Funcname || after != Word::Empty)) {
 								return false;
 							}
 							if (after == Word::ExpressionBegin) {
@@ -993,11 +985,18 @@ const int VERSION_PATCH = 0;
 							// Prefix operators
 							if (next && next != Word::ExpressionEnd && (word == Word::AddOperatorGroup || word == Word::NotOperator)) {
 								if (word == "-") {
-									words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
-									words.insert(words.begin() + opIndex, Word::Numeric);
-									words.insert(words.begin() + opIndex, Word::ExpressionBegin);
-									opIndex += 2;
-									if (endIndex != -1) endIndex += 3;
+									if (next == Word::Numeric) {
+										words[nextPos].word = "-" + next.word;
+										words.erase(words.begin() + opIndex);
+										--opIndex;
+										if (endIndex != -1) --endIndex;
+									} else {
+										words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
+										words.insert(words.begin() + opIndex, Word::Numeric);
+										words.insert(words.begin() + opIndex, Word::ExpressionBegin);
+										opIndex += 2;
+										if (endIndex != -1) endIndex += 3;
+									}
 								} else if (word == "+") {
 									words.erase(words.begin() + opIndex);
 									--opIndex;
@@ -1056,6 +1055,15 @@ const int VERSION_PATCH = 0;
 			{Word::Name, {
 				Word::ExpressionBegin,
 				Word::ExpressionEnd,
+				Word::ConcatOperator,
+				Word::CastOperator,
+				Word::MulOperatorGroup,
+				Word::AddOperatorGroup,
+				Word::CompareOperatorGroup,
+				Word::EqualityOperatorGroup,
+				Word::AndOperator,
+				Word::OrOperator,
+				Word::CommaOperator,
 			}},
 			{Word::ExpressionBegin, {
 				Word::Numeric,

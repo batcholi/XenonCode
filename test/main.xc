@@ -51,6 +51,27 @@ function @RunUnitTests()
 	$someArray.clear()
 	$results.append($someArray.size)
 	
+	// Test 5
+	$a *= +1
+	$a *= -1
+	$a += -delta
+	if $a == -2
+		$results.append("OK")
+	else
+		$results.append("ERROR")
+	
+	// Test 6
+	if delta == 0
+		$results.append("OK")
+	else
+		$results.append("ERROR")
+	
+	// Test 7
+	if delta
+		$results.append("ERROR")
+	else
+		$results.append("OK")
+	
 init
 	output.0 ("Hello, World!")
 	
