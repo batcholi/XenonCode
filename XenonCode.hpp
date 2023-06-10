@@ -1340,7 +1340,7 @@ const int VERSION_PATCH = 0;
 				
 				// Check first word validity for this Scope
 				if (scope == 0) { // Global scope
-					if (words[0] != Word::Name || (find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0]) == end(globalScopeFirstWords) && find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0]) == end(Implementation::entryPoints))) {
+					if (words[0] != Word::Name || (find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0].word) == end(globalScopeFirstWords) && find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) == end(Implementation::entryPoints))) {
 						throw ParseError("Invalid first word", words[0], "in the global scope");
 					}
 				} else { // Function scope
@@ -1458,7 +1458,7 @@ const int VERSION_PATCH = 0;
 						} else
 						
 					// entry points
-						if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0]) != end(Implementation::entryPoints)) {
+						if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) != end(Implementation::entryPoints)) {
 							if (words.size() != 1) throw ParseError("Too many words");
 						} else
 						
@@ -1969,7 +1969,7 @@ const int VERSION_PATCH = 0;
 				int nextWordIndex = 0;
 				auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
 					if (nextWordIndex < (int)words.size()) {
-						assert(type == Word::Empty || type == words[nextWordIndex]);
+						assert(type == Word::Empty || type == words[nextWordIndex].type);
 						return words[nextWordIndex++];
 					}
 					return Word::Empty;
@@ -3151,7 +3151,7 @@ const int VERSION_PATCH = 0;
 					int nextWordIndex = 0;
 					auto readWord = [&] (Word::Type type = Word::Empty) -> Word {
 						if (nextWordIndex < (int)line.words.size()) {
-							validate(type == Word::Empty || type == line.words[nextWordIndex]);
+							validate(type == Word::Empty || type == line.words[nextWordIndex].type);
 							return line.words[nextWordIndex++];
 						}
 						return Word::Empty;
@@ -3470,7 +3470,7 @@ const int VERSION_PATCH = 0;
 									pushStack("function");
 								}
 								// entry points
-								else if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), firstWord) != end(Implementation::entryPoints)) {
+								else if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), firstWord.word) != end(Implementation::entryPoints)) {
 									openFunction("system." + firstWord.word);
 									pushStack("function");
 								}
