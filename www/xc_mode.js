@@ -4,7 +4,7 @@ CodeMirror.defineSimpleMode("xenoncode", {
 	start: [
 	  // The regex matches the token, the token property contains the type
 	  {regex: /(?:("|\}))([^\\"\{\}]*)(?:("|$|\{))/, token: ["string-2", "string", "string-2"]},
-	  {regex: /function|storage|array|var|const|include|return|if|foreach|while|else|elseif|init|input|timer|tick|output|repeat|frequency|interval|break|loop/, token: "keyword"},
+	  {regex: /function|storage|array|var|const|include|return|if|foreach|while|else|elseif|init|input|timer|tick|output|repeat|frequency|interval|break|continue|:\s*(text|number)/, token: "keyword"},
 	//   {regex: /true|false/, token: "atom"},
 	//   {regex: /[-+]?(\d+\.?\d*)(?:e[-+]?\d+)?/i, token: "number"},
 	  {regex: /(\d+\.?\d*)/i, token: "number"},
@@ -20,7 +20,6 @@ CodeMirror.defineSimpleMode("xenoncode", {
 	// specific to simple modes.
 	meta: {
 	  dontIndentStates: ["comment"],
-	  lineComment: "//"
+	  lineComment: ";"
 	}
   });
-  
