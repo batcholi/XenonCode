@@ -39,7 +39,7 @@ void Init() {
 	});
 	
 	// This is an example of a constructor for the object type "position" (defined as a global device function)
-	XenonCode::DeclareDeviceFunction("position:position", [=](const vector<XenonCode::Var>& args) -> XenonCode::Var {
+	XenonCode::DeclareDeviceFunction("position:position", [=](XenonCode::Computer*, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return {positionType, 0/*This would be an implementation-defined object pointer (uint64_t) that must be mapped somewhere*/};
 	});
 	
