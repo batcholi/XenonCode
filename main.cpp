@@ -18,23 +18,23 @@ void Init() {
 	// Maximum of 127 object types
 	auto positionType = XenonCode::DeclareObjectType("position", {
 		// Those are the members, may be used either as functions (using args, modifying the object, returning void) or as properties (ignoring args, returning a value)
-		{"x:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		{"x:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			return 0.0;
 		}},
-		{"y:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		{"y:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			return 0.0;
 		}},
-		{"z:number", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		{"z:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			return 0.0;
 		}},
-		{"normalize()", [](const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		{"normalize()", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			//...
 			return {};
 		}},
 	});
 	
 	// Maximum of 65k global device functions
-	XenonCode::DeclareDeviceFunction("delta:number", [](const vector<XenonCode::Var>& args) -> XenonCode::Var {
+	XenonCode::DeclareDeviceFunction("delta:number", [](XenonCode::Computer*, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return 0.0;
 	});
 	
@@ -44,7 +44,7 @@ void Init() {
 	});
 	
 	// Must set the output function here
-	XenonCode::SetOutputFunction([](uint32_t ioIndex, const vector<XenonCode::Var>& args){
+	XenonCode::SetOutputFunction([](XenonCode::Computer*, uint32_t ioIndex, const vector<XenonCode::Var>& args){
 		if (verbose) {
 			cout << "output." << ioIndex << "\n";
 		}

@@ -1937,9 +1937,10 @@ const int VERSION_PATCH = 0;
 		}
 	};
 
-	using DeviceFunction = std::function<Var(const std::vector<Var>& args)>;
-	using DeviceObjectMember = std::function<Var(const Var& obj, const std::vector<Var>& args)>;
-	using OutputFunction = std::function<void(uint32_t ioNumber, const std::vector<Var>& args)>;
+	class Computer;
+	using DeviceFunction = std::function<Var(Computer*, const std::vector<Var>& args)>;
+	using DeviceObjectMember = std::function<Var(Computer*, const Var& obj, const std::vector<Var>& args)>;
+	using OutputFunction = std::function<void(Computer*, uint32_t ioNumber, const std::vector<Var>& args)>;
 
 	struct ObjectType {
 		uint8_t id;
@@ -2063,9 +2064,9 @@ const int VERSION_PATCH = 0;
 		Device::objectTypesList.emplace_back(name);
 		assert(Device::objectTypesList.size() == size_t(id));
 		for (auto&[prototype, method] : members) {
-			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](const std::vector<Var>& args) -> XenonCode::Var {
+			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](Computer* computer, const std::vector<Var>& args) -> XenonCode::Var {
 				if (args.size() > 0) {
-					return method(args[0], std::vector<Var>(args.begin()+1, args.end()));
+					return method(computer, args[0], std::vector<Var>(args.begin()+1, args.end()));
 				} else {
 					throw XenonCode::RuntimeError("Invalid object member arguments");
 				}
@@ -4682,7 +4683,7 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
-		OutputFunction Device::outputFunction = [](uint32_t, const std::vector<Var>&){};
+		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
 			if (program.size() <= index) return;
@@ -5141,7 +5142,7 @@ const int VERSION_PATCH = 0;
 										else if (IsObject(c)) args.emplace_back(MemGetObject(c));
 										else throw RuntimeError("Invalid operation");
 									}
-									Var ret = Device::deviceFunctionsById[dev.value](args);
+									Var ret = Device::deviceFunctionsById[dev.value](this, args);
 									if (dst && ret.type != Var::Void) {
 										if (ret.type == Var::Numeric) {
 											MemSet(ret.numericValue, dst);
@@ -5166,7 +5167,7 @@ const int VERSION_PATCH = 0;
 										if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
 										else args.emplace_back(MemGetText(c));
 									}
-									Device::outputFunction((uint32_t)MemGetNumeric(io), args);
+									Device::outputFunction(this, (uint32_t)MemGetNumeric(io), args);
 								}break;
 								case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
