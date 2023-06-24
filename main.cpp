@@ -37,6 +37,12 @@ void Init() {
 	XenonCode::DeclareDeviceFunction("delta:number", [](XenonCode::Computer*, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 		return 0.0;
 	});
+	XenonCode::DeclareDeviceFunction("print", [](XenonCode::Computer*, const vector<XenonCode::Var>& args) -> XenonCode::Var {
+		for (const auto& arg : args) {
+			cout << string(arg) << endl;
+		}
+		return {};
+	});
 	
 	// This is an example of a constructor for the object type "position" (defined as a global device function)
 	XenonCode::DeclareDeviceFunction("position:position", [=](XenonCode::Computer*, const vector<XenonCode::Var>& args) -> XenonCode::Var {
