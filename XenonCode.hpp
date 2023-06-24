@@ -19,6 +19,9 @@
 #ifdef VOID
 	#undef VOID
 #endif
+#ifdef DISCARD
+	#undef DISCARD
+#endif
 #ifdef RETURN
 	#undef RETURN
 #endif
@@ -1753,6 +1756,7 @@ const int VERSION_PATCH = 0;
 		// Statements
 		RETURN = 0, // Must add this at the end of each function block
 		VOID = 10, // Must add this after each OP statement, helps validate validity and also makes the bytecode kind of human readable
+		DISCARD = 11, // Discard the return value of this statement
 		OP = 32, // OP [...] VOID
 		
 		// Comments/Info
@@ -2632,7 +2636,7 @@ const int VERSION_PATCH = 0;
 								retType = CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(function.returnType).id);
 							}
 						} else if (function.returnType != "" && !isTrailingFunction) {
-							throw CompileError("A function call here should NOT return a value, but", funcName, "does");
+							write(DISCARD); // We may discard the return value of a device function
 						}
 					} else if (f == LAS) {
 						if (getReturn) {
@@ -3327,19 +3331,24 @@ const int VERSION_PATCH = 0;
 														break;
 													}
 													
-													Word expr = computeConstExpression(line.words, nextWordIndex, argEnd);
-													if (expr == Word::Numeric) {
-														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_NUMERIC, expr));
-													} else if (expr == Word::Text) {
-														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_TEXT, expr));
+													Word arg = readWord();
+													if (arg == Word::CommaOperator) {
+														continue;
+													}
+													if (arg == Word::Varname) {
+														ByteCode ref = getVar(arg);
+														arg = GetConstValue(ref);
+													} else if (arg == Word::ExpressionBegin) {
+														arg = computeConstExpression(line.words, nextWordIndex, argEnd-1);
+													}
+													if (arg == Word::Numeric) {
+														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_NUMERIC, arg));
+													} else if (arg == Word::Text) {
+														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_TEXT, arg));
 													} else {
 														validate(false);
 													}
-													
 													nextWordIndex = argEnd+1;
-													if (readWord() != Word::CommaOperator) {
-														break;
-													}
 												}
 											}
 											
@@ -5196,7 +5205,7 @@ const int VERSION_PATCH = 0;
 										else throw RuntimeError("Invalid operation");
 									}
 									Var ret = Device::deviceFunctionsById[dev.value](this, args);
-									if (dst && ret.type != Var::Void) {
+									if (dst && dst != DISCARD && ret.type != Var::Void) {
 										if (ret.type == Var::Numeric) {
 											MemSet(ret.numericValue, dst);
 										} else if (ret.type == Var::Text) {
