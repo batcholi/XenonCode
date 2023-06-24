@@ -1319,7 +1319,7 @@ const int VERSION_PATCH = 0;
 		"repeat",
 		"while",
 		"break",
-		"loop",
+		"continue",
 		"if",
 		"elseif",
 		"else",
@@ -1575,8 +1575,8 @@ const int VERSION_PATCH = 0;
 							if (words.size() != 1) throw ParseError("Too many words");
 						} else
 						
-					// loop
-						if (words[0] == "loop") {
+					// continue
+						if (words[0] == "continue") {
 							if (words.size() != 1) throw ParseError("Too many words");
 						} else
 						
@@ -1710,7 +1710,7 @@ const int VERSION_PATCH = 0;
 					scope = line.scope;
 				} catch (ParseError& e) {
 					std::stringstream err {};
-					err << e.what() << " at line " << lineNumber << " in " << filepath;
+					err << e.what() << " in " << filepath << ":" << lineNumber;
 					throw ParseError(err.str());
 				}
 			}
@@ -2223,7 +2223,7 @@ const int VERSION_PATCH = 0;
 			case RAM_VAR_TEXT:
 			return true;
 		}
-		return false;
+		return v.type >= RAM_OBJECT;
 	}
 
 	inline static bool IsArray(ByteCode v) {
@@ -2597,10 +2597,12 @@ const int VERSION_PATCH = 0;
 						if (IsArray(args[0])) { // Don't allow arrays to be passed as arguments
 							throw CompileError("Cannot pass an array to function", func, "in arg 1");
 						}
-						write(SET);
-						write(args[0]);
-						write(getReturnVar(funcName));
-						write(VOID);
+						if (args[0].type < RAM_OBJECT) { // Objects don't get returned from trailing functions
+							write(SET);
+							write(args[0]);
+							write(getReturnVar(funcName));
+							write(VOID);
+						}
 					}
 					return VOID;
 				} else if (func == Word::Name) {
@@ -3919,7 +3921,7 @@ const int VERSION_PATCH = 0;
 									}
 								}
 								// next
-								else if (firstWord == "loop") {
+								else if (firstWord == "continue") {
 									int s = stack.size();
 									while (s-- > 0) {
 										if (stack[s].type == "loop") {
@@ -3998,7 +4000,7 @@ const int VERSION_PATCH = 0;
 				closeCurrentFunction();
 			} catch (CompileError& e) {
 				std::stringstream err;
-				err << e.what() << " at line " << currentLine << " in " << currentFile;
+				err << e.what() << " in " << currentFile << ":" << currentLine;
 				throw CompileError(err.str());
 			}
 			varsInitSize = rom_vars_init.size();
@@ -5855,9 +5857,16 @@ const int VERSION_PATCH = 0;
 				std::stringstream str;
 				str << err.what();
 				if (currentFile != "" && currentLine) {
-					str << " on bytecode " << index << " at line " << currentLine << " in " << currentFile << std::endl;
+					str << " on bytecode " << index << " in " << currentFile << ":" << currentLine << std::endl;
 				}
 				throw RuntimeError(str.str());
+			} catch (std::exception& err) {
+				std::stringstream str;
+				str << err.what();
+				if (currentFile != "" && currentLine) {
+					str << " on bytecode " << index << " in " << currentFile << ":" << currentLine << std::endl;
+				}
+				throw std::runtime_error(str.str());
 			}
 		}
 		

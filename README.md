@@ -11,7 +11,7 @@
 - Easy string concatenation and formatting
 - User-defined functions
 - Device-defined functions and objects
-- Trailing functions
+- Trailing/member functions
 - Built-in standard math functions
 - Built-in IO operations between virtual devices
 - Synchronized interval functions (timers)
@@ -94,9 +94,10 @@ XenonCode is designed with a very basic syntax in mind and a very precise struct
 
 - Each statement has to be short and easy to read
 - Very little special characters needed
-- Indentations define the scope (tabs ONLY)
+- Less criptic than most other languages
+- Indentations define the scope (tabs ONLY, no ambiguity there)
 - A single instruction per line
-- Array indexing, like most other programming languages, is 0-based but uses the `arr.0` notation instead of the typical `arr[0]`
+- Array indexing, like most other programming languages, is 0-based but uses the `arr.0` dot notation instead of the typical `arr[0]` subscript notation
 - 100% Case-insensitive
 - An implementation may define custom "Device" functions, objects and entry points
 
@@ -110,7 +111,7 @@ Generic data types the user can declare:
 
 A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false), although any value other than zero is evaluated to true.  
 
-`text` variables contain pure arbitrary text, altough their maximum size depends on the implementation.  
+`text` variables contain plain unicode text, altough their maximum size depends on the implementation.  
 
 Object types are for use by the implementation and are opaque to the user, meaning their structure is not necessarily defined, however the implementation may make availalbe some member functions for those objects to the user.  
 
@@ -128,11 +129,11 @@ A code statement may also end with a trailing comment
 # Limitations
 This language is designed to potentially be executed Server-side in the context of a multiplayer game, hence for security and performance reasons there are limits to what users can do.
 
-- No pointer nor reference types (except for implementation-defined objects)
+- No pointer nor reference types (except for implementation-defined objects, which must be sanitized by the implementation at runtime)
 - The number of instructions per cycle may be limited, upon which an overflow may cause a virtual crash for the user
 - Arrays may be limited in size at runtime, upon which an overflow may trigger a virtual crash for the user
 - Recursive stack (calling a function recursively) is NOT allowed for the user
-- Functions MUST be fully defined BEFORE their use (this ensures the previous point)
+- Functions MUST be fully defined BEFORE their use, so the order of definition matters (this is what enforces the previous point)
 
 ### Per-Virtual-Computer limitations
 These are defined per implementation and may include multiple variants or be customizable by the user
@@ -148,17 +149,20 @@ These are defined per implementation and may include multiple variants or be cus
 - All functions, including timers, are executed atomically, preventing any data-race
 - Function arguments are always passed by copy, a function CANNOT modify the variables placed in its argument list
 - Trailing functions DO modify the value of the leading variable
-- Variable assignments always copy the value
-- Divisions by zero result in the value zero. It is at the responsibility of the user to make sure to account for it.
+- Variable assignments always copy the value for generic types
+- Implementation-defined objects are always passed by reference
+- Implementation-defined objects cannot be copied unless the implementation provides that functionality through a device function
+- Divisions by zero results in the value zero. It is at the responsibility of the user to make sure to account for it.
 
 ### Basic rules
 - Variables may be declared using `var` and optionally assigned an initial value otherwise the generic default is used (0 for number and "" for text)
+- Object variables must be assigned upon declaration using a constructor or a device function that returns an object of that type
 - Starting a statement with a varialbe name (starting with `$`) means that we are modifying its value
 - If the next word following a variable assignment is `=`, then the following expression's result is going to be assigned as its value
 - If the next word following a variable assignment is a dot and a function, this function call is considered a trailing function
-- Calling a trailing function DOES modify the value of the leading variable wich is also used as the function's first argument which must be omitted from the argument list
-- Starting a statement with a function name (starting with `@` for user-defined functions) means that we are calling this function
-- Calling a function will NEVER modify the value of any of its arguments passed within parenthesis
+- Calling a trailing function DOES modify the value of the leading variable wich is also used as the function's first argument which must be omitted from the argument list when calling it
+- Starting a statement with a function name (starting with `@` for user-defined functions) means that we are calling this function and discarding its return value
+- Calling a function will NEVER modify the value of any of its generic-typed arguments passed within parenthesis, generic types are always passed by copy
 - Anything in parenthesis that is not preceeded by a function name is considered a separate expression, inner left-most expressions are computed first
 - Typical rules apply for mathematical precedence of operators
 
@@ -180,27 +184,28 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `timer` Define the body of a function that will execute repeatedly at a specific frequency in Hz
 - `input` Define an input function
 - `;` or `//` Comments
-- one or more tabs, meaning we're within a function body, then the following rules apply:
 - an entry point defined by the implementation
+- one or more tabs, meaning we're within a function body, then the following rules apply:
 
-### Function body
-- `var` Declare a new variable in this local scope
-- `array` Declare a new array in this local scope
+### Function body / Entry point
+- `var` Declare a new variable in this local scope (not accessible from outside of this function)
+- `array` Declare a new array in this local scope (not accessible from outside of this function)
 - `$` To assign a new value to an existing variable
-- `@` To call a leading user-defined function
+- `@` To call a user-defined function
 - `output` Built-in function to send data to another device through a specific port
 - `foreach` loops through all items of an array
 - `repeat` loops a block of code n times
 - `while` loops as long as a condition evaluates to true
 - `break` stops a loop here as if it completed all iterations
-- `loop` stops this iteration of a loop here and run the next iteration immediately
+- `continue` stops this iteration of a loop here and run the next iteration immediately
 - `if` runs a block of code if a condition evaluates to true
 - `elseif` after a if, when the initial condition so far evaluates to false and a new condition evaluates to true
 - `else` after a if, when all conditions evaluated to false
 - `return` stop the execution of this function here and return a value to the caller
 
 ## Reserved keywords
-Since all user-defined words must start with either `$` or `@`, there is no need for reserved words.
+Since all user-defined words must start with either `$` or `@`, there is no need for reserved words.  
+The implementation/device must take care of only defining function names and object types that do not conflict with built-in keywords for the version of XenonCode that they're using.  
 
 ## Declaring a constant
 Constants are named values that should never change throughout the execution of a program. They are fixed values defined at compile-time.  
@@ -213,15 +218,18 @@ Their assigned values must be explicitely given and must be expressions which th
 Variables are named values that can change throughout the execution of a program.  
 We may or may not assign them an initial value.  
 If we do not assign an initial value, the default generic value is used, and we must provide a type.  
-A variable is only accessible within the scope it has been declared in. For instance, if we declare a variable at the biginning of a function, it is available throughout the entire function. If we declare a variable within a if block, it is only available within that block, until an Else, Elseif or going back to the parent scope.  
+A variable is only accessible within the scope it has been declared in. For instance, if we declare a variable at the biginning of a function, it is available throughout the entire function. If we declare a variable within a if block, it is only available within that block, until the corresponding `else`, `elseif` or until going back to the parent scope.  
 A variable declared in the global scope is accessible from everywhere.  
 For variables declared in the global scope, when we assign it an initial value, the given expression must be determined at compile-time.  
 Variable names must start with a letter or underscore (`a`-`z` or `_`) then must contain only alphanumeric characters and underscores.  
 
-`var $stuff = 5` // declares a number variable with an initial value set to 5 when the program starts
-`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" when the program starts
-`var $stuff:number` // declares a number variable with an initial value set to 0 when the program starts
-`var $stuff:text` // declares a text variable with an initial value set to "" when the program starts
+`var $stuff = 5` // declares a number variable with an initial value set to 5 when the program starts  
+`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" when the program starts  
+`var $stuff:number` // declares a number variable with an initial value set to 0 when the program starts  
+`var $stuff:text` // declares a text variable with an initial value set to "" when the program starts  
+`var $stuff = position()` // declares an instance of an implementation-defined object of the type `position` (this is an example)  
+
+Implementation-defined objects cannot be declared without initialization, since they do not have a default value.  
 
 ## Assigning a new value to a variable
 To assign a new value to a variable, we can simply start a statement with the variable name followed by a `=` and an expression the result of which will be the new value.  
@@ -239,14 +247,17 @@ Arrays are initialized with zero size when the program starts, values may be add
 `array $stuff:number` // declare an array of numbers  
 `array $stuff:text` // declare an array of texts  
 
+Arrays cannot contain implementation-defined objects, just generic types.  
+
 ## Declaring storage
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  
 We can declare storage variables and arrays of either number or text.  
-Storage must be declared in the global scope.  
+Storage should ONLY be declared in the global scope.  
 ```
 storage var $stuff:number
 storage var $stuff:text
 storage array $stuff:number
+storage array $stuff:text
 ```
 
 ## Accessing/Assigning the nth item within an array
@@ -256,7 +267,7 @@ To access or modify the value of a specific item in an array, we must use the tr
 `$value = $stuff.1` // Assign the value of the second item of the array to the variable $value  
 
 ## Accessing/Assigning the nth character within a text variable
-Text variables work in a very similar with to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
+Text variables work in a very similar way to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
 `$myText.0 = "a"` // Set "a" as the first character of $myText  
 
 ## The Init function
@@ -278,7 +289,7 @@ tick
 ```
 
 ## Timer functions
-Timer functions are executed at a specified interval or frequency, but at most Once per clock cycle.  
+Timer functions are executed at a specified interval or frequency, but at most once per clock cycle.  
 We can either specify an `interval` as in every N seconds or a `frequency` as in N times per second.  
 Timer functions cannot be called by the user. They can only be defined, and the device will automatically call them at their appropriate time.  
 ```
@@ -298,7 +309,7 @@ Input functions are like user-defined functions, containing arguments, but no re
 The port index must be specified after the input keyword and a trail operator `.`  
 The port index may be specified via a constant as well (must be known at compile time).  
 Function arguments must be surrounded with parenthesis and their types must be specified.  
-Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them as data is received.  
+Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them if data has been received, at the end of a clock cycle.  
 ```
 input.0 ($arg1:number, $arg2:text)
     $stuff = $arg1
@@ -356,17 +367,17 @@ This keyword is used to stop a loop as if it completed all its iterations.
 ```
 while $stuff < 5
     $stuff++
-    if $stuff == 5
+    if $stuff == 3
         break
 ```
 
-## Loop
-This keyword is used to stop this iteration of a loop here and run the next iteration immediately, just like the `continue` keyword does in other programming languages
+## Continue
+This keyword is used to stop this iteration of a loop here and run the next iteration immediately.  
 ```
 while $stuff < 5
     $stuff++
     if $stuff == 2
-        loop
+        continue
 ```
 
 ## Math Operators
@@ -374,23 +385,23 @@ while $stuff < 5
 - `-` subtraction
 - `*` multiplication
 - `/` division
-- `%` modulo
+- `%` modulus
 - `^` power
 
 ## Trailing Operators
 - `++` increment the variable's value
 - `--` decrement the variable's value
-- `!!` reverses the variable's value
+- `!!` reverses the variable's value (if it's value is `0`, sets it to `1`, otherwise to `0`)
 
 ## Assignment operators
 - `=` just assign the following value directly
 
-The following operators will compute the appropriate math operation and assign the result to the leading variable.  
+The following operators will compute the appropriate math operation between the leading variable and the following expression, then assign the result back to the leading variable.  
 - `+=` addition
 - `-=` substraction
 - `*=` multiplication
 - `/=` division
-- `%=` modulo
+- `%=` modulus
 - `^=` to the power
 - `&=` concatenate text
 
@@ -405,7 +416,7 @@ The following operators will compute the appropriate math operation and assign t
 - `||` or `or` conditional OR
 
 ## Other operators
-- `.` (trail operator) refer to a sub-item of an array (or of a built-in function) or call a trailing function on the leading variable, or a member of an object
+- `.` (trail operator) refer to a sub-item of an array or text or call a trailing function on the leading variable, or a member of an object
 - `:` (typecast operator) cast as another type
 - `&` (concat operator) concatenate texts
 - `!` (not operator) reverses a boolean value or expression (non-zero numbers become 0, and 0 becomes 1)
@@ -414,7 +425,7 @@ The following operators will compute the appropriate math operation and assign t
 
 To parse an existing variable as another type, simply add a colon and the type, like so: 
 ```$someTextValue = $someNumberValue:text```
-This only works with generic types `number` and `text`, not arrays or objects  
+This only works with generic types `number` and `text`, not arrays or objects.  
 
 ## String concatenation
 
@@ -428,7 +439,7 @@ To do this, you can put some code into another `.xc` file and use the `include` 
 include "test.xc"
 ```
 This is effectively the same as taking all the lines from `test.xc` and inserting them into the current file where the `include` is.  
-This can be done on multiple levels, just make sure that a file does not include itself, directly or indirectly.
+This can be done on multiple levels, just make sure that a file does not include itself, directly or indirectly, in which case the definitions within it will conflict and result in a compile error.
 
 # User-Defined Functions
 
@@ -441,6 +452,8 @@ Functions may have arguments that can be used within the body so that the operat
 Function arguments are defined after the function name, within parenthesis and they can be of type `number`, `text`, or implementation-defined object. 
 
 Function names have the same rules as variable names.  
+
+NOTE: Functions MUST be fully defined before their use. This means that the order of function declaration matters and we can only call a function that has been declared ABOVE the caller and a function CANNOT call itself. This enforces the "no-stack-recursion" rule.  
 
 ### Declaration
 
@@ -458,6 +471,9 @@ This function takes a number argument and a text argument:
 This function takes an implementation-defined object type `position` argument:
 ```function @func3 ($var1:position)```
 
+This function takes a number argument and a text argument and returns a number value:
+```function @func2 ($var1:number, $var2:text) : number```
+
 ### Body
 The body of a function (the operations to be executed when calling it) must be on the following lines after the declaration, indented with one tab.  
 Empty lines within a body are allowed and ignored by the compiler.  
@@ -472,10 +488,10 @@ function @func1 ($var1:number, $var2:number) : number
 ### Call
 
 Calling a function will run the operation in its body. 
-To call a function, simply write the name of the function (starting with `@` for user-defined functions), then its arguments within parenthesis and separated by a comma, like so:  
+To call a function, simply write the name of the function (starting with `@` for user-defined functions), then its arguments within parenthesis separated by commas, like so:  
 ```@func1(4, 6)```
-Here we have passed two number arguments, thus this call execute the body of the declaration above.  
-It is of course also possible to use variables instead of just literal numbers as the function arguments.  
+Here we have passed two number arguments, thus this call executes the body of the declaration above.  
+It is of course also possible to use variables or even complex expressions instead of just literal numbers as the function arguments.  
 
 #### NOTE:
 Omitted arguments are legal.  
@@ -495,10 +511,12 @@ Any function may be called as a trailing function, even user-defined functions.
 The way they work is that under the hood the leading variable is passed as the first argument to that function, and then assigned the returning value.  
 When calling a trailing function, we must ommit the first argument as it automatically sends the leading variable as its first argument under the hood.  
 If the function definition does not have any arguments, this is still valid, although we simply don't care about the current value of the leading variable, but we'll assign a new value to it.  
-If the function definition does not have a return type, the value of the leading variable may be assigned the default generic value of 0 or "".  
+The function definition MUST have a return type that matches that of the leading variable, if it's a generic type.  
+A trailing function may be called on implementation-defined objects, in which case the first argument must be of that object type, there is no return type in the function and it must NOT return any value.  
 Since we cannot pass Arrays as function arguments, arrays can only take their own specifically defined trailing functions.  
 ```$myVariable.round()```
 ```$myVariable.@func1(6)```
+```$myArray.clear()```
 
 # Built-in functions
 
@@ -524,7 +542,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `step`(edge1, edge2, number) or (edge, number)
 - `smoothstep`(edge1, edge2, number)
 - `lerp`(a, b, number)
-- `mod`(number, divisor) // the modulo operator
+- `mod`(number, divisor) // the modulus operator
 - `min`(number, number)
 - `max`(number, number)
 - `avg`(number, number)
