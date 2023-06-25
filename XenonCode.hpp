@@ -1462,7 +1462,31 @@ const int VERSION_PATCH = 0;
 						
 					// entry points
 						if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) != end(Implementation::entryPoints)) {
-							if (words.size() != 1) throw ParseError("Too many words");
+							if (words.size() > 1) {
+								if (words[1] == Word::TrailOperator) {
+									if (words.size() > 2 && words[2] != Word::Numeric && words[2] != Word::Text && words[2] != Word::Varname) {
+										throw ParseError("The reference after the dot must be either a literal value, a variable name or a constant name");
+									}
+									if (words.size() > 3) {
+										if (words[3] != Word::ExpressionBegin) {
+											throw ParseError("Reference may only be followed by a set of parenthesis, optionally containing an argument list");
+										}
+										if (words.size() < 5) throw ParseError("Too few words");
+										if (ParseDeclarationArgs(words, 3) != -1) {
+											throw ParseError("Too many words");
+										}
+									}
+								} else {
+									// throw ParseError("A device entry point may only be followed by a dot");
+									if (words[1] != Word::ExpressionBegin) {
+										throw ParseError("A device entry point may only be followed by a dot and a reference, then/or a set of parenthesis optionally containing an argument list");
+									}
+									if (words.size() < 3) throw ParseError("Too few words");
+									if (ParseDeclarationArgs(words, 1) != -1) {
+										throw ParseError("Too many words");
+									}
+								}
+							}
 						} else
 						
 					// In both Global and Function scopes
@@ -2039,7 +2063,8 @@ const int VERSION_PATCH = 0;
 	};
 	
 	// Implementation SHOULD declare entry points
-	inline static void DeclareEntryPoint(const std::string& entryName) {
+	inline static void DeclareEntryPoint(std::string entryName) {
+		std::transform(entryName.begin(), entryName.end(), entryName.begin(), [](unsigned char c){ return std::tolower(c); });
 		assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), entryName) == globalScopeFirstWords.end());
 		Implementation::entryPoints.emplace_back(entryName);
 	}
@@ -2270,6 +2295,13 @@ const int VERSION_PATCH = 0;
 		uint32_t addr = 0;
 		std::vector<uint32_t> args {};
 	};
+	
+	struct EntryPoint {
+		std::string name;
+		uint32_t addr = 0;
+		ByteCode ref = VOID;
+		std::vector<uint32_t> args {};
+	};
 
 	class Assembly {
 		static inline const std::string parserFiletype = "XenonCode!";
@@ -2299,13 +2331,13 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<std::string, uint32_t> functionRefs {}; // function references (addr)
 		std::vector<TimerFunction> timers {};
 		std::map<uint32_t, InputFunction> inputs {};
+		std::vector<EntryPoint> entryPoints {};
 		std::vector<std::string> sourceFiles {};
 		/* Function names:
 			system.init
 			system.tick
 			system.input (not present in functionRefs)
 			system.timer (not present in functionRefs)
-			system.* (implementation-defined entry points)
 		Varnames related to functions:
 			@funcname.1 		argument
 			@funcname:			return
@@ -2526,7 +2558,7 @@ const int VERSION_PATCH = 0;
 			auto openFunction = [&](const std::string& name){
 				assert(currentScope == 0);
 				assert(currentFunctionName == "");
-				if (name != "system.timer" && name != "system.input" && functionRefs.contains(name)) {
+				if (name != "system.timer" && name != "system.input" && name != "entrypoint" && functionRefs.contains(name)) {
 					throw CompileError("Function " + name + " is already defined");
 				}
 				currentFunctionName = name;
@@ -2544,6 +2576,9 @@ const int VERSION_PATCH = 0;
 						inputs[currentInputPort].addr = currentFunctionAddr;
 						currentInputPort = 0;
 						userVars["system.input"].clear();
+					} else if (currentFunctionName == "entrypoint") {
+						assert(entryPoints.size() > 0);
+						entryPoints.back().addr = currentFunctionAddr;
 					} else {
 						functionRefs.emplace(currentFunctionName, currentFunctionAddr);
 					}
@@ -3536,7 +3571,54 @@ const int VERSION_PATCH = 0;
 								}
 								// entry points
 								else if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), firstWord.word) != end(Implementation::entryPoints)) {
-									openFunction("system." + firstWord.word);
+									auto& entryPoint = entryPoints.emplace_back();
+									entryPoint.name = firstWord.word;
+									Word dotOrBeginParen = readWord();
+									if (dotOrBeginParen == Word::TrailOperator) {
+										Word refNameOrLiteral = readWord();
+										if (refNameOrLiteral == Word::Varname) {
+											entryPoint.ref = getVar(refNameOrLiteral);
+										} else if (refNameOrLiteral == Word::Numeric) {
+											entryPoint.ref = declareVar("", ROM_CONST_NUMERIC, refNameOrLiteral);
+										} else if (refNameOrLiteral == Word::Text) {
+											entryPoint.ref = declareVar("", ROM_CONST_TEXT, refNameOrLiteral);
+										} else {
+											validate(false);
+										}
+										dotOrBeginParen = readWord();
+									}
+									if (dotOrBeginParen == Word::ExpressionBegin) {
+										// Arguments
+										int argN = 0;
+										for (;;) {
+											Word word = readWord();
+											if (!word || word == Word::ExpressionEnd) break;
+											++argN;
+											validate(word == Word::Varname);
+											readWord(Word::CastOperator);
+											std::string type = readWord(Word::Name);
+											ByteCode arg;
+											if (type == "number") {
+												arg = declareVar(word, RAM_VAR_NUMERIC);
+											} else if (type == "text") {
+												arg = declareVar(word, RAM_VAR_TEXT);
+											} else {
+												if (Device::objectTypesByName.contains(type)) {
+													arg = declareVar(word, CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(type).id));
+												} else {
+													throw CompileError("Invalid argument type in function declaration");
+												}
+											}
+											entryPoint.args.emplace_back(arg.rawValue);
+											Word next = readWord();
+											if (next == Word::CommaOperator) continue;
+											else if (next == Word::ExpressionEnd) break;
+											else validate(false);
+										}
+									} else {
+										validate(!dotOrBeginParen);
+									}
+									openFunction("entrypoint");
 									pushStack("function");
 								}
 								// ERROR
@@ -4139,7 +4221,7 @@ const int VERSION_PATCH = 0;
 				s << "0 " << GetDeviceFunctionsList(0) << '\n';
 				
 				// Write some sizes
-				s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << sourceFiles.size() << '\n';
+				s << varsInitSize << ' ' << programSize << ' ' << storageRefs.size() << ' ' << functionRefs.size() << ' ' << timers.size() << ' ' << inputs.size() << ' ' << entryPoints.size() << ' ' << sourceFiles.size() << '\n';
 				s << rom_numericConstants.size() << ' ';
 				s << rom_textConstants.size() << '\n';
 				s << ram_numericVariables << ' ';
@@ -4172,6 +4254,13 @@ const int VERSION_PATCH = 0;
 				for (auto&[port, input] : inputs) {
 					s << port << ' ' << input.addr << ' ' << input.args.size();
 					for (auto& arg : input.args) s << ' ' << arg;
+					s << '\n';
+				}
+				
+				// Write entry points
+				for (auto& entryPoint : entryPoints) {
+					s << entryPoint.name << ' ' << entryPoint.addr << ' ' << entryPoint.ref.rawValue << ' ' << entryPoint.args.size();
+					for (auto& arg : entryPoint.args) s << ' ' << arg;
 					s << '\n';
 				}
 				
@@ -4209,6 +4298,7 @@ const int VERSION_PATCH = 0;
 			size_t functionRefsSize;
 			size_t timersSize;
 			size_t inputsSize;
+			size_t entryPointsSize;
 			size_t sourceFilesSize;
 			size_t rom_numericConstantsSize;
 			size_t rom_textConstantsSize;
@@ -4244,7 +4334,7 @@ const int VERSION_PATCH = 0;
 				} while (objId != 0);
 				
 				// Read some sizes
-				s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> sourceFilesSize;
+				s >> varsInitSize >> programSize >> storageRefsSize >> functionRefsSize >> timersSize >> inputsSize >> entryPointsSize >> sourceFilesSize;
 				s >> rom_numericConstantsSize;
 				s >> rom_textConstantsSize;
 				s >> ram_numericVariables;
@@ -4265,12 +4355,16 @@ const int VERSION_PATCH = 0;
 				rom_textConstants.reserve(rom_textConstantsSize);
 				storageRefs.reserve(storageRefsSize);
 				functionRefs.reserve(functionRefsSize);
+				entryPoints.reserve(entryPointsSize);
 				sourceFiles.reserve(sourceFilesSize);
 
+				// Discard the \n
+				s.get();
+				
 				// Read sourceFile references for debug
 				for (size_t i = 0; i < sourceFilesSize; ++i) {
 					std::string f;
-					s >> f;
+					std::getline(s, f, '\n');
 					sourceFiles.push_back(f);
 				}
 
@@ -4307,6 +4401,23 @@ const int VERSION_PATCH = 0;
 					inputs[port].args.resize(argsSize);
 					for (size_t j = 0; j < argsSize; ++j) {
 						s >> inputs[port].args[j];
+					}
+				}
+				
+				// Read entry points
+				for (size_t i = 0; i < entryPointsSize; ++i) {
+					std::string name;
+					uint32_t address;
+					ByteCode ref;
+					size_t argsSize;
+					s >> name >> address >> ref.rawValue >> argsSize;
+					auto& entryPoint = entryPoints.emplace_back();
+					entryPoint.name = name;
+					entryPoint.addr = address;
+					entryPoint.ref = ref;
+					entryPoint.args.resize(argsSize);
+					for (size_t j = 0; j < argsSize; ++j) {
+						s >> entryPoint.args[j];
 					}
 				}
 
@@ -4653,9 +4764,6 @@ const int VERSION_PATCH = 0;
 		bool HasTick() {
 			return assembly && assembly->functionRefs.contains("system.tick");
 		}
-		bool HasEntryPoint(const std::string& name) {
-			return assembly && assembly->functionRefs.contains("system." + name);
-		}
 		bool HasTimers() {
 			return assembly && assembly->timers.size() > 0;
 		}
@@ -4723,9 +4831,45 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
-		void RunEntryPoint(const std::string& name) {
-			if (HasEntryPoint(name)) {
-				RunCode(assembly->rom_program, assembly->functionRefs.at("system." + name));
+		void RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
+			std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
+			for (auto& entryPoint : assembly->entryPoints) {
+				if (entryPoint.name == name) {
+					
+					// Ref
+					if (entryPoint.ref.type == VOID) {
+						if (ref.type != Var::Void) continue;
+					} else {
+						if (ref.type == Var::Void) continue;
+						if (ref.type == Var::Numeric) {
+							if (int64_t(ref) != int64_t(std::round(MemGetNumeric(entryPoint.ref)))) continue;
+						} else if (ref.type == Var::Text) {
+							if (std::string(ref) != MemGetText(entryPoint.ref)) continue;
+						} else if (ref.type >= Var::Object) {
+							if (ref.addrValue != MemGetObject(entryPoint.ref).addrValue) continue;
+						} else {
+							assert(!"Invalid ref type");
+						}
+					}
+					
+					// Write args
+					for (size_t i = 0; i < args.size(); ++i) {
+						if (i >= entryPoint.args.size()) break;
+						const Var& arg = args[i];
+						ByteCode dst = entryPoint.args[i];
+						if (IsNumeric(dst) && arg.type == Var::Numeric) {
+							MemSet(arg.numericValue, dst);
+						} else if (IsText(dst) && arg.type == Var::Text) {
+							MemSet(arg.textValue, dst);
+						} else if (IsObject(dst) && arg.type == Var::Object) {
+							MemSetObject(arg.addrValue, dst); // Reference assignment for objects
+						} else {
+							throw RuntimeError(name + " argument type mismatch");
+						}
+					}
+					
+					RunCode(assembly->rom_program, entryPoint.addr);
+				}
 			}
 		}
 		
