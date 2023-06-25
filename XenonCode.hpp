@@ -261,7 +261,7 @@ const int VERSION_PATCH = 0;
 
 #pragma endregion
 
-#pragma region Math helpers
+#pragma region Helper Functions
 
 	inline static double step(double edge1, double edge2, double val) {
 		if (edge1 > edge2) {
@@ -287,6 +287,10 @@ const int VERSION_PATCH = 0;
 		if (edge1 == edge2) return 0.0;
 		val = std::clamp((val - edge1) / (edge2 - edge1), 0.0, 1.0);
 		return val * val * val * (val * (val * 6 - 15) + 10);
+	}
+	
+	inline static void strtolower(std::string& str) {
+		std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
 	}
 	
 #pragma endregion
@@ -1918,6 +1922,11 @@ const int VERSION_PATCH = 0;
 			else if (type == Text) return textValue==""? 0.0 : stod(textValue);
 			return 0.0;
 		}
+		operator float() const {
+			if (type == Numeric) return float(numericValue);
+			else if (type == Text) return textValue==""? 0.0f : stof(textValue);
+			return 0.0f;
+		}
 		operator int64_t() const {
 			if (type == Numeric) return (int64_t)std::round(numericValue);
 			else if (type == Text) return stol(textValue);
@@ -2064,7 +2073,7 @@ const int VERSION_PATCH = 0;
 	
 	// Implementation SHOULD declare entry points
 	inline static void DeclareEntryPoint(std::string entryName) {
-		std::transform(entryName.begin(), entryName.end(), entryName.begin(), [](unsigned char c){ return std::tolower(c); });
+		strtolower(entryName);
 		assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), entryName) == globalScopeFirstWords.end());
 		Implementation::entryPoints.emplace_back(entryName);
 	}
@@ -4758,6 +4767,24 @@ const int VERSION_PATCH = 0;
 			return {Var::Type(Var::Object | (ref & (RAM_OBJECT-1))), ram_objects[ref.value]};
 		}
 		
+		bool EntryPointMatches(const EntryPoint& entryPoint, const Var& ref) {
+			if (entryPoint.ref.type == VOID) {
+				if (ref.type != Var::Void) return false;
+			} else {
+				if (ref.type == Var::Void) return false;
+				if (ref.type == Var::Numeric) {
+					if (int64_t(ref) != int64_t(std::round(MemGetNumeric(entryPoint.ref)))) return false;
+				} else if (ref.type == Var::Text) {
+					if (std::string(ref) != MemGetText(entryPoint.ref)) return false;
+				} else if (ref.type >= Var::Object) {
+					if (ref.addrValue != MemGetObject(entryPoint.ref).addrValue) return false;
+				} else {
+					assert(!"Invalid ref type");
+				}
+			}
+			return true;
+		}
+		
 		void RunCode(const std::vector<ByteCode>& program, uint32_t index = 0);
 		
 	public:
@@ -4831,26 +4858,20 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
+		bool HasEntryPoint(std::string name, const Var& ref = {}) {
+			strtolower(name);
+			for (const auto& entryPoint : assembly->entryPoints) {
+				if (entryPoint.name == name && EntryPointMatches(entryPoint, ref)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		
 		void RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
-			std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
-			for (auto& entryPoint : assembly->entryPoints) {
-				if (entryPoint.name == name) {
-					
-					// Ref
-					if (entryPoint.ref.type == VOID) {
-						if (ref.type != Var::Void) continue;
-					} else {
-						if (ref.type == Var::Void) continue;
-						if (ref.type == Var::Numeric) {
-							if (int64_t(ref) != int64_t(std::round(MemGetNumeric(entryPoint.ref)))) continue;
-						} else if (ref.type == Var::Text) {
-							if (std::string(ref) != MemGetText(entryPoint.ref)) continue;
-						} else if (ref.type >= Var::Object) {
-							if (ref.addrValue != MemGetObject(entryPoint.ref).addrValue) continue;
-						} else {
-							assert(!"Invalid ref type");
-						}
-					}
+			strtolower(name);
+			for (const auto& entryPoint : assembly->entryPoints) {
+				if (entryPoint.name == name && EntryPointMatches(entryPoint, ref)) {
 					
 					// Write args
 					for (size_t i = 0; i < args.size(); ++i) {
