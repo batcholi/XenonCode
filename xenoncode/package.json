@@ -1,0 +1,67 @@
+{
+  "name": "xenoncode",
+  "displayName": "XenonCode",
+  "description": "XenonCode Syntax",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.78.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "xenoncode",
+        "aliases": [
+          "XenonCode",
+          "xenoncode",
+          "xc"
+        ],
+        "extensions": [
+          ".xc"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "xenoncode",
+        "scopeName": "source.xenoncode",
+        "path": "./syntaxes/xenoncode.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "xenoncode",
+      "properties": {
+        "linter.executable": {
+          "type": "string",
+          "default": "xenoncode",
+          "description": "Path to the xenoncode executable"
+        }
+      }
+    }
+  },
+  "icon": "xc.png",
+  "publisher": "Xenon3D",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/batcholi/XenonCode.git"
+  },
+  "activationEvents": [
+    "onLanguage:xenoncode"
+  ],
+  "main": "./src/extension.js",
+  "dependencies": {
+    "child_process": "^1.0.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.18.9"
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
+    "esbuild-base": "esbuild ./src/extension.js --bundle --outfile=out/main.js --external:vscode --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch"
+  }
+}

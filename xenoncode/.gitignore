@@ -1,0 +1,5 @@
+out/**
+node_modules/**
+.pat
+package-lock.json
+*.vsix
