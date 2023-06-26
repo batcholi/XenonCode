@@ -1,8 +1,8 @@
 {
   "name": "xenoncode",
   "displayName": "XenonCode",
-  "description": "XenonCode Syntax",
-  "version": "0.0.1",
+  "description": "XenonCode syntax highlighter for Visual Studio Code",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.78.0"
   },
@@ -32,9 +32,9 @@
       }
     ],
     "configuration": {
-      "title": "xenoncode",
+      "title": "XenonCode Extension Settings",
       "properties": {
-        "linter.executable": {
+        "xenoncode.linter_executable": {
           "type": "string",
           "default": "xenoncode",
           "description": "Path to the xenoncode executable"
@@ -49,7 +49,6 @@
     "url": "https://github.com/batcholi/XenonCode.git"
   },
   "activationEvents": [
-    "onLanguage:xenoncode"
   ],
   "main": "./src/extension.js",
   "dependencies": {

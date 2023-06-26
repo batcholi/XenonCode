@@ -2,6 +2,7 @@ const vscode = require('vscode');
 const { spawn } = require('child_process');
 
 function activate(context) {
+  let config = vscode.workspace.getConfiguration('xenoncode');
   let diagnosticCollection = vscode.languages.createDiagnosticCollection('xenoncode_line_linter');
 
   // WARNING Message to use Tabs instead of Spaces
@@ -18,7 +19,7 @@ function activate(context) {
   }
 
   // Linter
-  const linterExecutable = vscode.workspace.getConfiguration().get('xenoncode.linter.executable', 'xenoncode');
+  const linter_executable = config.get('linter_executable');
   vscode.workspace.onDidChangeTextDocument(event => {
     
     const document = event.document;
@@ -28,7 +29,7 @@ function activate(context) {
 
     lines.forEach((line, lineIndex) => {
       let args = ['-parse-line-generic', line];
-      let linter = spawn(linterExecutable, args);
+      let linter = spawn(linter_executable, args);
       linter.stderr.on('data', (data) => {
         console.error(data.toString());
         if (data.length > 0) {
