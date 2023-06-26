@@ -603,7 +603,8 @@ const int VERSION_PATCH = 0;
 				// Operators
 				if (isoperator(c)) {
 					word += c;
-					if (isoperator(s.peek())) {
+					int c2 = s.peek();
+					if (isoperator(c2) && (c2 == c || c2 == '=' || (c == '<' && c2 == '>'))) {
 						word += s.get();
 					}
 					type = Operator;
@@ -920,7 +921,7 @@ const int VERSION_PATCH = 0;
 					Word prev = prevPos >= startIndex? words[prevPos] : Word::Empty;
 					Word next = nextPos <= (int)lastWord()? words[nextPos] : Word::Empty;
 					
-					// Suffix operators (INVALID IN EXPRESSIONS, for now at least...)
+					// Suffix operators (INVALID IN EXPRESSIONS, because they modify the variable itself, and that should require a direct assignment in a separate statement, as per the language's philosophy)
 					if (word == Word::SuffixOperatorGroup) {
 						
 						throw ParseError("Cannot use a suffix operator within an expression");
@@ -953,7 +954,7 @@ const int VERSION_PATCH = 0;
 						// Handle function calls (and cast) within expressions
 						if (next == Word::Name || next == Word::Funcname) {
 							Word after = nextPos+1 <= (int)lastWord()? words[nextPos+1] : Word::Empty;
-							if (word != Word::CastOperator && word != Word::TrailOperator && after != Word::ExpressionBegin && (next == Word::Funcname || after != Word::Empty)) {
+							if (word != Word::CastOperator && word != Word::TrailOperator && next == Word::Funcname && after != Word::ExpressionBegin) {
 								return false;
 							}
 							if (after == Word::ExpressionBegin) {
@@ -1905,7 +1906,10 @@ const int VERSION_PATCH = 0;
 		Var(bool value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(int32_t value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(int64_t value) : type(Numeric), textValue(""), numericValue(value) {}
+		Var(uint32_t value) : type(Numeric), textValue(""), numericValue(value) {}
+		Var(uint64_t value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(double value) : type(Numeric), textValue(""), numericValue(value) {}
+		Var(float value) : type(Numeric), textValue(""), numericValue(value) {}
 		Var(const char* value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const std::string& value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
@@ -2567,7 +2571,7 @@ const int VERSION_PATCH = 0;
 			auto openFunction = [&](const std::string& name){
 				assert(currentScope == 0);
 				assert(currentFunctionName == "");
-				if (name != "system.timer" && name != "system.input" && name != "entrypoint" && functionRefs.contains(name)) {
+				if (name != "system.timer" && name != "system.input" && !name.starts_with("entrypoint.") && functionRefs.contains(name)) {
 					throw CompileError("Function " + name + " is already defined");
 				}
 				currentFunctionName = name;
@@ -2585,9 +2589,10 @@ const int VERSION_PATCH = 0;
 						inputs[currentInputPort].addr = currentFunctionAddr;
 						currentInputPort = 0;
 						userVars["system.input"].clear();
-					} else if (currentFunctionName == "entrypoint") {
+					} else if (currentFunctionName.starts_with("entrypoint.")) {
 						assert(entryPoints.size() > 0);
 						entryPoints.back().addr = currentFunctionAddr;
+						userVars[currentFunctionName].clear();
 					} else {
 						functionRefs.emplace(currentFunctionName, currentFunctionAddr);
 					}
@@ -3580,8 +3585,10 @@ const int VERSION_PATCH = 0;
 								}
 								// entry points
 								else if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), firstWord.word) != end(Implementation::entryPoints)) {
+									size_t entryPointIndex = entryPoints.size();
 									auto& entryPoint = entryPoints.emplace_back();
 									entryPoint.name = firstWord.word;
+									openFunction("entrypoint." + std::to_string(entryPointIndex));
 									Word dotOrBeginParen = readWord();
 									if (dotOrBeginParen == Word::TrailOperator) {
 										Word refNameOrLiteral = readWord();
@@ -3627,7 +3634,6 @@ const int VERSION_PATCH = 0;
 									} else {
 										validate(!dotOrBeginParen);
 									}
-									openFunction("entrypoint");
 									pushStack("function");
 								}
 								// ERROR

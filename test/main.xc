@@ -52,9 +52,9 @@ function @RunUnitTests()
 	$results.append($someArray.size)
 	
 	// Test 5
-	$a *= +1
-	$a *= -1
-	$a += -delta
+	$a *=+1
+	$a =-2
+	$a +=clamp(-delta,-10,+10)
 	if $a == -2
 		$results.append("OK")
 	else
