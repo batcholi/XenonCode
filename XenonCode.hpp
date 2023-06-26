@@ -1341,14 +1341,14 @@ const int VERSION_PATCH = 0;
 			return words.size() > 0;
 		}
 		
-		ParsedLine(const std::string& str, int line_ = 0) : line(line_) {
+		ParsedLine(const std::string& str, int line_ = 0, bool generic = false) : line(line_) {
 			ParseWords(str, words, scope);
 			
 			if (words.size() > 0) {
 				
 				// Check first word validity for this Scope
 				if (scope == 0) { // Global scope
-					if (words[0] != Word::Name || (find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0].word) == end(globalScopeFirstWords) && find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) == end(Implementation::entryPoints))) {
+					if (words[0] != Word::Name || (!generic && find(begin(globalScopeFirstWords), end(globalScopeFirstWords), words[0].word) == end(globalScopeFirstWords) && find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) == end(Implementation::entryPoints))) {
 						throw ParseError("Invalid first word", words[0], "in the global scope");
 					}
 				} else { // Function scope
@@ -1360,8 +1360,45 @@ const int VERSION_PATCH = 0;
 				// Validate statement (and insert/modify words to standarize it)
 				if (words[0] == Word::Name) {
 					
-					// Only in Global Scope
+					// In both Global and Function scopes
 					
+					// var
+						if (words[0] == "var") {
+							if ((words.size() > 1 && words[1] != Word::Varname)
+							 || (words.size() < 4)
+							 || (words[2] != "=" && words[2] != Word::CastOperator)
+							 || (words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text")
+							 || (words[2] == Word::CastOperator && words.size() > 4)
+							) {
+								throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
+							}
+							if (words[2] == "=") {
+								if (!ParseExpression(words, 3)) {
+									throw ParseError("Invalid expression after var assignment");
+								}
+							}
+						} else
+						
+					// array
+						if (words[0] == "array") {
+							if ((words.size() > 1 && words[1] != Word::Varname)
+							 || (words.size() > 2 && words[2] != Word::CastOperator && words[2] != "=")
+							 || (words[2] == "=" && words.size() > 3 && words[3] != Word::Varname)
+							) {
+								throw ParseError("Second word must be a variable name (starting with $) followed by either a colon and the array type (number or text) or an assignment to another array variable");
+							}
+							if (words.size() > 3 && words[3] != "number" && words[3] != "text" && words[3] != Word::Varname) {
+								throw ParseError("Invalid array type", words[3], "it must be either 'number' or 'text'");
+							}
+							if (words.size() > 4 && words[4] == "=") {
+								throw ParseError("Cannot initialize array values here");
+							}
+							if (words.size() > 4) throw ParseError("Too many words");
+							if (words.size() < 4) throw ParseError("Too few words");
+						} else
+						
+					// Only in Global Scope
+					if (scope == 0) {
 					// include
 						if (words[0] == "include") {
 							if (words.size() > 1) {
@@ -1466,7 +1503,7 @@ const int VERSION_PATCH = 0;
 						} else
 						
 					// entry points
-						if (find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) != end(Implementation::entryPoints)) {
+						if (generic || find(begin(Implementation::entryPoints), end(Implementation::entryPoints), words[0].word) != end(Implementation::entryPoints)) {
 							if (words.size() > 1) {
 								if (words[1] == Word::TrailOperator) {
 									if (words.size() > 2 && words[2] != Word::Numeric && words[2] != Word::Text && words[2] != Word::Varname) {
@@ -1492,45 +1529,11 @@ const int VERSION_PATCH = 0;
 									}
 								}
 							}
-						} else
-						
-					// In both Global and Function scopes
+						} else {
+							throw ParseError("Invalid first word", words[0], "in the global scope");
+						}
+					} else
 					
-					// var
-						if (words[0] == "var") {
-							if ((words.size() > 1 && words[1] != Word::Varname)
-							 || (words.size() < 4)
-							 || (words[2] != "=" && words[2] != Word::CastOperator)
-							 || (words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text")
-							 || (words[2] == Word::CastOperator && words.size() > 4)
-							) {
-								throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
-							}
-							if (words[2] == "=") {
-								if (!ParseExpression(words, 3)) {
-									throw ParseError("Invalid expression after var assignment");
-								}
-							}
-						} else
-						
-					// array
-						if (words[0] == "array") {
-							if ((words.size() > 1 && words[1] != Word::Varname)
-							 || (words.size() > 2 && words[2] != Word::CastOperator && words[2] != "=")
-							 || (words[2] == "=" && words.size() > 3 && words[3] != Word::Varname)
-							) {
-								throw ParseError("Second word must be a variable name (starting with $) followed by either a colon and the array type (number or text) or an assignment to another array variable");
-							}
-							if (words.size() > 3 && words[3] != "number" && words[3] != "text" && words[3] != Word::Varname) {
-								throw ParseError("Invalid array type", words[3], "it must be either 'number' or 'text'");
-							}
-							if (words.size() > 4 && words[4] == "=") {
-								throw ParseError("Cannot initialize array values here");
-							}
-							if (words.size() > 4) throw ParseError("Too many words");
-							if (words.size() < 4) throw ParseError("Too few words");
-						} else
-						
 					// Only in Function scope
 					
 					// output
@@ -1636,7 +1639,7 @@ const int VERSION_PATCH = 0;
 						} else
 						
 					// device function
-						if (words.size() == 1 || words[1] != Word::ExpressionBegin) {
+						if (scope > 0 && (words.size() == 1 || words[1] != Word::ExpressionBegin)) {
 							throw ParseError("A device function call must be followed by a set of parenthesis, optionally containing arguments");
 						}
 					

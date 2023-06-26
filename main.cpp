@@ -83,6 +83,9 @@ void PrintUsage() {
 	cout << "  xenoncode [-verbose] -parse-line 'a line of code'" << endl;
 	cout << "    Parses a single line of code and check for syntax errors" << endl;
 	cout << endl;
+	cout << "  xenoncode [-verbose] -parse-line-generic 'a line of code'" << endl;
+	cout << "    Parses a single line of code and check for syntax errors, without verifying the validity of device-specific objects/functions/entrypoints" << endl;
+	cout << endl;
 	cout << "  xenoncode [-verbose] -compile <sourcedir>" << endl;
 	cout << "    Parse and Compile a program from a given directory" << endl;
 	cout << "    There must be a 'main.xc' present" << endl;
@@ -110,12 +113,12 @@ bool ParseFile(const string& filepath) {
 	return false;
 }
 
-bool ParseLine(const string& line) {
+bool ParseLine(const string& line, bool generic = false) {
 	try {
 		if (verbose) {
 			cout << line << endl;
 		}
-		XenonCode::ParsedLine src(line);
+		XenonCode::ParsedLine src(line, 0, generic);
 		if (verbose) {
 			XenonCode::DebugWords(src.words);
 			cout << endl;
@@ -259,6 +262,10 @@ int main(const int argc, const char** argv) {
 				// Parse Single Line at a time
 				else if (arg == "parse-line") {
 					if (!ParseLine(nextArgStr())) return 1;
+				}
+				// Parse Single Line at a time, without verifying the validity of device-specific objects, functions and entry points
+				else if (arg == "parse-line-generic") {
+					if (!ParseLine(nextArgStr(), true)) return 1;
 				}
 				// Compile (using a directory)
 				else if (arg == "compile") {
