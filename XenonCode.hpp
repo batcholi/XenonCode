@@ -1936,12 +1936,12 @@ const int VERSION_PATCH = 0;
 		}
 		operator int64_t() const {
 			if (type == Numeric) return (int64_t)std::round(numericValue);
-			else if (type == Text) return stol(textValue);
+			else if (type == Text) return stoll(textValue);
 			return 0;
 		}
 		operator uint64_t() const {
 			if (type == Numeric) return (uint64_t)std::round(numericValue);
-			else if (type == Text) return stoul(textValue);
+			else if (type == Text) return stoull(textValue);
 			return 0;
 		}
 		operator int32_t() const {
@@ -2873,7 +2873,7 @@ const int VERSION_PATCH = 0;
 						if (double(word2) == 0.0) {
 							throw CompileError("Division by zero in const expression");
 						}
-						return Word{double(long(std::round(double(word1))) % long(std::round(double(word2))))};
+						return Word{double(int64_t(std::round(double(word1))) % int64_t(std::round(double(word2))))};
 					} else {
 						validate(false);
 					}
@@ -4499,20 +4499,44 @@ const int VERSION_PATCH = 0;
 		
 		Computer() {}
 		~Computer() {
-			if (assembly) {
-				delete assembly;
-			}
+			Shutdown();
 		}
 		
+		// Compile to bytecode and save assembly
+		static bool CompileAssembly(const std::string& directory, const std::vector<ParsedLine>& lines, bool verbose = false) {
+			Assembly assembly(lines, verbose);
+			std::ofstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::out | std::ios::trunc | std::ios::binary};
+			assembly.Write(file);
+			return file.good();
+		}
+		
+		// From a compiled assembly
 		bool LoadProgram(const std::string& directory_) {
+			Shutdown();
+
 			directory = directory_;
 			
-			{// Load Assembly
-				if (assembly) delete assembly;
-				std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE};
-				assembly = new Assembly(file);
-			}
+			// Load Assembly
+			std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::binary};
+			assembly = new Assembly(file);
 			
+			return Bootup();
+		}
+		
+		// From a source code
+		bool LoadProgram(const std::string& directory_, const std::vector<ParsedLine>& lines, bool verbose = false) {
+			Shutdown();
+			
+			directory = directory_;
+			
+			// Load Assembly
+			if (assembly) delete assembly;
+			assembly = new Assembly(lines, verbose);
+			
+			return Bootup();
+		}
+		
+		bool Bootup() {
 			{// Check Capabilities
 				// Do we have enough RAM to run this program?
 				if (capability.ram < assembly->ram_numericVariables
@@ -4560,6 +4584,13 @@ const int VERSION_PATCH = 0;
 			timersLastRun.resize(assembly->timers.size());
 			
 			return true;
+		}
+		
+		void Shutdown() {
+			if (assembly) {
+				delete assembly;
+				assembly = nullptr;
+			}
 		}
 		
 		void SaveStorage() {

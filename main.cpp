@@ -137,13 +137,12 @@ bool Compile(const string& directory) {
 			mainFile.DebugParsedLines();
 			cout << "Compiling..." << endl;
 		}
-		XenonCode::Assembly assembly {mainFile.lines, verbose};
-		ofstream output(directory + "/" + XC_PROGRAM_EXECUTABLE, ios_base::out | ios_base::trunc);
-		assembly.Write(output);
-		if (verbose) {
-			cout << "\nCompiled Successfully!\n" << endl;
+		if (XenonCode::Computer::CompileAssembly(directory, mainFile.lines, verbose)) {
+			if (verbose) {
+				cout << "\nCompiled Successfully!\n" << endl;
+			}
+			return true;
 		}
-		return true;
 	} catch (XenonCode::CompileError& e) {
 		cerr << e.what() << endl;
 	}

@@ -108,7 +108,8 @@
         "__memory": "cpp",
         "*.inc": "cpp",
         "__functional_base_03": "cpp",
-        "__hash": "cpp"
+        "__hash": "cpp",
+        "charconv": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

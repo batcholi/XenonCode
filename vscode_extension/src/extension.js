@@ -21,12 +21,11 @@ function activate(context) {
   // Linter
   const linter_executable = config.get('linter_executable');
   vscode.workspace.onDidChangeTextDocument(event => {
-    
     const document = event.document;
+    if (document.languageId !== 'xenoncode') return;
     const lines = document.getText().split('\n');
     const diagnostics = [];
     diagnosticCollection.clear();
-
     lines.forEach((line, lineIndex) => {
       let args = ['-parse-line-generic', line];
       let linter = spawn(linter_executable, args);

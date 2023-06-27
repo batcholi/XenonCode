@@ -79,8 +79,8 @@ init
 	$results.clear()
 	@RunUnitTests()
 
-timer interval 1
-	output.0 ("tick")
+; timer interval 1
+; 	output.0 ("tick")
 
-shutdown
-	output.0 ("Shutdown!")
+; shutdown
+; 	output.0 ("Shutdown!")

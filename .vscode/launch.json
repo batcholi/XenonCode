@@ -8,7 +8,7 @@
             "name": "Build and Run XenonCode",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/xenoncode",
+            "program": "${workspaceFolder}/build/xenoncode-debug",
             // "args": ["-verbose", "-parse-file", "../test/main.xc"],
             // "args": ["-verbose", "-compile", "../test"],
             "args": ["-verbose", "-compile", "../test", "-hz", "10", "-run", "../test"],

@@ -12,7 +12,7 @@
                 
                 "${workspaceFolder}/main.cpp",
                 "-o",
-                "${workspaceFolder}/build/xenoncode"
+                "${workspaceFolder}/build/xenoncode-debug"
             ],
             "options": {
                 "cwd": "${workspaceFolder}/build"
