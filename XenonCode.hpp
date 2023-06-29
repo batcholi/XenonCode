@@ -2961,7 +2961,7 @@ const int VERSION_PATCH = 0;
 					case Word::Funcname:
 					case Word::Name:{
 						std::vector<ByteCode> args {};
-						if (words[startIndex+1] == Word::ExpressionBegin) {
+						if (size_t(startIndex+1) < words.size() && words[startIndex+1] == Word::ExpressionBegin) {
 							int argIndex = startIndex+2;
 							while (argIndex <= endIndex) {
 								int argEnd = GetArgEnd(words, argIndex, endIndex);
@@ -4498,7 +4498,7 @@ const int VERSION_PATCH = 0;
 		} capability;
 		
 		Computer() {}
-		~Computer() {
+		virtual ~Computer() {
 			Shutdown();
 		}
 		
