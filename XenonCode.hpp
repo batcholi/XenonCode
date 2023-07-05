@@ -2002,7 +2002,7 @@ const int VERSION_PATCH = 0;
 				std::string type;
 			};
 			
-			uint32_t id;
+			uint32_t id; // may be set after construction
 			std::string name = "";
 			std::vector<Arg> args {};
 			std::string returnType = "";
@@ -2085,12 +2085,21 @@ const int VERSION_PATCH = 0;
 		Implementation::entryPoints.emplace_back(entryName);
 	}
 
-	// Implementation SHOULD declare device functions
+	// Implementation SHOULD declare (or override) device functions
 	inline static Device::FunctionInfo& DeclareDeviceFunction(const std::string& prototype, DeviceFunction&& func, uint8_t base = 0) {
+		Device::FunctionInfo f {0, prototype};
+		if (Device::deviceFunctionsByName.contains(f.name)) {
+			if (base != 0) throw std::runtime_error("Cannot override a device object member");
+			auto& existingFuncRef = Device::deviceFunctionsByName.at(f.name);
+			existingFuncRef.args = f.args;
+			existingFuncRef.returnType = f.returnType;
+			Device::deviceFunctionsById[existingFuncRef.id] = forward<DeviceFunction>(func);
+			return existingFuncRef;
+		}
 		static std::map<uint8_t, uint32_t> nextID {};
 		assert(nextID[base] < 65535);
 		uint32_t id = (++nextID[base]) | (uint32_t(base) << 16);
-		Device::FunctionInfo f {id, prototype};
+		f.id = id;
 		Device::deviceFunctionsByName.emplace(f.name, f);
 		Device::deviceFunctionNamesById.emplace(id, f.name);
 		Device::deviceFunctionsById.emplace(id, forward<DeviceFunction>(func));
@@ -4504,7 +4513,10 @@ const int VERSION_PATCH = 0;
 		
 		Computer() {}
 		virtual ~Computer() {
-			Shutdown();
+			if (assembly) {
+				delete assembly;
+				assembly = nullptr;
+			}
 		}
 		
 		// Compile to bytecode and save assembly
@@ -4517,10 +4529,9 @@ const int VERSION_PATCH = 0;
 		
 		// From a compiled assembly
 		virtual bool LoadProgram(const std::string& directory) {
-			Shutdown();
-			
-			// Load Assembly
 			std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::binary};
+			
+			if (assembly) delete assembly;
 			assembly = new Assembly(file);
 			
 			return Bootup();
@@ -4528,9 +4539,7 @@ const int VERSION_PATCH = 0;
 		
 		// From a source code
 		virtual bool LoadProgram(const std::vector<ParsedLine>& lines, bool verbose = false) {
-			Shutdown();
 			
-			// Load Assembly
 			if (assembly) delete assembly;
 			assembly = new Assembly(lines, verbose);
 			
