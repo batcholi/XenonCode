@@ -157,9 +157,10 @@ bool Run(const string& directory) {
 	XenonCode::Computer computer;
 	computer.capability.ram = 65536;
 	if (computer.LoadProgram(directory)) {
+		computer.LoadStorage(directory + "/storage");
 		try {
 			if (computer.RunInit()) {
-				computer.SaveStorage();
+				computer.SaveStorage(directory + "/storage");
 				if (cyclesPerSecond && computer.ShouldRunContinuously()) {
 					
 					{// Signal Handler
@@ -200,7 +201,7 @@ bool Run(const string& directory) {
 								inputQueue.pop();
 							}
 						}
-						computer.SaveStorage();
+						computer.SaveStorage(directory + "/storage");
 					}
 					if (inputThread.joinable()) {
 						inputThread.detach();

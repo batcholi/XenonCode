@@ -78,6 +78,9 @@ init
 	// Run Unit tests
 	$results.clear()
 	@RunUnitTests()
+	
+	return
+	print("this should not be visible because we have returned early")
 
 ; timer interval 1
 ; 	output.0 ("tick")

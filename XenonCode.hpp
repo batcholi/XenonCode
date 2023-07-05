@@ -4060,13 +4060,16 @@ const int VERSION_PATCH = 0;
 								}
 								// return
 								else if (firstWord == "return") {
-									validate(currentFunctionName != "");
-									ByteCode ret = getReturnVar(currentFunctionName);
-									ByteCode val = compileExpression(line.words, nextWordIndex, -1);
-									write(SET);
-									write(ret);
-									write(val);
-									write(VOID);
+									if (line.words.size() > 1) {
+										validate(currentFunctionName != "");
+										ByteCode ret = getReturnVar(currentFunctionName);
+										ByteCode val = compileExpression(line.words, nextWordIndex, -1);
+										write(SET);
+										write(ret);
+										write(val);
+										write(VOID);
+									}
+									write(RETURN);
 								}
 								else if (Device::deviceFunctionsByName.contains(firstWord.word)) {
 									// Device Function call
@@ -4475,27 +4478,27 @@ const int VERSION_PATCH = 0;
 
 	class Computer {
 		// Data
-		std::string directory;
 		Assembly* assembly = nullptr;
 		std::vector<double> ram_numeric {};
 		std::vector<std::string> ram_text {};
 		std::vector<std::vector<double>> ram_numeric_arrays {};
 		std::vector<std::vector<std::string>> ram_text_arrays {};
 		std::vector<uint64_t> ram_objects {};
-		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
 		
 		// State
-		bool storageDirty = false;
 		uint64_t currentCycleInstructions = 0;
 		std::vector<double> timersLastRun {};
 		
 	public:
 		struct Capability {
-			uint32_t ipc = 1'000'000; // instructions per cycle
+			uint32_t ipc = 0; // instructions per cycle
 			uint32_t ram = 16'000'000; // number of ram variables * their memory penalty
 			uint32_t storage = 256; // number of storage references
 			uint32_t io = 256; // Number of input/output ports
 		} capability;
+		
+		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
+		bool storageDirty = false;
 		
 		Computer() {}
 		virtual ~Computer() {
@@ -4511,10 +4514,8 @@ const int VERSION_PATCH = 0;
 		}
 		
 		// From a compiled assembly
-		bool LoadProgram(const std::string& directory_) {
+		bool LoadProgram(const std::string& directory) {
 			Shutdown();
-
-			directory = directory_;
 			
 			// Load Assembly
 			std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::binary};
@@ -4524,10 +4525,8 @@ const int VERSION_PATCH = 0;
 		}
 		
 		// From a source code
-		bool LoadProgram(const std::string& directory_, const std::vector<ParsedLine>& lines, bool verbose = false) {
+		bool LoadProgram(const std::vector<ParsedLine>& lines, bool verbose = false) {
 			Shutdown();
-			
-			directory = directory_;
 			
 			// Load Assembly
 			if (assembly) delete assembly;
@@ -4567,18 +4566,6 @@ const int VERSION_PATCH = 0;
 			ram_objects.clear();
 			ram_objects.resize(assembly->ram_objectReferences, 0);
 			
-			// Prepare storage cache
-			storageCache.clear();
-			for (const auto& name : assembly->storageRefs) {
-				auto& storage = storageCache[name];
-				storage.clear();
-				std::ifstream file{directory + "/storage/" + name};
-				char value[XC_MAX_TEXT_LENGTH+1];
-				while (file.getline(value, XC_MAX_TEXT_LENGTH, '\0')) {
-					storage.emplace_back(std::string(value));
-				}
-			}
-			
 			// Prepare timers
 			timersLastRun.clear();
 			timersLastRun.resize(assembly->timers.size());
@@ -4593,13 +4580,26 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
-		void SaveStorage() {
+		void LoadStorage(const std::string& storageDir) {
+			storageCache.clear();
+			for (const auto& name : assembly->storageRefs) {
+				auto& storage = storageCache[name];
+				storage.clear();
+				std::ifstream file{storageDir + "/" + name};
+				char value[XC_MAX_TEXT_LENGTH+1];
+				while (file.getline(value, XC_MAX_TEXT_LENGTH, '\0')) {
+					storage.emplace_back(std::string(value));
+				}
+			}
+			storageDirty = false;
+		}
+		
+		void SaveStorage(const std::string& storageDir) {
 			if (storageDirty) {
-				std::string storagePath = directory + "/storage/";
-				std::filesystem::create_directories(storagePath);
+				std::filesystem::create_directories(storageDir);
 				for (const auto& name : assembly->storageRefs) {
 					const auto& storage = storageCache[name];
-					std::ofstream file{storagePath + name};
+					std::ofstream file{storageDir + "/" + name};
 					for (const std::string& value : storage) {
 						file << value << '\0';
 					}
@@ -4608,9 +4608,17 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
-		void ClearStorage() {
-			std::string storagePath = directory + "/storage/";
-			std::filesystem::remove_all(storagePath);
+		void ClearStorage(const std::string& storageDir = "#") {
+			if (storageDir != "#") {
+				std::filesystem::remove_all(storageDir);
+			}
+			storageCache.clear();
+			if (assembly) {
+				for (const auto& name : assembly->storageRefs) {
+					storageCache[name].clear();
+				}
+			}
+			storageDirty = false;
 		}
 		
 	private:
@@ -4974,9 +4982,11 @@ const int VERSION_PATCH = 0;
 			
 			// IPC
 			auto ipcCheck = [this](int ipcPenalty = 1){
-				currentCycleInstructions += ipcPenalty;
-				if (currentCycleInstructions > capability.ipc) {
-					throw RuntimeError("Maximum IPC exceeded");
+				if (capability.ipc > 0) {
+					currentCycleInstructions += ipcPenalty;
+					if (currentCycleInstructions > capability.ipc) {
+						throw RuntimeError("Maximum IPC exceeded");
+					}
 				}
 			};
 			
