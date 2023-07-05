@@ -2,11 +2,17 @@
     "insertSpaces": false,
     "tabSize": 4,
 
-    // "xenoncode": {
-    //     "editor.insertSpaces": false,
-    //     "editor.tabSize": 4
-    // }
-
+    "onEnterRules": [
+        {
+            "beforeText": "^\\s*(function|if|foreach|while|else|elseif|init|input|timer|tick|repeat)(\\s+|$)",
+            "action": { "indent": "indent" }
+        },
+        {
+            "beforeText": "^\\s*(return|break)(\\s+|$)",
+            "action": { "indent": "outdent" }
+        }
+    ],
+    
     "comments": {
         // symbol used for single line comment
         "lineComment": ";"

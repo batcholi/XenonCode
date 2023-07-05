@@ -4500,6 +4500,8 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
 		bool storageDirty = false;
 		
+		bool IsLoaded() const {return assembly;}
+		
 		Computer() {}
 		virtual ~Computer() {
 			Shutdown();
@@ -4514,7 +4516,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		// From a compiled assembly
-		bool LoadProgram(const std::string& directory) {
+		virtual bool LoadProgram(const std::string& directory) {
 			Shutdown();
 			
 			// Load Assembly
@@ -4525,7 +4527,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		// From a source code
-		bool LoadProgram(const std::vector<ParsedLine>& lines, bool verbose = false) {
+		virtual bool LoadProgram(const std::vector<ParsedLine>& lines, bool verbose = false) {
 			Shutdown();
 			
 			// Load Assembly
@@ -4535,7 +4537,7 @@ const int VERSION_PATCH = 0;
 			return Bootup();
 		}
 		
-		bool Bootup() {
+		virtual bool Bootup() {
 			{// Check Capabilities
 				// Do we have enough RAM to run this program?
 				if (capability.ram < assembly->ram_numericVariables
@@ -4573,14 +4575,14 @@ const int VERSION_PATCH = 0;
 			return true;
 		}
 		
-		void Shutdown() {
+		virtual void Shutdown() {
 			if (assembly) {
 				delete assembly;
 				assembly = nullptr;
 			}
 		}
 		
-		void LoadStorage(const std::string& storageDir) {
+		virtual void LoadStorage(const std::string& storageDir) {
 			storageCache.clear();
 			for (const auto& name : assembly->storageRefs) {
 				auto& storage = storageCache[name];
@@ -4594,7 +4596,7 @@ const int VERSION_PATCH = 0;
 			storageDirty = false;
 		}
 		
-		void SaveStorage(const std::string& storageDir) {
+		virtual void SaveStorage(const std::string& storageDir) {
 			if (storageDirty) {
 				std::filesystem::create_directories(storageDir);
 				for (const auto& name : assembly->storageRefs) {
@@ -4608,7 +4610,7 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
-		void ClearStorage(const std::string& storageDir = "#") {
+		virtual void ClearStorage(const std::string& storageDir = "#") {
 			if (storageDir != "#") {
 				std::filesystem::remove_all(storageDir);
 			}
