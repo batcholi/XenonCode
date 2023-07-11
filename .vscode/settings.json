@@ -109,7 +109,10 @@
         "*.inc": "cpp",
         "__functional_base_03": "cpp",
         "__hash": "cpp",
-        "charconv": "cpp"
+        "charconv": "cpp",
+        "format": "cpp",
+        "__bits": "cpp",
+        "__verbose_abort": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

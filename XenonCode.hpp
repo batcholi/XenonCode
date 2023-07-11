@@ -14,6 +14,7 @@
 #include <cmath>
 #include <filesystem>
 #include <functional>
+#include <cstring>
 
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
@@ -4525,6 +4526,204 @@ const int VERSION_PATCH = 0;
 			std::ofstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::out | std::ios::trunc | std::ios::binary};
 			assembly.Write(file);
 			return file.good();
+		}
+		
+		// From a saved state
+		virtual std::vector<uint8_t> SaveState() {
+			if (!assembly) {
+				return {};
+			}
+			
+			std::vector<uint8_t> state;
+			size_t pos = 0;
+			uint32_t memsize;
+			
+			{// Assembly
+				std::stringstream ss(std::ios::out | std::ios::in | std::ios::binary);
+				assembly->Write(ss);
+				memsize = ss.tellp();
+				ss.seekg(0, std::ios::beg);
+				state.reserve(
+					+ sizeof(memsize) + memsize
+					+ sizeof(memsize) + ram_numeric.size() * sizeof(double)
+					+ sizeof(memsize) + ram_text.size() * 20 // approximate average text length
+					+ sizeof(memsize) + ram_numeric_arrays.size() * sizeof(double) * 10 // approximate average numeric array length
+					+ sizeof(memsize) + ram_text_arrays.size() * 20 * 10 // approximate average text array length
+					+ sizeof(memsize) + ram_objects.size() * sizeof(uint64_t)
+					+ sizeof(memsize) // checksum
+				);
+				state.resize(pos + sizeof(memsize) + memsize);
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				ss.read((char*)state.data() + pos, memsize);
+				assert(ss.tellg() == memsize);
+				pos += memsize;
+			}
+			
+			{// ram_numeric
+				state.resize(pos + sizeof(memsize) + ram_numeric.size() * sizeof(double));
+				memsize = ram_numeric.size();
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				memcpy(state.data() + pos, ram_numeric.data(), ram_numeric.size() * sizeof(double));
+				pos += ram_numeric.size() * sizeof(double);
+			}
+			
+			{// ram_text
+				state.resize(pos + sizeof(memsize));
+				memsize = ram_text.size();
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				for (const std::string& text : ram_text) {
+					state.resize(pos + text.size() + 1);
+					memcpy(state.data() + pos, text.data(), text.size() + 1);
+					pos += text.size() + 1;
+				}
+			}
+			
+			{// ram_numeric_arrays
+				state.resize(pos + sizeof(memsize));
+				memsize = ram_numeric_arrays.size();
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				for (const std::vector<double>& arr : ram_numeric_arrays) {
+					state.resize(pos + sizeof(memsize));
+					memsize = arr.size();
+					memcpy(state.data() + pos, &memsize, sizeof(memsize));
+					pos += sizeof(memsize);
+					memcpy(state.data() + pos, arr.data(), arr.size() * sizeof(double));
+					pos += arr.size() * sizeof(double);
+				}
+			}
+			
+			{// ram_text_arrays
+				state.resize(pos + sizeof(memsize));
+				memsize = ram_text_arrays.size();
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				for (const std::vector<std::string>& arr : ram_text_arrays) {
+					state.resize(pos + sizeof(memsize));
+					memsize = arr.size();
+					memcpy(state.data() + pos, &memsize, sizeof(memsize));
+					pos += sizeof(memsize);
+					for (const std::string& text : arr) {
+						state.resize(pos + text.size() + 1);
+						memcpy(state.data() + pos, text.data(), text.size() + 1);
+						pos += text.size() + 1;
+					}
+				}
+			}
+			
+			{// ram_objects
+				state.resize(pos + sizeof(memsize) + ram_objects.size() * sizeof(uint64_t));
+				memsize = ram_objects.size();
+				memcpy(state.data() + pos, &memsize, sizeof(memsize));
+				pos += sizeof(memsize);
+				memcpy(state.data() + pos, ram_objects.data(), ram_objects.size() * sizeof(uint64_t));
+				pos += ram_objects.size() * sizeof(uint64_t);
+			}
+			
+			{// Checksum (just the total size, don't need to confirm data integrity)
+				size_t totalSize = state.size() + sizeof(totalSize);
+				state.resize(pos + sizeof(totalSize));
+				memcpy(state.data() + pos, &totalSize, sizeof(totalSize));
+				pos += sizeof(totalSize);
+			}
+			
+			return state;
+		}
+		
+		// From a saved state
+		virtual bool LoadState(const std::vector<uint8_t>& state) {
+			size_t pos = 0;
+			uint32_t memsize;
+			
+			{// Assembly
+				std::stringstream ss(std::ios::out | std::ios::in | std::ios::binary);
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ss.write((char*)state.data() + pos, memsize);
+				assert(ss.tellp() == memsize);
+				ss.seekg(0, std::ios::beg);
+				pos += memsize;
+				if (assembly) delete assembly;
+				assembly = new Assembly(ss);
+				if (!Bootup()) return false;
+			}
+			
+			{// ram_numeric
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ram_numeric.resize(memsize);
+				memcpy(ram_numeric.data(), state.data() + pos, ram_numeric.size() * sizeof(double));
+				pos += ram_numeric.size() * sizeof(double);
+			}
+			
+			{// ram_text
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ram_text.resize(memsize);
+				for (std::string& text : ram_text) {
+					text.resize(0);
+					while (state[pos] != '\0') {
+						text += state[pos];
+						++pos;
+					}
+					++pos;
+				}
+			}
+			
+			{// ram_numeric_arrays
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ram_numeric_arrays.resize(memsize);
+				for (std::vector<double>& arr : ram_numeric_arrays) {
+					memcpy(&memsize, state.data() + pos, sizeof(memsize));
+					pos += sizeof(memsize);
+					arr.resize(memsize);
+					memcpy(arr.data(), state.data() + pos, arr.size() * sizeof(double));
+					pos += arr.size() * sizeof(double);
+				}
+			}
+			
+			{// ram_text_arrays
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ram_text_arrays.resize(memsize);
+				for (std::vector<std::string>& arr : ram_text_arrays) {
+					memcpy(&memsize, state.data() + pos, sizeof(memsize));
+					pos += sizeof(memsize);
+					arr.resize(memsize);
+					for (std::string& text : arr) {
+						text.resize(0);
+						while (state[pos] != '\0') {
+							text += state[pos];
+							++pos;
+						}
+						++pos;
+					}
+				}
+			}
+			
+			{// ram_objects
+				memcpy(&memsize, state.data() + pos, sizeof(memsize));
+				pos += sizeof(memsize);
+				ram_objects.resize(memsize);
+				memcpy(ram_objects.data(), state.data() + pos, ram_objects.size() * sizeof(uint64_t));
+				pos += ram_objects.size() * sizeof(uint64_t);
+			}
+			
+			{// Checksum (just the total size, don't need to confirm data integrity)
+				size_t totalSize;
+				memcpy(&totalSize, state.data() + pos, sizeof(totalSize));
+				pos += sizeof(totalSize);
+				if (pos != totalSize) {
+					throw RuntimeError("Invalid state");
+				}
+			}
+			
+			// Ready
+			return true;
 		}
 		
 		// From a compiled assembly
