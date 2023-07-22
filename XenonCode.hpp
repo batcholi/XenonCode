@@ -4514,10 +4514,7 @@ const int VERSION_PATCH = 0;
 		
 		Computer() {}
 		virtual ~Computer() {
-			if (assembly) {
-				delete assembly;
-				assembly = nullptr;
-			}
+			ClearAssemly();
 		}
 		
 		// Compile to bytecode and save assembly
@@ -4646,7 +4643,7 @@ const int VERSION_PATCH = 0;
 				assert(ss.tellp() == memsize);
 				ss.seekg(0, std::ios::beg);
 				pos += memsize;
-				if (assembly) delete assembly;
+				ClearAssemly();
 				assembly = new Assembly(ss);
 				if (!Bootup()) return false;
 			}
@@ -4730,7 +4727,7 @@ const int VERSION_PATCH = 0;
 		virtual bool LoadProgram(const std::string& directory) {
 			std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::binary};
 			
-			if (assembly) delete assembly;
+			ClearAssemly();
 			assembly = new Assembly(file);
 			
 			return Bootup();
@@ -4739,7 +4736,7 @@ const int VERSION_PATCH = 0;
 		// From a source code
 		virtual bool LoadProgram(const std::vector<ParsedLine>& lines, bool verbose = false) {
 			
-			if (assembly) delete assembly;
+			ClearAssemly();
 			assembly = new Assembly(lines, verbose);
 			
 			return Bootup();
@@ -4783,11 +4780,15 @@ const int VERSION_PATCH = 0;
 			return true;
 		}
 		
-		virtual void Shutdown() {
+		void ClearAssemly() {
 			if (assembly) {
 				delete assembly;
 				assembly = nullptr;
 			}
+		}
+		
+		virtual void Shutdown() {
+			ClearAssemly();
 		}
 		
 		virtual void LoadStorage(const std::string& storageDir) {
