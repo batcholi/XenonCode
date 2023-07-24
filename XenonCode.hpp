@@ -5174,6 +5174,7 @@ const int VERSION_PATCH = 0;
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
+			if (!assembly) return;
 			if (program.size() <= index) return;
 			
 			// Find current file and line for debug
