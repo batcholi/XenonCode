@@ -4495,8 +4495,6 @@ const int VERSION_PATCH = 0;
 		std::vector<std::vector<std::string>> ram_text_arrays {};
 		std::vector<uint64_t> ram_objects {};
 		
-		// State
-		uint64_t currentCycleInstructions = 0;
 		std::vector<double> timersLastRun {};
 		
 	public:
@@ -4507,6 +4505,7 @@ const int VERSION_PATCH = 0;
 			uint32_t io = 256; // Number of input/output ports
 		} capability;
 		
+		uint64_t currentCycleInstructions = 0;
 		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
 		bool storageDirty = false;
 		
