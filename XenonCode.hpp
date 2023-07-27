@@ -1640,8 +1640,13 @@ const int VERSION_PATCH = 0;
 						} else
 						
 					// device function
-						if (scope > 0 && (words.size() == 1 || words[1] != Word::ExpressionBegin)) {
-							throw ParseError("A device function call must be followed by a set of parenthesis, optionally containing arguments");
+						if (scope > 0) {
+							if (words.size() == 1 || words[1] != Word::ExpressionBegin) {
+								throw ParseError("A device function call must be followed by a set of parenthesis, optionally containing arguments");
+							}
+							if (ParseArgs(words, 1) != -1) {
+								throw ParseError("Invalid argument list after device function call");
+							}
 						}
 					
 				} else
