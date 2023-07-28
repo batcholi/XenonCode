@@ -5339,7 +5339,7 @@ const int VERSION_PATCH = 0;
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
 										MemSet(double(MemGetNumeric(a) == MemGetNumeric(b)), dst);
-									} else if (IsText(dst) && IsText(a) && IsText(b)) {
+									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
