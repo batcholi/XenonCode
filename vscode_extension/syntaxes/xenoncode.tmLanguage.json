@@ -14,7 +14,7 @@
             ]
         },
 		{
-			"match": "(?:(\\W|^))(function|storage|array|var|const|include|return|if|foreach|while|else|elseif|init|input|timer|tick|output|repeat|frequency|interval|break|continue|and|or|:\\s*(text|number))(?=(\\W|$))",
+			"match": "(?:(\\W|^))(function|storage|array|var|const|include|return|if|foreach|while|else|elseif|init|input|timer|tick|output|repeat|frequency|interval|break|continue|and|or|xor|:\\s*(text|number))(?=(\\W|$))",
 			"name": "keyword.control.xenoncode"
 		},
 		{

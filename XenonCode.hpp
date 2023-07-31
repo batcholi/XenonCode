@@ -65,6 +65,9 @@
 #ifdef ORR
 	#undef ORR
 #endif
+#ifdef XOR
+	#undef XOR
+#endif
 #ifdef EQQ
 	#undef EQQ
 #endif
@@ -393,6 +396,7 @@ const int VERSION_PATCH = 0;
 			EqualityOperatorGroup, // == != <>
 			AndOperator, // && and
 			OrOperator, // || or
+			XorOperator,
 			AssignmentOperatorGroup, // = += -= *= /= ^= %= &=
 			CommaOperator, // ,
 			
@@ -466,6 +470,9 @@ const int VERSION_PATCH = 0;
 						}break;
 					case OrOperator:{
 						this->word = "||";
+						}break;
+					case XorOperator:{
+						this->word = "xor";
 						}break;
 					case ConcatOperator:{
 						this->word = "&";
@@ -694,6 +701,8 @@ const int VERSION_PATCH = 0;
 						word.type = Word::AndOperator;
 					else if (word == "or")
 						word.type = Word::OrOperator;
+					else if (word == "xor")
+						word.type = Word::XorOperator;
 				}
 				if (word == Word::Expression) {
 					words.push_back(Word::ExpressionBegin);
@@ -823,6 +832,8 @@ const int VERSION_PATCH = 0;
 						break;
 					case Word::OrOperator:
 						std::cout << "OrOperator{" << word << "} ";
+					case Word::XorOperator:
+						std::cout << "XorOperator{" << word << "} ";
 						break;
 					case Word::AssignmentOperatorGroup:
 						std::cout << "AssignmentOperatorGroup{" << word << "} ";
@@ -882,6 +893,8 @@ const int VERSION_PATCH = 0;
 						break;
 					case Word::OrOperator:
 						std::cout << "|| ";
+					case Word::XorOperator:
+						std::cout << "xor ";
 						break;
 					case Word::Void:
 						break;
@@ -1038,6 +1051,9 @@ const int VERSION_PATCH = 0;
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
 				Word::EqualityOperatorGroup,
+				Word::AndOperator,
+				Word::OrOperator,
+				Word::XorOperator,
 				Word::CommaOperator,
 			}},
 			{Word::Text, {
@@ -1056,6 +1072,7 @@ const int VERSION_PATCH = 0;
 				Word::EqualityOperatorGroup,
 				Word::AndOperator,
 				Word::OrOperator,
+				Word::XorOperator,
 				Word::ConcatOperator,
 				Word::CommaOperator,
 			}},
@@ -1073,6 +1090,7 @@ const int VERSION_PATCH = 0;
 				Word::EqualityOperatorGroup,
 				Word::AndOperator,
 				Word::OrOperator,
+				Word::XorOperator,
 				Word::CommaOperator,
 			}},
 			{Word::ExpressionBegin, {
@@ -1094,6 +1112,7 @@ const int VERSION_PATCH = 0;
 				Word::EqualityOperatorGroup,
 				Word::AndOperator,
 				Word::OrOperator,
+				Word::XorOperator,
 				Word::CommaOperator,
 			}},
 			{Word::TrailOperator, {
@@ -1156,6 +1175,13 @@ const int VERSION_PATCH = 0;
 				Word::Name,
 				Word::ExpressionBegin,
 			}},
+			{Word::XorOperator, {
+				Word::Numeric,
+				Word::Varname,
+				Word::Funcname,
+				Word::Name,
+				Word::ExpressionBegin,
+			}},
 			// {Word::AssignmentOperatorGroup, {}}, // Not allowed within expressions
 			{Word::CommaOperator, {
 				Word::Numeric,
@@ -1188,6 +1214,7 @@ const int VERSION_PATCH = 0;
 				Word::EqualityOperatorGroup,
 				Word::AndOperator,
 				Word::OrOperator,
+				Word::XorOperator,
 				Word::CommaOperator,
 			}}}},
 			{Word::ExpressionBegin, {
@@ -1841,6 +1868,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( CCT /* REF_DST REF_A REF_B */ ) // & (concat)
 	DEF_OP( AND /* REF_DST REF_A REF_B */ ) // &&
 	DEF_OP( ORR /* REF_DST REF_A REF_B */ ) // ||
+	DEF_OP( XOR /* REF_DST REF_A REF_B */ ) // xor
 	DEF_OP( EQQ /* REF_DST REF_A REF_B */ ) // ==
 	DEF_OP( NEQ /* REF_DST REF_A REF_B */ ) // !=
 	DEF_OP( LST /* REF_DST REF_A REF_B */ ) // <
@@ -2940,6 +2968,9 @@ const int VERSION_PATCH = 0;
 				} else if (op == Word::OrOperator) {
 					validate(word1 == Word::Numeric && word2 == Word::Numeric);
 					return Word{double(double(word1) || double(word2))};
+				} else if (op == Word::XorOperator) {
+					validate(word1 == Word::Numeric && word2 == Word::Numeric);
+					return Word{double(!!(double(word1)) != !!(double(word2)))};
 				}
 				throw CompileError("Invalid operator", op, "in const expression");
 			};
@@ -3203,6 +3234,15 @@ const int VERSION_PATCH = 0;
 						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						ByteCode tmp = declareTmpNumeric();
 						write(ORR);
+						write(tmp);
+						write(ref1);
+						write(ref2);
+						write(VOID);
+						return tmp;
+					} else if (op == Word::XorOperator) {
+						validate(IsNumeric(ref1) && IsNumeric(ref2));
+						ByteCode tmp = declareTmpNumeric();
+						write(XOR);
 						write(tmp);
 						write(ref1);
 						write(ref2);
@@ -5319,7 +5359,7 @@ const int VERSION_PATCH = 0;
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
 										MemSet(double(MemGetNumeric(a) && MemGetNumeric(b)), dst);
-									} else if (IsText(dst) && IsText(a) && IsText(b)) {
+									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != "" && MemGetText(b) != ""), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -5329,8 +5369,18 @@ const int VERSION_PATCH = 0;
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
 										MemSet(double(MemGetNumeric(a) || MemGetNumeric(b)), dst);
-									} else if (IsText(dst) && IsText(a) && IsText(b)) {
+									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != "" && MemGetText(b) != ""), dst);
+									} else throw RuntimeError("Invalid operation");
+								}break;
+								case XOR: {
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
+										MemSet(double(!!MemGetNumeric(a) != !!MemGetNumeric(b)), dst);
+									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
+										MemSet(double((MemGetText(a) != "") != (MemGetText(b) != "")), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case EQQ: {
@@ -5349,7 +5399,7 @@ const int VERSION_PATCH = 0;
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
 										MemSet(double(MemGetNumeric(a) != MemGetNumeric(b)), dst);
-									} else if (IsText(dst) && IsText(a) && IsText(b)) {
+									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;

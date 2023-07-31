@@ -414,6 +414,7 @@ The following operators will compute the appropriate math operation between the 
 - `>=` greater or equal to
 - `&&` or `and` conditional AND
 - `||` or `or` conditional OR
+- `xor` is also available, equivalent to (!!a != !!b)
 
 ## Other operators
 - `.` (trail operator) refer to a sub-item of an array or text or call a trailing function on the leading variable, or a member of an object
