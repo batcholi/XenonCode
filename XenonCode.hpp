@@ -266,6 +266,8 @@ const int VERSION_PATCH = 0;
 #pragma endregion
 
 #pragma region Helper Functions
+	
+	#define EPSILON_DOUBLE 0.0000001
 
 	inline static double step(double edge1, double edge2, double val) {
 		if (edge1 > edge2) {
@@ -5030,6 +5032,9 @@ const int VERSION_PATCH = 0;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
+		bool MemGetBoolean(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+			return abs(MemGetNumeric(ref, arrIndex)) > EPSILON_DOUBLE;
+		}
 		const std::string& MemGetText(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			switch (ref.type) {
 				case ROM_CONST_TEXT: {
@@ -5358,7 +5363,7 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetNumeric(a) && MemGetNumeric(b)), dst);
+										MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
 									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != "" && MemGetText(b) != ""), dst);
 									} else throw RuntimeError("Invalid operation");
@@ -5368,9 +5373,9 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetNumeric(a) || MemGetNumeric(b)), dst);
+										MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
 									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
-										MemSet(double(MemGetText(a) != "" && MemGetText(b) != ""), dst);
+										MemSet(double(MemGetText(a) != "" || MemGetText(b) != ""), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case XOR: {
@@ -5378,7 +5383,7 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(!!MemGetNumeric(a) != !!MemGetNumeric(b)), dst);
+										MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
 									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double((MemGetText(a) != "") != (MemGetText(b) != "")), dst);
 									} else throw RuntimeError("Invalid operation");
@@ -5388,7 +5393,7 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetNumeric(a) == MemGetNumeric(b)), dst);
+										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
 									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
 									} else throw RuntimeError("Invalid operation");
@@ -5398,7 +5403,7 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetNumeric(a) != MemGetNumeric(b)), dst);
+										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
 									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
 									} else throw RuntimeError("Invalid operation");
@@ -5451,7 +5456,7 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(double(MemGetNumeric(val) == 0.0), dst);
+										MemSet(double(!MemGetBoolean(val)), dst);
 									} else if (IsText(dst) && IsText(val)) {
 										MemSet(double(MemGetText(val) == ""), dst);
 									} else throw RuntimeError("Invalid operation");
@@ -6319,7 +6324,7 @@ const int VERSION_PATCH = 0;
 									if (addrTrue.type != ADDR || addrFalse.type != ADDR) throw RuntimeError("Invalid address");
 									bool val;
 									if (IsNumeric(ref)) {
-										val = MemGetNumeric(ref);
+										val = MemGetBoolean(ref);
 									} else if (IsText(ref)) {
 										val = MemGetText(ref) != "";
 									} else {
