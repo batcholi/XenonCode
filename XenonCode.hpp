@@ -4630,7 +4630,7 @@ const int VERSION_PATCH = 0;
 				memcpy(state.data() + pos, &memsize, sizeof(memsize));
 				pos += sizeof(memsize);
 				for (const std::vector<double>& arr : ram_numeric_arrays) {
-					state.resize(pos + sizeof(memsize));
+					state.resize(pos + sizeof(memsize) + arr.size() * sizeof(double));
 					memsize = arr.size();
 					memcpy(state.data() + pos, &memsize, sizeof(memsize));
 					pos += sizeof(memsize);
@@ -4651,8 +4651,10 @@ const int VERSION_PATCH = 0;
 					pos += sizeof(memsize);
 					for (const std::string& text : arr) {
 						state.resize(pos + text.size() + 1);
-						memcpy(state.data() + pos, text.data(), text.size() + 1);
-						pos += text.size() + 1;
+						memcpy(state.data() + pos, text.data(), text.size());
+						pos += text.size();
+						state[pos] = '\0';
+						++pos;
 					}
 				}
 			}
