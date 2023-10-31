@@ -5574,7 +5574,10 @@ const int VERSION_PATCH = 0;
 									ByteCode min = nextCode();
 									ByteCode max = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(min) && IsNumeric(max)) {
-										MemSet(std::clamp(MemGetNumeric(val), MemGetNumeric(min), MemGetNumeric(max)), dst);
+										double minVal = MemGetNumeric(min);
+										double maxVal = MemGetNumeric(max);
+										if (minVal > maxVal) throw RuntimeError("Invalid operation");
+										MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
