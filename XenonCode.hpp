@@ -353,10 +353,18 @@ const int VERSION_PATCH = 0;
 		return isalnum(c) || c == '_';
 	}
 
-	inline static std::string ToString(double val) {
-		std::stringstream str;
-		str << val;
-		return str.str();
+	inline static std::string ToString(double value) {
+		std::ostringstream oss;
+		oss << std::fixed << value;
+		std::string str = oss.str();
+		size_t dotPos = str.find('.');
+		if (dotPos != std::string::npos) {
+			str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+			if (str.back() == '.') {
+				str.pop_back();
+			}
+		}
+		return str;
 	}
 
 	inline static const int WORD_ENUM_FINAL_TYPE_START = 11;
@@ -2011,7 +2019,7 @@ const int VERSION_PATCH = 0;
 			return 0;
 		}
 		operator std::string() const {
-			if (type == Numeric) return std::to_string(numericValue);
+			if (type == Numeric) return ToString(numericValue);
 			else if (type == Text) return textValue;
 			return "";
 		}
