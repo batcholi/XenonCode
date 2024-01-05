@@ -4854,7 +4854,7 @@ const int VERSION_PATCH = 0;
 				storage.clear();
 				std::ifstream file{storageDir + "/" + name};
 				char value[XC_MAX_TEXT_LENGTH+1];
-				while (file.getline(value, XC_MAX_TEXT_LENGTH, '\0')) {
+				while (file.getline(value, XC_MAX_TEXT_LENGTH)) {
 					storage.emplace_back(std::string(value));
 				}
 			}
@@ -4868,7 +4868,7 @@ const int VERSION_PATCH = 0;
 					const auto& storage = storageCache[name];
 					std::ofstream file{storageDir + "/" + name};
 					for (const std::string& value : storage) {
-						file << value << '\0';
+						file << value << '\n';
 					}
 				}
 				storageDirty = false;
