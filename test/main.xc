@@ -97,6 +97,9 @@ function @RunUnitTests()
 	$words.from($numbers)
 	foreach $words ($word)
 		$results.append($word)
+	var $serialized = ""
+	$serialized.from($numbers, ", ")
+	$results.append($serialized)
 	
 init
 	output.0 ("Hello, World!")

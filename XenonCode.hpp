@@ -1921,7 +1921,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( INS /* REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...] */ ) // array.insert(index, value, value...)
 	DEF_OP( DEL /* REF_ARR REF_INDEX [REF_INDEX_END] */ ) // array.erase(index [, end])
 	DEF_OP( FLL /* REF_ARR REF_QTY REF_VAL */ ) // array.fill(qty, value)
-	DEF_OP( FRM /* REF_ARR REF_VAL [REF_SEPARATOR] */ ) // array.from(value [, separator])
+	DEF_OP( FRM /* (REF_ARR | REF_TXT) (REF_ARR | REF_VAL) [REF_SEPARATOR] */ ) // array.from(value [, separator])
 	DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
 	DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
 	DEF_OP( MIN /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.min  min(number, number...)
@@ -6074,12 +6074,12 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case FRM: {// REF_ARR REF_VAL [REF_SEPARATOR]
+								case FRM: {// REF_DST REF_VAL [REF_SEPARATOR]
 									ByteCode arr = nextCode();
 									ByteCode val = nextCode();
 									ByteCode sep = nextCode();
 									std::string separator = sep.type != VOID? MemGetText(sep) : "";
-									if (!IsArray(arr)) throw RuntimeError("Not an array");
+									if (!IsArray(arr) && !IsText(arr)) throw RuntimeError("Not an array or text");
 									auto fillArray = [&](std::vector<auto>& dst){
 										dst.clear();
 										if (IsStorage(val)) {
@@ -6164,6 +6164,57 @@ const int VERSION_PATCH = 0;
 										}break;
 										case RAM_ARRAY_TEXT:{
 											fillArray(GetTextArray(arr));
+										}break;
+										case RAM_VAR_TEXT:
+										case STORAGE_VAR_TEXT:{
+											std::string dst = "";
+											if (IsStorage(val)) {
+												auto& otherArray = GetStorage(val);
+												if (IsArray(val)) {
+													for (const auto& val : otherArray) {
+														if (dst != "") dst += separator;
+														dst += val;
+													}
+												} else if (separator == "") {
+													dst = otherArray[0];
+												} else {
+													throw RuntimeError("Invalid operation");
+												}
+											}
+											else if (IsArray(val)) {
+												switch (val.type) {
+													case RAM_ARRAY_NUMERIC:{
+														for (const auto& val : GetNumericArray(val)) {
+															if (dst != "") dst += separator;
+															dst += ToString(val);
+														}
+													}break;
+													case RAM_ARRAY_TEXT:{
+														for (const auto& val : GetTextArray(val)) {
+															if (dst != "") dst += separator;
+															dst += val;
+														}
+													}break;
+													default: throw RuntimeError("Invalid operation");
+												}
+											}
+											else if (IsNumeric(val)) {
+												if (separator != "") throw RuntimeError("Invalid operation");
+												double value = MemGetNumeric(val);
+												dst = ToString(value);
+											}
+											else if (IsText(val)) {
+												if (separator != "") throw RuntimeError("Invalid operation");
+												dst = MemGetText(val);
+											}
+											else throw RuntimeError("Invalid operation");
+											ipcCheck(dst.length() + 1);
+											if (arr.type == STORAGE_VAR_TEXT) {
+												StorageSet(dst, arr);
+												storageDirty = true;
+											} else {
+												MemSet(dst, arr);
+											}
 										}break;
 									}
 								}break;
