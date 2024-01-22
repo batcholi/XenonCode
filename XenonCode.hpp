@@ -6171,9 +6171,9 @@ const int VERSION_PATCH = 0;
 											if (IsStorage(val)) {
 												auto& otherArray = GetStorage(val);
 												if (IsArray(val)) {
-													for (const auto& val : otherArray) {
+													for (const auto& v : otherArray) {
 														if (dst != "") dst += separator;
-														dst += val;
+														dst += v;
 													}
 												} else if (separator == "") {
 													dst = otherArray[0];
@@ -6184,15 +6184,15 @@ const int VERSION_PATCH = 0;
 											else if (IsArray(val)) {
 												switch (val.type) {
 													case RAM_ARRAY_NUMERIC:{
-														for (const auto& val : GetNumericArray(val)) {
+														for (const auto& v : GetNumericArray(val)) {
 															if (dst != "") dst += separator;
-															dst += ToString(val);
+															dst += ToString(v);
 														}
 													}break;
 													case RAM_ARRAY_TEXT:{
-														for (const auto& val : GetTextArray(val)) {
+														for (const auto& v : GetTextArray(val)) {
 															if (dst != "") dst += separator;
-															dst += val;
+															dst += v;
 														}
 													}break;
 													default: throw RuntimeError("Invalid operation");
