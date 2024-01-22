@@ -583,6 +583,7 @@ These functions MUST be called as trailing functions, and they do not return any
 - $myArray.`insert`(index, value) // Insert a new value to an array after a position, pushing back all following values by one
 - $myArray.`erase`(index) // Erase an element from an array at a specific index, pulling back all following values by one
 - $myArray.`fill`(qty, value) // Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
+- $myArray.`from`(other [, separator]) // Set the contents of the array to another array or text. Separator is for splitting with a specific string (only valid when other is a text).
 
 ### Trailing members for Arrays and Texts
 Using the trail operator `.`, we can also return a specific information about certain types of variables.  

@@ -185,6 +185,9 @@
 #ifdef FLL
 	#undef FLL
 #endif
+#ifdef FRM
+	#undef FRM
+#endif
 #ifdef SIZ
 	#undef SIZ
 #endif
@@ -1918,6 +1921,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( INS /* REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...] */ ) // array.insert(index, value, value...)
 	DEF_OP( DEL /* REF_ARR REF_INDEX [REF_INDEX_END] */ ) // array.erase(index [, end])
 	DEF_OP( FLL /* REF_ARR REF_QTY REF_VAL */ ) // array.fill(qty, value)
+	DEF_OP( FRM /* REF_ARR REF_VAL [REF_SEPARATOR] */ ) // array.from(value [, separator])
 	DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
 	DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
 	DEF_OP( MIN /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.min  min(number, number...)
@@ -2299,6 +2303,7 @@ const int VERSION_PATCH = 0;
 		if (func == "insert") {returnType = VOID; return INS;}
 		if (func == "erase") {returnType = VOID; return DEL;}
 		if (func == "fill") {returnType = VOID; return FLL;}
+		if (func == "from") {returnType = VOID; return FRM;}
 		if (func == "substring") {returnType = RAM_VAR_TEXT; return SBS;}
 		if (func == "text") {returnType = RAM_VAR_TEXT; return TXT;}
 		if (func == "sort") {returnType = VOID; return ASC;}
@@ -2331,6 +2336,18 @@ const int VERSION_PATCH = 0;
 		return false;
 	}
 
+	inline static bool IsStorage(ByteCode v) {
+		switch (v.type) {
+			case STORAGE_ARRAY_NUMERIC:
+			case STORAGE_ARRAY_TEXT:
+			case STORAGE_VAR_NUMERIC:
+			case STORAGE_VAR_TEXT:
+			return true;
+		}
+		return false;
+	}
+	
+	// Does not include arrays
 	inline static bool IsNumeric(ByteCode v) {
 		switch (v.type) {
 			case ROM_CONST_NUMERIC:
@@ -2340,7 +2357,8 @@ const int VERSION_PATCH = 0;
 		}
 		return false;
 	}
-
+	
+	// Does not include arrays
 	inline static bool IsText(ByteCode v) {
 		switch (v.type) {
 			case ROM_CONST_TEXT:
@@ -5085,6 +5103,43 @@ const int VERSION_PATCH = 0;
 			return {Var::Type(Var::Object | (ref & (RAM_OBJECT-1))), ram_objects[ref.value]};
 		}
 		
+		template<typename CONTAINER, typename T>
+		void ArrayInsertAuto(CONTAINER& container, const T& value) {
+			if constexpr (std::is_same_v<CONTAINER, T>) {
+				container.insert(container.end(), value.begin(), value.end());
+			}
+			else if constexpr (std::is_same_v<typename CONTAINER::value_type, T>) {
+				container.push_back(value);
+			}
+			else if constexpr (std::is_same_v<typename CONTAINER::value_type, double> && std::is_same_v<T, std::string>) {
+				if (value == "") {
+					container.push_back(0.0);
+				} else {
+					container.push_back(stod(value));
+				}
+			}
+			else if constexpr (std::is_same_v<typename CONTAINER::value_type, std::string> && std::is_same_v<T, double>) {
+				container.push_back(ToString(value));
+			}
+			else if constexpr (std::is_same_v<typename CONTAINER::value_type, double> && std::is_same_v<typename T::value_type, std::string>) {
+				for (const auto& v : value) {
+					if (v == "") {
+						container.push_back(0.0);
+					} else {
+						container.push_back(stod(v));
+					}
+				}
+			}
+			else if constexpr (std::is_same_v<typename CONTAINER::value_type, std::string> && std::is_same_v<typename T::value_type, double>) {
+				for (const auto& v : value) {
+					container.push_back(ToString(v));
+				}
+			}
+			else {
+				throw RuntimeError("Invalid operation");
+			}
+		}
+		
 		bool EntryPointMatches(const EntryPoint& entryPoint, const Var& ref) {
 			if (entryPoint.ref.type == VOID) {
 				if (ref.type != Var::Void) return false;
@@ -5751,7 +5806,7 @@ const int VERSION_PATCH = 0;
 											array.reserve(args.size());
 											for (const auto& c : args) {
 												if (IsNumeric(c)) {
-													array.push_back(std::to_string(MemGetNumeric(c)));
+													array.push_back(ToString(MemGetNumeric(c)));
 												} else {
 													array.push_back(MemGetText(c));
 												}
@@ -5828,7 +5883,7 @@ const int VERSION_PATCH = 0;
 											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
 											sort(values.begin(), values.end());
 											array.clear();
-											for (const auto& val : values) array.push_back(std::to_string(val));
+											for (const auto& val : values) array.push_back(ToString(val));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
@@ -5861,7 +5916,7 @@ const int VERSION_PATCH = 0;
 											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
 											sort(values.begin(), values.end(), std::greater<double>());
 											array.clear();
-											for (const auto& val : values) array.push_back(std::to_string(val));
+											for (const auto& val : values) array.push_back(ToString(val));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
@@ -5906,7 +5961,7 @@ const int VERSION_PATCH = 0;
 											values.reserve(args.size());
 											for (const auto& c : args) {
 												if (IsNumeric(c)) {
-													values.push_back(std::to_string(MemGetNumeric(c)));
+													values.push_back(ToString(MemGetNumeric(c)));
 												} else {
 													values.push_back(MemGetText(c));
 												}
@@ -5998,7 +6053,7 @@ const int VERSION_PATCH = 0;
 										case STORAGE_ARRAY_NUMERIC:{
 											auto& array = GetStorage(arr);
 											array.clear();
-											array.resize(count, std::to_string(MemGetNumeric(val)));
+											array.resize(count, ToString(MemGetNumeric(val)));
 											storageDirty = true;
 										}break;
 										case STORAGE_ARRAY_TEXT:{
@@ -6016,6 +6071,99 @@ const int VERSION_PATCH = 0;
 											auto& array = GetTextArray(arr);
 											array.clear();
 											array.resize(count, MemGetText(val));
+										}break;
+									}
+								}break;
+								case FRM: {// REF_ARR REF_VAL [REF_SEPARATOR]
+									ByteCode arr = nextCode();
+									ByteCode val = nextCode();
+									ByteCode sep = nextCode();
+									std::string separator = sep.type != VOID? MemGetText(sep) : "";
+									if (!IsArray(arr)) throw RuntimeError("Not an array");
+									auto fillArray = [&](std::vector<auto>& dst){
+										dst.clear();
+										if (IsStorage(val)) {
+											auto& otherArray = GetStorage(val);
+											if (IsArray(val)) {
+												if (separator != "") throw RuntimeError("Invalid operation");
+												dst.reserve(otherArray.size());
+												ArrayInsertAuto(dst, otherArray);
+											} else if (separator == "") {
+												dst.reserve(otherArray[0].length());
+												for (char c : otherArray[0]) {
+													ArrayInsertAuto(dst, std::string(1, c));
+												}
+											} else {
+												std::string str = otherArray[0];
+												while (str != "") {
+													auto pos = str.find(separator);
+													if (pos == std::string::npos) {
+														ArrayInsertAuto(dst, str);
+														break;
+													} else {
+														ArrayInsertAuto(dst, str.substr(0, pos));
+														str = str.substr(pos + separator.length());
+													}
+												}
+											}
+										}
+										else if (IsArray(val)) {
+											switch (val.type) {
+												case RAM_ARRAY_NUMERIC:{
+													const auto& values = GetNumericArray(val);
+													dst.reserve(values.size());
+													ArrayInsertAuto(dst, values);
+												}break;
+												case RAM_ARRAY_TEXT:{
+													const auto& values = GetTextArray(val);
+													dst.reserve(values.size());
+													ArrayInsertAuto(dst, values);
+												}break;
+												default: throw RuntimeError("Invalid operation");
+											}
+										}
+										else if (IsNumeric(val)) {
+											if (separator != "") throw RuntimeError("Invalid operation");
+											double value = MemGetNumeric(val);
+											std::string str = ToString(value);
+											for (char c : str) {
+												ArrayInsertAuto(dst, std::string(1, c));
+											}
+										}
+										else if (IsText(val)) {
+											std::string str = MemGetText(val);
+											if (separator == "") {
+												dst.reserve(str.length());
+												for (char c : str) {
+													ArrayInsertAuto(dst, std::string(1, c));
+												}
+											} else {
+												while (str != "") {
+													auto pos = str.find(separator);
+													if (pos == std::string::npos) {
+														ArrayInsertAuto(dst, str);
+														break;
+													} else {
+														ArrayInsertAuto(dst, str.substr(0, pos));
+														str = str.substr(pos + separator.length());
+													}
+												}
+											}
+										}
+										else throw RuntimeError("Invalid operation");
+										ipcCheck(dst.size() + 1);
+									};
+									switch (arr.type) {
+										case STORAGE_ARRAY_NUMERIC:
+										case STORAGE_ARRAY_TEXT:{
+											fillArray(GetStorage(arr));
+											storageDirty = true;
+										}break;
+										case RAM_ARRAY_NUMERIC:{
+											fillArray(GetNumericArray(arr));
+										}break;
+										case RAM_ARRAY_TEXT:{
+											fillArray(GetTextArray(arr));
 										}break;
 									}
 								}break;

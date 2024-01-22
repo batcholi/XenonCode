@@ -72,6 +72,32 @@ function @RunUnitTests()
 	else
 		$results.append("OK")
 	
+	// Test 8
+	$results.append("---")
+	var $someText = "Hello World!"
+	array $words : text
+	$words.from($someText, " ")
+	foreach $words ($word)
+		$results.append($word)
+	$words.from($someText)
+	foreach $words ($word)
+		$results.append($word)
+	$someText = "12 48 1"
+	array $numbers : number
+	$numbers.from($someText, " ")
+	foreach $numbers ($number)
+		$results.append($number)
+	var $aDigit = 5
+	$words.from($aDigit)
+	$results.append($words.0)
+	$someText = "12"
+	$numbers.from($someText)
+	foreach $numbers ($number)
+		$results.append($number)
+	$words.from($numbers)
+	foreach $words ($word)
+		$results.append($word)
+	
 init
 	output.0 ("Hello, World!")
 	
