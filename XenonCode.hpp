@@ -302,6 +302,66 @@ const int VERSION_PATCH = 0;
 		std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
 	}
 	
+	inline static size_t utf8length(const std::string& str) {
+		size_t len = 0;
+		for (size_t i = 0; i < str.length(); ++i) {
+			if ((str[i] & 0xC0) != 0x80) {
+				++len;
+			}
+		}
+		return len;
+	}
+	
+	inline static std::string utf8substr(const std::string& str, size_t start, size_t length = 0) {
+		if (length == 0) {
+			length = utf8length(str) - start;
+		}
+		size_t len = 0;
+		size_t i = 0;
+		for (; i < str.length(); ++i) {
+			if ((str[i] & 0xC0) != 0x80) {
+				if (len == start) {
+					break;
+				}
+				++len;
+			}
+		}
+		size_t j = i;
+		for (; j < str.length(); ++j) {
+			if ((str[j] & 0xC0) != 0x80) {
+				if (len == start + length) {
+					break;
+				}
+				++len;
+			}
+		}
+		return str.substr(i, j-i);
+	}
+	
+	inline static void utf8assign(std::string& str, size_t start, const std::string& substr) {
+		size_t substrLen = utf8length(substr);
+		size_t len = 0;
+		size_t i = 0;
+		for (; i < str.length(); ++i) {
+			if ((str[i] & 0xC0) != 0x80) {
+				if (len == start) {
+					break;
+				}
+				++len;
+			}
+		}
+		size_t j = i;
+		for (; j < str.length(); ++j) {
+			if ((str[j] & 0xC0) != 0x80) {
+				if (len == start + substrLen) {
+					break;
+				}
+				++len;
+			}
+		}
+		str.replace(i, j-i, substr);
+	}
+	
 #pragma endregion
 
 #pragma region Errors
@@ -1930,7 +1990,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( SUM /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.sum
 	DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 	DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
-	DEF_OP( IDX /* REF_DST REF_ARR ARRAY_INDEX ifindexnone[REF_NUM] */ ) // get an indexed value from an array or text
+	DEF_OP( IDX /* REF_DST (REF_ARR | REF_TXT) INDEX ifindexnone[REF_NUM] */ ) // get an indexed value from an array or text
 	DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
 	DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
 	DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
@@ -5002,7 +5062,19 @@ const int VERSION_PATCH = 0;
 				throw RuntimeError("Text too large");
 			}
 			switch (dst.type) {
-				case STORAGE_VAR_TEXT:
+				case STORAGE_VAR_TEXT: {
+					auto& storage = GetStorage(dst);
+					if (arrIndex == ARRAY_INDEX_NONE) {
+						storage[0] = value;
+					} else if (utf8length(value) == 1) {
+						if (arrIndex >= utf8length(storage[0])) {
+							throw RuntimeError("Invalid text indexing");
+						}
+						utf8assign(storage[0], arrIndex, value);
+					} else {
+						throw RuntimeError("Invalid char assignment");
+					}
+				}break;
 				case STORAGE_ARRAY_TEXT: {
 					StorageSet(value, dst, arrIndex);
 				}break;
@@ -5010,7 +5082,16 @@ const int VERSION_PATCH = 0;
 					if (dst.value >= ram_text.size()) {
 						throw RuntimeError("Invalid memory reference");
 					}
-					ram_text[dst.value] = value;
+					if (arrIndex == ARRAY_INDEX_NONE) {
+						ram_text[dst.value] = value;
+					} else if (utf8length(value) == 1) {
+						if (arrIndex >= utf8length(ram_text[dst.value])) {
+							throw RuntimeError("Invalid text indexing");
+						}
+						utf8assign(ram_text[dst.value], arrIndex, value);
+					} else {
+						throw RuntimeError("Invalid char assignment");
+					}
 				}break;
 				case RAM_ARRAY_TEXT: {
 					auto& arr = GetTextArray(dst);
@@ -5063,7 +5144,7 @@ const int VERSION_PATCH = 0;
 		bool MemGetBoolean(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			return abs(MemGetNumeric(ref, arrIndex)) > EPSILON_DOUBLE;
 		}
-		const std::string& MemGetText(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+		const std::string& MemGetText(ByteCode ref) {
 			switch (ref.type) {
 				case ROM_CONST_TEXT: {
 					if (ref.value >= assembly->rom_textConstants.size()) {
@@ -5071,15 +5152,64 @@ const int VERSION_PATCH = 0;
 					}
 					return assembly->rom_textConstants[ref.value];
 				}break;
-				case STORAGE_VAR_TEXT:
-				case STORAGE_ARRAY_TEXT: {
-					return StorageGetText(ref, arrIndex);
+				case STORAGE_VAR_TEXT: {
+					return StorageGetText(ref);
 				}break;
 				case RAM_VAR_TEXT: {
 					if (ref.value >= ram_text.size()) {
 						throw RuntimeError("Invalid memory reference");
 					}
 					return ram_text[ref.value];
+				}break;
+				case VOID: {
+					static const std::string empty = "";
+					return empty;
+				}
+				default: throw RuntimeError("Invalid memory reference");
+			}
+		}
+		std::string MemGetText(ByteCode ref, uint32_t arrIndex) {
+			switch (ref.type) {
+				case ROM_CONST_TEXT: {
+					if (ref.value >= assembly->rom_textConstants.size()) {
+						throw RuntimeError("Invalid memory reference");
+					}
+					if (arrIndex == ARRAY_INDEX_NONE) {
+						return assembly->rom_textConstants[ref.value];
+					} else {
+						const std::string& text = assembly->rom_textConstants[ref.value];
+						if (arrIndex >= utf8length(text)) {
+							throw RuntimeError("Invalid text indexing");
+						}
+						return utf8substr(text, arrIndex, 1);
+					}
+				}break;
+				case STORAGE_ARRAY_TEXT: {
+					return StorageGetText(ref, arrIndex);
+				}break;
+				case STORAGE_VAR_TEXT: {
+					if (arrIndex == ARRAY_INDEX_NONE) {
+						return StorageGetText(ref);
+					} else {
+						const std::string& text = StorageGetText(ref);
+						if (arrIndex >= utf8length(text)) {
+							throw RuntimeError("Invalid text indexing");
+						}
+						return utf8substr(text, arrIndex, 1);
+					}
+				}break;
+				case RAM_VAR_TEXT: {
+					if (ref.value >= ram_text.size()) {
+						throw RuntimeError("Invalid memory reference");
+					}
+					if (arrIndex == ARRAY_INDEX_NONE) {
+						return ram_text[ref.value];
+					} else {
+						if (arrIndex >= utf8length(ram_text[ref.value])) {
+							throw RuntimeError("Invalid text indexing");
+						}
+						return utf8substr(ram_text[ref.value], arrIndex, 1);
+					}
 				}break;
 				case RAM_ARRAY_TEXT: {
 					auto& arr = GetTextArray(ref);
@@ -5089,8 +5219,7 @@ const int VERSION_PATCH = 0;
 					return arr[arrIndex];
 				}break;
 				case VOID: {
-					static const std::string empty = "";
-					return empty;
+					return "";
 				}
 				default: throw RuntimeError("Invalid memory reference");
 			}
@@ -6089,9 +6218,10 @@ const int VERSION_PATCH = 0;
 												dst.reserve(otherArray.size());
 												ArrayInsertAuto(dst, otherArray);
 											} else if (separator == "") {
-												dst.reserve(otherArray[0].length());
-												for (char c : otherArray[0]) {
-													ArrayInsertAuto(dst, std::string(1, c));
+												size_t len = utf8length(otherArray[0]);
+												dst.reserve(len);
+												for (size_t i = 0; i < len; ++i) {
+													ArrayInsertAuto(dst, utf8substr(otherArray[0], i, 1));
 												}
 											} else {
 												std::string str = otherArray[0];
@@ -6133,9 +6263,10 @@ const int VERSION_PATCH = 0;
 										else if (IsText(val)) {
 											std::string str = MemGetText(val);
 											if (separator == "") {
-												dst.reserve(str.length());
-												for (char c : str) {
-													ArrayInsertAuto(dst, std::string(1, c));
+												size_t len = utf8length(str);
+												dst.reserve(len);
+												for (size_t i = 0; i < len; ++i) {
+													ArrayInsertAuto(dst, utf8substr(str, i, 1));
 												}
 											} else {
 												while (str != "") {
@@ -6240,7 +6371,7 @@ const int VERSION_PATCH = 0;
 											}break;
 										}
 									} else {
-										MemSet(MemGetText(ref).length(), dst);
+										MemSet(utf8length(MemGetText(ref)), dst);
 									}
 								}break;
 								case LAS: {
@@ -6268,7 +6399,9 @@ const int VERSION_PATCH = 0;
 											}break;
 										}
 									} else {
-										MemSet(std::string(1, MemGetText(ref).back()), dst);
+										const std::string& text = MemGetText(ref);
+										size_t len = utf8length(text);
+										MemSet(utf8substr(text, len-1, 1), dst);
 									}
 								}break;
 								case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
@@ -6491,11 +6624,11 @@ const int VERSION_PATCH = 0;
 									ByteCode b = nextCode();
 									std::string text = MemGetText(src);
 									int start = (int)std::round(MemGetNumeric(a));
-									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(text.length()-start);
+									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(utf8length(text)-start);
 									if (!IsText(dst)) throw RuntimeError("Invalid operation");
-									MemSet(text.substr(start, len), dst);
+									MemSet(utf8substr(text, start, len), dst);
 								}break;
-								case IDX: {// REF_DST REF_ARR ARRAY_INDEX ifindexnone[REF_NUM]
+								case IDX: {// REF_DST REF_ARR|REF_TEXT INDEX ifindexnone[REF_NUM]
 									ByteCode dst = nextCode();
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
@@ -6512,7 +6645,10 @@ const int VERSION_PATCH = 0;
 											MemSet(MemGetNumeric(arr, arr_index), dst);
 										break;
 										case STORAGE_ARRAY_TEXT:
+										case STORAGE_VAR_TEXT:
 										case RAM_ARRAY_TEXT:
+										case RAM_VAR_TEXT:
+										case ROM_CONST_TEXT:
 											MemSet(MemGetText(arr, arr_index), dst);
 										break;
 										default: throw RuntimeError("Not an array");

@@ -101,6 +101,29 @@ function @RunUnitTests()
 	$serialized.from($numbers, ", ")
 	$results.append($serialized)
 	
+	// Test 9
+	$results.append("---")
+	var $utf8 = "Il était une fois"
+	$results.append($utf8.last)
+	$utf8.substring(2,6)
+	$results.append($utf8)
+	$results.append($utf8.0)
+	$results.append($utf8.1)
+	$results.append($utf8.2)
+	$utf8.3 = "i"
+	$words.from($utf8)
+	foreach $words ($word)
+		$results.append($word)
+	$utf8.substring(1)
+	$utf8.2 = "à"
+	$results.append($utf8)
+	$utf8.4 = "è"
+	$utf8.0 = "à"
+	$results.append($utf8)
+	$utf8.substring(1)
+	$results.append($utf8)
+	$results.append($utf8.last)
+	
 init
 	output.0 ("Hello, World!")
 	
