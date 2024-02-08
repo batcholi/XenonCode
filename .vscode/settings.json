@@ -137,7 +137,7 @@
     "editor.smoothScrolling": false,
     "editor.stablePeek": false,
     "editor.tabCompletion": "off",
-    "editor.wordBasedSuggestions": false,
+    "editor.wordBasedSuggestions": "off",
     "editor.wordWrapColumn": 200,
     "files.insertFinalNewline": true,
     "files.trimTrailingWhitespace": false,

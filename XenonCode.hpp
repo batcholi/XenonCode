@@ -1867,7 +1867,11 @@ const int VERSION_PATCH = 0;
 	};
 
 	// This function recursively parses the given file and all included files and returns all lines joined
-	inline static SourceFile GetParsedFile(const std::string& filedir, const std::string& filename) {
+	inline static SourceFile GetParsedFile(const std::string& filedir, const std::string& filename, std::set<std::string>& parsedFiles) {
+		if (parsedFiles.contains(filename)) {
+			throw ParseError("Circular dependency detected with file '" + filename + "'");
+		}
+		parsedFiles.insert(filename);
 		SourceFile src(filedir + "/" + filename);
 		// Include other files (and replace the include statement by the lines of the other file, recursively)
 		for (unsigned int i = 0; i < src.lines.size(); ++i) {
@@ -1875,7 +1879,7 @@ const int VERSION_PATCH = 0;
 				if (line.scope == 0 && line.words[0] == "include") {
 					std::string includeFilename = line.words[1];
 					line.words.clear();
-					auto includeSrc = GetParsedFile(filedir, includeFilename);
+					auto includeSrc = GetParsedFile(filedir, includeFilename, parsedFiles);
 					src.lines.insert(src.lines.begin()+i, includeSrc.lines.begin(), includeSrc.lines.end());
 					i += includeSrc.lines.size();
 					src.lines.insert(src.lines.begin()+i, Word{Word::FileInfo, filedir + "/" + filename});
@@ -1884,6 +1888,10 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		return src;
+	}
+	inline static SourceFile GetParsedFile(const std::string& filedir, const std::string& filename) {
+		std::set<std::string> parsedFiles;
+		return GetParsedFile(filedir, filename, parsedFiles);
 	}
 
 #pragma endregion
