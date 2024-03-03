@@ -340,11 +340,12 @@ The block of code under that loop statement will be executed for every item in t
 ```
 foreach $stuff ($item)
     // we loop through the array $stuff, and we define $item and its value is the current item's
-    // note that there is no such thing as a reference value and $item is a copy, so modifying the value of $item will not affect the original array $stuff
+    // note that $item is a copy of its value, so modifying the value of $item will not affect the original array $stuff
 foreach $stuff ($item, $i)
     // here we also define $i which contains the 0-based index of this item within the array $stuff
     // if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
     $stuff.$i = $item
+    // CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
 ```
 
 ## Repeat loops
@@ -352,6 +353,7 @@ This loop will repeat the execution of the following block a given number of tim
 ```
 repeat 5 ($i)
     // this block will be repeated 5 times, and $i is the 0-based index of this iteration (first time will be 0, last will be 4)
+    // CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
 ```
 The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
 

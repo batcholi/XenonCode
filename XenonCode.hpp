@@ -4171,7 +4171,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}
-								// next
+								// continue
 								else if (firstWord == "continue") {
 									int s = stack.size();
 									while (s-- > 0) {

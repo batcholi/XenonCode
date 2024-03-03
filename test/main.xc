@@ -124,6 +124,13 @@ function @RunUnitTests()
 	$results.append($utf8)
 	$results.append($utf8.last)
 	
+	// test 10
+	repeat 10 ($i)
+		repeat 10 ($j)
+			$results.append($i)
+			$results.append($j)
+			break
+	
 init
 	output.0 ("Hello, World!")
 	
