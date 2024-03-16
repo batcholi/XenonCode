@@ -2058,6 +2058,7 @@ const int VERSION_PATCH = 0;
 		operator uint64_t() const {
 			if (type == Numeric) return (uint64_t)std::round(numericValue);
 			else if (type == Text) return stoull(textValue);
+			else if (type >= Object) return addrValue;
 			return 0;
 		}
 		operator int32_t() const {
@@ -3162,28 +3163,26 @@ const int VERSION_PATCH = 0;
 						if (opIndex+1 == endIndex) { // trailing member with no parenthesis, in an expression
 							validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
 							return compileFunctionCall(operand, {ref1}, true, true);
-						} else { // trailing function call, in an expression
-						
-							// validate(words[opIndex+2] == Word::ExpressionBegin);
-							// std::vector<ByteCode> args {};
-							// args.push_back(ref1);
-							// int argBegin = opIndex+3;
-							// while (argBegin <= endIndex) {
-							// 	int argEnd = GetArgEnd(words, argBegin, endIndex);
-							// 	if (argEnd == -1) {
-							// 		++argBegin;
-							// 		break;
-							// 	}
-							// 	args.push_back(compileExpression(words, argBegin, argEnd));
-							// 	argBegin = argEnd + 2;
-							// 	if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
-							// 		break;
-							// 	}
-							// }
-							// return compileFunctionCall(operand, args, true);
-							
-							throw CompileError("A trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
-							
+						} else if (IsObject(ref1)) { // trailing function call, in an expression, on an object
+							validate(words[opIndex+2] == Word::ExpressionBegin);
+							std::vector<ByteCode> args {};
+							args.push_back(ref1);
+							int argBegin = opIndex+3;
+							while (argBegin <= endIndex) {
+								int argEnd = GetArgEnd(words, argBegin, endIndex);
+								if (argEnd == -1) {
+									++argBegin;
+									break;
+								}
+								args.push_back(compileExpression(words, argBegin, argEnd));
+								argBegin = argEnd + 2;
+								if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
+									break;
+								}
+							}
+							return compileFunctionCall(operand, args, true, true);
+						} else {
+							throw CompileError("A non-object-member trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
 						}
 					} else if (operand == Word::Numeric || operand == Word::Varname) {
 						validate(IsArray(ref1) || IsText(ref1));
