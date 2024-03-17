@@ -635,9 +635,10 @@ const int VERSION_PATCH = 0;
 						while (!s.eof()) {
 							if (s.peek() == '"') {
 								s.get();
-								break;
+								if (s.eof() || s.peek() != '"') {
+									break;
+								}
 							}
-							if (s.peek() == '\\') s.get();
 							if (word.length() >= XC_MAX_TEXT_LENGTH) {
 								throw ParseError("Text too long");
 							}
@@ -651,13 +652,11 @@ const int VERSION_PATCH = 0;
 						bool inString = false;
 						while (!s.eof()) {
 							if (inString) {
-								if (s.peek() == '\\') {
+								if (s.peek() == '"') {
 									word += s.get();
-									if (s.peek() == '"') {
-										word += s.get();
+									if (s.peek() != '"') {
+										inString = false;
 									}
-								} else if (s.peek() == '"') {
-									inString = false;
 								}
 							} else {
 								if (s.peek() == '(') {

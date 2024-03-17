@@ -112,6 +112,12 @@ Generic data types the user can declare:
 A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false), although any value other than zero is evaluated to true.  
 
 `text` variables contain plain unicode text, altough their maximum size depends on the implementation.  
+A text literal is defined within double quotes `" "`.  
+To use double quotes characters within the text, you may duplicate them.  
+There is no other escape sequence mechanism. A backslash `\` is simply part of the string, and the implementation may decide to use it for escape sequences.  
+```
+var $myText = "Say ""Hello"" to this text"
+```
 
 Object types are for use by the implementation and are opaque to the user, meaning their structure is not necessarily defined, however the implementation may make availalbe some member functions for those objects to the user.  
 

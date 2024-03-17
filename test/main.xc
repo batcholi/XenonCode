@@ -131,6 +131,9 @@ function @RunUnitTests()
 			$results.append($j)
 			break
 	
+	// test 11
+	$results.append("Hello\n\""World\!""\\")
+	
 init
 	output.0 ("Hello, World!")
 	
