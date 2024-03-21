@@ -224,6 +224,12 @@
 #ifdef CND
 	#undef CND
 #endif
+#ifdef FND
+	#undef FND
+#endif
+#ifdef CON
+	#undef CON
+#endif
 #pragma endregion
 
 namespace XenonCode {
@@ -700,7 +706,10 @@ const int VERSION_PATCH = 0;
 							hasDecimal = true;
 							word += s.get();
 						}
-						if (!isdigit(s.peek())) break;
+						if (!isdigit(s.peek())) {
+							if (!hasDecimal && isalnum_(s.peek())) goto ContinueWithName;
+							else break;
+						}
 						word += s.get();
 					}
 					type = Numeric;
@@ -709,6 +718,7 @@ const int VERSION_PATCH = 0;
 				// Name
 				if (isalpha_(c)) {
 					word += tolower(c);
+					ContinueWithName:
 					while (isalnum_(s.peek())) {
 						word += tolower(s.get());
 					}
@@ -1991,6 +2001,8 @@ const int VERSION_PATCH = 0;
 	DEF_OP( FRM /* (REF_ARR | REF_TXT) (REF_ARR | REF_VAL) [REF_SEPARATOR] */ ) // array.from(value [, separator])
 	DEF_OP( SIZ /* REF_DST (REF_ARR | REF_TXT) */ ) // array.size  text.size
 	DEF_OP( LAS /* REF_DST (REF_ARR | REF_TXT) */ ) // array.last  text.last
+	DEF_OP( FND /* REF_DST (REF_ARR | REF_TXT) REF_VALUE */ ) // array.find(value)  text.find(value)
+	DEF_OP( CON /* REF_DST (REF_ARR | REF_TXT) REF_VALUE */ ) // array.contains(value)  text.contains(value)
 	DEF_OP( MIN /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.min  min(number, number...)
 	DEF_OP( MAX /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.max  max(number, number...)
 	DEF_OP( AVG /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.avg  avg(number, number...)
@@ -2355,6 +2367,8 @@ const int VERSION_PATCH = 0;
 		if (func == "lerp") {returnType = RAM_VAR_NUMERIC; return LRP;}
 		if (func == "size") {returnType = RAM_VAR_NUMERIC; return SIZ;}
 		if (func == "last") {returnType = VOID/*NUMERIC|TEXT*/; return LAS;}
+		if (func == "find") {returnType = RAM_VAR_NUMERIC; return FND;}
+		if (func == "contains") {returnType = RAM_VAR_NUMERIC; return CON;}
 		if (func == "mod") {returnType = RAM_VAR_NUMERIC; return MOD;}
 		if (func == "min") {returnType = RAM_VAR_NUMERIC; return MIN;}
 		if (func == "max") {returnType = RAM_VAR_NUMERIC; return MAX;}
@@ -5537,9 +5551,15 @@ const int VERSION_PATCH = 0;
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
+										double value = MemGetNumeric(a);
 										double operand = MemGetNumeric(b);
-										if (operand == 0) throw RuntimeError("Division by zero");
-										MemSet(double(int64_t(std::round(MemGetNumeric(a))) % int64_t(std::round(operand))), dst);
+										if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
+											if (std::round(operand) == 0) throw RuntimeError("Division by zero");
+											MemSet(double(int64_t(std::round(value)) % int64_t(std::round(operand))), dst);
+										} else {
+											if (operand == 0.0) throw RuntimeError("Division by zero");
+											MemSet(std::fmod(value, operand), dst);
+										}
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case POW: {
@@ -6072,7 +6092,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case INS: {// REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
+								case INS: {//insert REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
 									std::vector<ByteCode> args {};
@@ -6129,7 +6149,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case DEL: {// REF_ARR REF_INDEX [REF_INDEX_END]
+								case DEL: {//erase REF_ARR REF_INDEX [REF_INDEX_END]
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
 									ByteCode idx2 = nextCode();
@@ -6173,7 +6193,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case FLL: {// REF_ARR REF_QTY REF_VAL
+								case FLL: {//fill REF_ARR REF_QTY REF_VAL
 									ByteCode arr = nextCode();
 									ByteCode qty = nextCode();
 									ByteCode val = nextCode();
@@ -6209,7 +6229,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case FRM: {// REF_DST REF_VAL [REF_SEPARATOR]
+								case FRM: {//from REF_DST REF_VAL [REF_SEPARATOR]
 									ByteCode arr = nextCode();
 									ByteCode val = nextCode();
 									ByteCode sep = nextCode();
@@ -6355,7 +6375,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case SIZ: {// REF_DST (REF_ARR | REF_TXT)
+								case SIZ: {//size REF_DST (REF_ARR | REF_TXT)
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
@@ -6408,6 +6428,85 @@ const int VERSION_PATCH = 0;
 										const std::string& text = MemGetText(ref);
 										size_t len = utf8length(text);
 										MemSet(utf8substr(text, len-1, 1), dst);
+									}
+								}break;
+								case FND: {//find REF_DST (REF_ARR | REF_TXT) REF_VAL
+									ByteCode dst = nextCode();
+									ByteCode ref = nextCode();
+									ByteCode val = nextCode();
+									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
+									if (IsArray(ref)) {
+										switch (ref.type) {
+											case STORAGE_ARRAY_NUMERIC:{
+												bool found = false;
+												auto& array = GetStorage(ref);
+												for (size_t i = 0; i < array.size(); ++i) {
+													if ((array[i]==""? 0.0 : stod(array[i])) == MemGetNumeric(val)) {
+														MemSet(int(i), dst);
+														found = true;
+														break;
+													}
+												}
+												if (!found) MemSet(-1, dst);
+											}break;
+											case STORAGE_ARRAY_TEXT:{
+												auto& array = GetStorage(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetText(val));
+												MemSet(pos != array.end()? int(pos - array.begin()) : -1, dst);
+											}break;
+											case RAM_ARRAY_NUMERIC:{
+												auto& array = GetNumericArray(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetNumeric(val));
+												MemSet(pos != array.end()? int(pos - array.begin()) : -1, dst);
+											}break;
+											case RAM_ARRAY_TEXT:{
+												auto& array = GetTextArray(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetText(val));
+												MemSet(pos != array.end()? int(pos - array.begin()) : -1, dst);
+											}break;
+										}
+									} else {
+										auto pos = MemGetText(ref).find(MemGetText(val));
+										MemSet(pos != std::string::npos? int(utf8length(MemGetText(ref).substr(0, pos))) : -1, dst);
+									}
+								}break;
+								case CON: {//contains REF_DST (REF_ARR | REF_TXT) REF_VAL
+									ByteCode dst = nextCode();
+									ByteCode ref = nextCode();
+									ByteCode val = nextCode();
+									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
+									if (IsArray(ref)) {
+										switch (ref.type) {
+											case STORAGE_ARRAY_NUMERIC:{
+												auto& array = GetStorage(ref);
+												for (const auto& v : array) {
+													if ((v==""? 0.0 : stod(v)) == MemGetNumeric(val)) {
+														MemSet(1, dst);
+														break;
+													}
+												}
+											}break;
+											case STORAGE_ARRAY_TEXT:{
+												auto& array = GetStorage(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetText(val));
+												MemSet(pos != array.end()? 1 : 0, dst);
+											}break;
+											case RAM_ARRAY_NUMERIC:{
+												auto& array = GetNumericArray(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetNumeric(val));
+												MemSet(pos != array.end()? 1 : 0, dst);
+											}break;
+											case RAM_ARRAY_TEXT:{
+												auto& array = GetTextArray(ref);
+												auto pos = std::find(array.begin(), array.end(), MemGetText(val));
+												MemSet(pos != array.end()? 1 : 0, dst);
+											}break;
+										}
+									} else {
+										auto pos = MemGetText(ref).find(MemGetText(val));
+										MemSet(pos != std::string::npos? 1 : 0, dst);
 									}
 								}break;
 								case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))

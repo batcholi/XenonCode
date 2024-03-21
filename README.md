@@ -605,6 +605,11 @@ Using the trail operator `.`, we can also return a specific information about ce
 - $myArray.`last` // returns the value of the last item within an array, this also allows to modify that value by assigning an expression
 - $myText.`last` // returns the last character of a text variable, this also allows to modify that last character by assigning an expression
 
+### Other useful helpers
+- `contains`($myText, "str") // returns 1 if $myText contains "str", otherwise 0
+- `find`($myText, "str") // returns the index of the first character of the first occurance of "str" in $myText, otherwise -1 if not found
+These also work on arrays.  
+
 ### Device functions
 An implementation should define application-specific device functions.  
 Here are examples of basic device functions that MAY or MAY NOT be defined:  
