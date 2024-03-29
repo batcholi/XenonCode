@@ -139,6 +139,8 @@ init
 	
 	// Run Unit tests
 	$results.clear()
+	if $someVar != 16
+		return
 	@RunUnitTests()
 	
 	return

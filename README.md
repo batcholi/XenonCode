@@ -22,7 +22,7 @@
 
 # Sample code
 
-```
+```xc
 include "my_functions.xc"
 
 ; Declare global storage
@@ -115,7 +115,7 @@ A `number` variable is always a 64-bit floating point internally, but may also a
 A text literal is defined within double quotes `" "`.  
 To use double quotes characters within the text, you may duplicate them.  
 There is no other escape sequence mechanism. A backslash `\` is simply part of the string, and the implementation may decide to use it for escape sequences.  
-```
+```xc
 var $myText = "Say ""Hello"" to this text"
 ```
 
@@ -217,8 +217,8 @@ The implementation/device must take care of only defining function names and obj
 Constants are named values that should never change throughout the execution of a program. They are fixed values defined at compile-time.  
 Their assigned values must be explicitely given and must be expressions which the result can be determined at compile-time.  
 
-`const $stuff = 5` // declares a constant named $stuff with the number 5 as its value
-`const $stuff = "hello"` // declares a constant named $stuff with the text "hello" as its value
+`const $stuff = 5` declares a constant named $stuff with the number 5 as its value
+`const $stuff = "hello"` declares a constant named $stuff with the text "hello" as its value
 
 ## Declaring a variable
 Variables are named values that can change throughout the execution of a program.  
@@ -229,11 +229,11 @@ A variable declared in the global scope is accessible from everywhere.
 For variables declared in the global scope, when we assign it an initial value, the given expression must be determined at compile-time.  
 Variable names must start with a letter or underscore (`a`-`z` or `_`) then must contain only alphanumeric characters and underscores.  
 
-`var $stuff = 5` // declares a number variable with an initial value set to 5 when the program starts  
-`var $stuff = "hello"` // declares a text variable with an initial value set to "hello" when the program starts  
-`var $stuff:number` // declares a number variable with an initial value set to 0 when the program starts  
-`var $stuff:text` // declares a text variable with an initial value set to "" when the program starts  
-`var $stuff = position()` // declares an instance of an implementation-defined object of the type `position` (this is an example)  
+`var $stuff = 5` declares a number variable with an initial value set to 5 when the program starts  
+`var $stuff = "hello"` declares a text variable with an initial value set to "hello" when the program starts  
+`var $stuff:number` declares a number variable with an initial value set to 0 when the program starts  
+`var $stuff:text` declares a text variable with an initial value set to "" when the program starts  
+`var $stuff = position()` declares an instance of an implementation-defined object of the type `position` (this is an example)  
 
 Implementation-defined objects cannot be declared without initialization, since they do not have a default value.  
 
@@ -241,17 +241,17 @@ Implementation-defined objects cannot be declared without initialization, since 
 To assign a new value to a variable, we can simply start a statement with the variable name followed by a `=` and an expression the result of which will be the new value.  
 We may also use a trailing function which will inherently modify the value of said variable.  
 
-`$stuff = 5` // assign the value 5 to the variable named $stuff  
-`$stuff = $other + 5` // assign the result of the expression ($other + 5) to the variable named $stuff  
-`$stuff.round()` // call a trailing function that rounds the value of the variable  
+`$stuff = 5` assign the value 5 to the variable named $stuff  
+`$stuff = $other + 5` assign the result of the expression ($other + 5) to the variable named $stuff  
+`$stuff.round()` call a trailing function that rounds the value of the variable  
 
 ## Declaring an array
 An array is a dynamic list of values of a certain type. We can append or erase values, we can access a specific value from the list, or loop through all its values.  
 When declaring an array, we cannot specify an initial value, and we must provide a type.  
 Arrays are initialized with zero size when the program starts, values may be added/erased/modified throughout the execution of the program  
 
-`array $stuff:number` // declare an array of numbers  
-`array $stuff:text` // declare an array of texts  
+`array $stuff:number` declare an array of numbers  
+`array $stuff:text` declare an array of texts  
 
 Arrays cannot contain implementation-defined objects, just generic types.  
 
@@ -259,7 +259,7 @@ Arrays cannot contain implementation-defined objects, just generic types.
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  
 We can declare storage variables and arrays of either number or text.  
 Storage should ONLY be declared in the global scope.  
-```
+```xc
 storage var $stuff:number
 storage var $stuff:text
 storage array $stuff:number
@@ -268,41 +268,41 @@ storage array $stuff:text
 
 ## Accessing/Assigning the nth item within an array
 To access or modify the value of a specific item in an array, we must use the trail operator `.` followed by the 0-based index of the item or a variable containing that index  
-`$stuff.0 = 5` // Assign the value 5 to the first item of the array  
-`$stuff.$index = 5` // Assign the value 5 to the item with an index defined by the value of $index  
-`$value = $stuff.1` // Assign the value of the second item of the array to the variable $value  
+`$stuff.0 = 5` Assign the value 5 to the first item of the array  
+`$stuff.$index = 5` Assign the value 5 to the item with an index defined by the value of $index  
+`$value = $stuff.1` Assign the value of the second item of the array to the variable $value  
 
 ## Accessing/Assigning the nth character within a text variable
 Text variables work in a very similar way to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
-`$myText.0 = "a"` // Set "a" as the first character of $myText  
+`$myText.0 = "a"` Set "a" as the first character of $myText  
 
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
 The init function cannot be called by the user. It can only be defined, and the device will automatically call it upon virtual startup.  
-```
+```xc
 init
     $stuff = 5
     @func1()
-    //...
+    ;...
 ```
 
 ## Tick function
 The tick function is executed at the beginning of every clock cycle of this virtual computer.  
 The tick function cannot be called by the user. It can only be defined, and the device will automatically call it for each cycle.  
-```
+```xc
 tick
-    // This body is executed once per clock cycle at the virtual computer's frequency
+    ; This body is executed once per clock cycle at the virtual computer's frequency
 ```
 
 ## Timer functions
 Timer functions are executed at a specified interval or frequency, but at most once per clock cycle.  
 We can either specify an `interval` as in every N seconds or a `frequency` as in N times per second.  
 Timer functions cannot be called by the user. They can only be defined, and the device will automatically call them at their appropriate time.  
-```
+```xc
 timer frequency 4
-    // stuff here runs 4 times per second
+    ; stuff here runs 4 times per second
 timer interval 2
-    // stuff here runs once every 2 seconds
+    ; stuff here runs once every 2 seconds
 ```
 Note: If the clock speed of the virtual computer is slower than the given interval or frequency, that timer function will not correctly run at the specified interval or frequency, and may be executed at every clock cycle instead.  
 
@@ -316,7 +316,7 @@ The port index must be specified after the input keyword and a trail operator `.
 The port index may be specified via a constant as well (must be known at compile time).  
 Function arguments must be surrounded with parenthesis and their types must be specified.  
 Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them if data has been received, at the end of a clock cycle.  
-```
+```xc
 input.0 ($arg1:number, $arg2:text)
     $stuff = $arg1
 input.$myPortIndex ($arg1:number, $arg2:text)
@@ -331,48 +331,48 @@ We must pass a list of arguments surrounded with parenthesis (or an empty set of
 
 ## If Elseif Else
 Like most programming languages, we can use conditionals.  
-```
+```xc
 if $stuff == 5
-    // then run this
+    ; then run this
 elseif $stuff == 6
-    // then run that instead
+    ; then run that instead
 else
-    // all previous conditions evaluate to false, then run this instead
+    ; all previous conditions evaluate to false, then run this instead
 ```
 
 ## Foreach loops
 This loops through all items of an array.  
 The block of code under that loop statement will be executed for every item in the array, one by one.  
-```
+```xc
 foreach $stuff ($item)
-    // we loop through the array $stuff, and we define $item and its value is the current item's
-    // note that $item is a copy of its value, so modifying the value of $item will not affect the original array $stuff
+    ; we loop through the array $stuff, and we define $item and its value is the current item's
+    ; note that $item is a copy of its value, so modifying the value of $item will not affect the original array $stuff
 foreach $stuff ($item, $i)
-    // here we also define $i which contains the 0-based index of this item within the array $stuff
-    // if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
+    ; here we also define $i which contains the 0-based index of this item within the array $stuff
+    ; if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
     $stuff.$i = $item
-    // CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
+    ; CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
 ```
 
 ## Repeat loops
 This loop will repeat the execution of the following block a given number of times.  
-```
+```xc
 repeat 5 ($i)
-    // this block will be repeated 5 times, and $i is the 0-based index of this iteration (first time will be 0, last will be 4)
-    // CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
+    ; this block will be repeated 5 times, and $i is the 0-based index of this iteration (first time will be 0, last will be 4)
+    ; CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
 ```
 The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
 
 ## While loops
 This loop will run the following block as long as the given condition evaluates to true.  
-```
+```xc
 while $stuff < 5
     $stuff++
 ```
 
 ## Break
 This keyword is used to stop a loop as if it completed all its iterations.  
-```
+```xc
 while $stuff < 5
     $stuff++
     if $stuff == 3
@@ -381,7 +381,7 @@ while $stuff < 5
 
 ## Continue
 This keyword is used to stop this iteration of a loop here and run the next iteration immediately.  
-```
+```xc
 while $stuff < 5
     $stuff++
     if $stuff == 2
@@ -433,18 +433,22 @@ The following operators will compute the appropriate math operation between the 
 ## Casting (parse variables as another type)
 
 To parse an existing variable as another type, simply add a colon and the type, like so: 
-```$someTextValue = $someNumberValue:text```
+```xc
+$someTextValue = $someNumberValue:text
+```
 This only works with generic types `number` and `text`, not arrays or objects.  
 
 ## String concatenation
 
 To concatenate texts, simply separate all text values/variables with the concat operator `&` in the same assignment (don't forget to cast to text if you need to).  
-```$someTextVar = "Hello, " & $someName & "!, My age is " & $age:text & " and I have all my teeth"```
+```xc
+$someTextVar = "Hello, " & $someName & "!, My age is " & $age:text & " and I have all my teeth"
+```
 
 ## Include
 You may want to split your project into multiple source files.  
 To do this, you can put some code into another `.xc` file and use the `include` keyword in the parent file. 
-```
+```xc
 include "test.xc"
 ```
 This is effectively the same as taking all the lines from `test.xc` and inserting them into the current file where the `include` is.  
@@ -469,19 +473,29 @@ NOTE: Functions MUST be fully defined before their use. This means that the orde
 Here are some function declaration examples  
 
 This function takes in a single number argument:
-```function @func0 ($var1:number)```
+```xc
+function @func0 ($var1:number)
+```
 
 This function takes two number arguments:
-```function @func1 ($var1:number, $var2:number)```
+```xc
+function @func1 ($var1:number, $var2:number)
+```
 
 This function takes a number argument and a text argument:
-```function @func2 ($var1:number, $var2:text)```
+```xc
+function @func2 ($var1:number, $var2:text)
+```
 
 This function takes an implementation-defined object type `position` argument:
-```function @func3 ($var1:position)```
+```xc
+function @func3 ($var1:position)
+```
 
 This function takes a number argument and a text argument and returns a number value:
-```function @func2 ($var1:number, $var2:text) : number```
+```xc
+function @func2 ($var1:number, $var2:text) : number
+```
 
 ### Body
 The body of a function (the operations to be executed when calling it) must be on the following lines after the declaration, indented with one tab.  
@@ -489,7 +503,7 @@ Empty lines within a body are allowed and ignored by the compiler.
 Functions bodies may have a `return` statement optionally followed by an expression that would be used to assign a leading variable in the caller statement.  
 When returning a value, the return type must be provided at the end of the arguments, after the closing parenthesis and a colon.  
 
-```
+```xc
 function @func1 ($var1:number, $var2:number) : number
     return $var1 + $var2
 ```
@@ -498,7 +512,9 @@ function @func1 ($var1:number, $var2:number) : number
 
 Calling a function will run the operation in its body. 
 To call a function, simply write the name of the function (starting with `@` for user-defined functions), then its arguments within parenthesis separated by commas, like so:  
-```@func1(4, 6)```
+```xc
+@func1(4, 6)
+```
 Here we have passed two number arguments, thus this call executes the body of the declaration above.  
 It is of course also possible to use variables or even complex expressions instead of just literal numbers as the function arguments.  
 
@@ -513,7 +529,9 @@ This omitted argument concept can also be thought of as a concept similar to sta
 
 Functions may return a value using the `return` keyword.  
 This returned value may be assigned to a variable like so : 
-```$value = @func1(4, 6)```
+```xc
+$value = @func1(4, 6)
+```
 
 # Trailing functions
 Any function may be called as a trailing function, even user-defined functions.  
@@ -523,9 +541,15 @@ If the function definition does not have any arguments, this is still valid, alt
 The function definition MUST have a return type that matches that of the leading variable, if it's a generic type.  
 A trailing function may be called on implementation-defined objects, in which case the first argument must be of that object type, there is no return type in the function and it must NOT return any value.  
 Since we cannot pass Arrays as function arguments, arrays can only take their own specifically defined trailing functions.  
-```$myVariable.round()```
-```$myVariable.@func1(6)```
-```$myArray.clear()```
+```xc
+$myVariable.round()
+```
+```xc
+$myVariable.@func1(6)
+```
+```xc
+$myArray.clear()
+```
 
 # Built-in functions
 
@@ -551,7 +575,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `step`(edge1, edge2, number) or (edge, number)
 - `smoothstep`(edge1, edge2, number)
 - `lerp`(a, b, number)
-- `mod`(number, divisor) // the modulus operator
+- `mod`(number, divisor) the modulus operator
 - `min`(number, number)
 - `max`(number, number)
 - `avg`(number, number)
@@ -561,14 +585,14 @@ Trailing math functions will use the leading variable as its first argument and 
 - `div`(number, number)
 
 ### Text functions
-- `substring`(inputText, start, length) // returns a new string
+- `substring`(inputText, start, length) returns a new string
 - `text`(inputTextWithFormatting, vars ...)
 
 #### Formatting
 The `text` function takes a format as the first argument.  
 The format is basically a text that may contain enclosing braces that will be replaced by the value of some variables or expressions.  
 Exemple: 
-```
+```xc
 $formattedText = text("My name is {} and I am {} years old.", $name, $age)
 ```
 Empty braces above will be replaced by the corresponding variables in the following arguments in the same order.  
@@ -583,37 +607,37 @@ It is also possible to format number variables in a specific way by providing so
 
 ### Trailing functions for Arrays
 These functions MUST be called as trailing functions, and they do not return anything, instead they modify the array
-- $myArray.`clear`() // Empty an array
-- $myArray.`sort`() // Sort an array in Ascending order
-- $myArray.`sortd`() // Sort an array in Descending order
-- $myArray.`append`(value) // Append a new value to an array
-- $myArray.`pop`() // Erase the last value in an array, reducing its size by one
-- $myArray.`insert`(index, value) // Insert a new value to an array after a position, pushing back all following values by one
-- $myArray.`erase`(index) // Erase an element from an array at a specific index, pulling back all following values by one
-- $myArray.`fill`(qty, value) // Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
-- $myArray.`from`(other [, separator]) // Set the contents of the array to another array or text. Separator is for splitting with a specific string (only valid when other is a text). This function also works in reverse when executed on a text given an array and a separator.
+- $myArray.`clear`() Empty an array
+- $myArray.`sort`() Sort an array in Ascending order
+- $myArray.`sortd`() Sort an array in Descending order
+- $myArray.`append`(value) Append a new value to an array
+- $myArray.`pop`() Erase the last value in an array, reducing its size by one
+- $myArray.`insert`(index, value) Insert a new value to an array after a position, pushing back all following values by one
+- $myArray.`erase`(index) Erase an element from an array at a specific index, pulling back all following values by one
+- $myArray.`fill`(qty, value) Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
+- $myArray.`from`(other [, separator]) Set the contents of the array to another array or text. Separator is for splitting with a specific string (only valid when other is a text). This function also works in reverse when executed on a text given an array and a separator.
 
 ### Trailing members for Arrays and Texts
 Using the trail operator `.`, we can also return a specific information about certain types of variables.  
-- $myArray.`size` // returns the number of elements in $myArray
-- $myText.`size` // returns the number of characters in $myText
-- $myArray.`min` // returns the minimum value within a number array
-- $myArray.`max` // returns the maximum value within a number array
-- $myArray.`avg` // returns the average value within a number array
-- $myArray.`med` // returns the median value within a number array
-- $myArray.`sum` // returns the sum of all values within a number array
-- $myArray.`last` // returns the value of the last item within an array, this also allows to modify that value by assigning an expression
-- $myText.`last` // returns the last character of a text variable, this also allows to modify that last character by assigning an expression
+- $myArray.`size` returns the number of elements in $myArray
+- $myText.`size` returns the number of characters in $myText
+- $myArray.`min` returns the minimum value within a number array
+- $myArray.`max` returns the maximum value within a number array
+- $myArray.`avg` returns the average value within a number array
+- $myArray.`med` returns the median value within a number array
+- $myArray.`sum` returns the sum of all values within a number array
+- $myArray.`last` returns the value of the last item within an array, this also allows to modify that value by assigning an expression
+- $myText.`last` returns the last character of a text variable, this also allows to modify that last character by assigning an expression
 
 ### Other useful helpers
-- `contains`($myText, "str") // returns 1 if $myText contains "str", otherwise 0
-- `find`($myText, "str") // returns the index of the first character of the first occurance of "str" in $myText, otherwise -1 if not found
+- `contains`($myText, "str") returns 1 if $myText contains "str", otherwise 0
+- `find`($myText, "str") returns the index of the first character of the first occurance of "str" in $myText, otherwise -1 if not found
 These also work on arrays.  
 
 ### Device functions
 An implementation should define application-specific device functions.  
 Here are examples of basic device functions that MAY or MAY NOT be defined:  
-- `delta`() // returns the time difference in seconds from the last execution of this `delta` function  
+- `delta`() returns the time difference in seconds from the last execution of this `delta` function  
 Device functions that do not require any arguments may be used without parenthesis when called from within an expression.  
 
 # Compiler Specifications
