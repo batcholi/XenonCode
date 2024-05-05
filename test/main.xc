@@ -7,7 +7,7 @@ function @increment($v:number):number
 
 function @RunUnitTests()
 	
-	// Test 1
+	; Test 1
 	$results.append("Test 1")
 	repeat 10 ($i)
 		$results.append(text("{0.0}",$i+1))
@@ -15,7 +15,7 @@ function @RunUnitTests()
 		$results.append(text("{0}",$i+1))
 		$results.append($i+3)
 		
-	// Test 2
+	; Test 2
 	$results.append("Test 2")
 	var $a = $someVar * 2
 	var $b = $a - 3
@@ -23,7 +23,7 @@ function @RunUnitTests()
 	$b++
 	$results.append($a, $b)
 
-	// Test 3
+	; Test 3
 	$results.append("Test 3")
 	if $a == 33
 		$results.append("OK")
@@ -32,7 +32,7 @@ function @RunUnitTests()
 		$results.append("ERROR")
 	$results.append($a)
 	
-	// Test 4
+	; Test 4
 	$results.append("Test 4")
 	$someArray.append(1,2,2+1)
 	$results.append($someArray.sum)
@@ -51,7 +51,7 @@ function @RunUnitTests()
 	$someArray.clear()
 	$results.append($someArray.size)
 	
-	// Test 5
+	; Test 5
 	$a *=+1
 	$a =-2
 	$a +=clamp(-delta,-10,+10)
@@ -60,19 +60,19 @@ function @RunUnitTests()
 	else
 		$results.append("ERROR")
 	
-	// Test 6
+	; Test 6
 	if delta == 0
 		$results.append("OK")
 	else
 		$results.append("ERROR")
 	
-	// Test 7
+	; Test 7
 	if delta
 		$results.append("ERROR")
 	else
 		$results.append("OK")
 	
-	// Test 8
+	; Test 8
 	$results.append("---")
 	var $someText = "Hello World!"
 	array $words : text
@@ -101,7 +101,7 @@ function @RunUnitTests()
 	$serialized.from($numbers, ", ")
 	$results.append($serialized)
 	
-	// Test 9
+	; Test 9
 	$results.append("---")
 	var $utf8 = "Il était une fois"
 	$results.append($utf8.last)
@@ -124,20 +124,34 @@ function @RunUnitTests()
 	$results.append($utf8)
 	$results.append($utf8.last)
 	
-	// test 10
+	; test 10
 	repeat 10 ($i)
 		repeat 10 ($j)
 			$results.append($i)
 			$results.append($j)
 			break
 	
-	// test 11
+	; test 11
 	$results.append("Hello\n\""World\!""\\")
+	
+	; test 12
+	var $text1 = ".a{0.12}.b{a}"
+	var $text2 = ".cc{}.dd{1.53}"
+	$results.append(text("{}\n{}", $text1, $text2))
+	
+	; test 13
+	var $ore = "Fe"
+	var $composition = ".Al{0.1}.Fe{0.15}.Cu{0.01}"
+	$composition.substring(find($composition, "."&$ore&"{") + $ore.size + 2)
+	if contains($composition, "}")
+		$composition.substring(0, find($composition, "}"))
+	$results.append($composition)
+	
 	
 init
 	output.0 ("Hello, World!")
 	
-	// Run Unit tests
+	; Run Unit tests
 	$results.clear()
 	if $someVar != 16
 		return

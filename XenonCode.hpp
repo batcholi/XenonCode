@@ -662,6 +662,7 @@ const int VERSION_PATCH = 0;
 									word += s.get();
 									if (s.peek() != '"') {
 										inString = false;
+										continue;
 									}
 								}
 							} else {
@@ -5851,10 +5852,11 @@ const int VERSION_PATCH = 0;
 										if (IsNumeric(src)) {
 											MemSet(ToString(MemGetNumeric(src)), dst);
 										} else {
+											size_t pos = 0;
 											std::string txt = MemGetText(src);
 											for (ByteCode c : args) {
-												size_t p1 = txt.find('{');
-												size_t p2 = txt.find('}');
+												size_t p1 = txt.find('{', pos);
+												size_t p2 = txt.find('}', p1);
 												if (p1 == std::string::npos || p2 == std::string::npos || p1 > p2) break;
 												std::string format = txt.substr(p1+1, p2-p1-1);
 												std::string before = txt.substr(0, p1);
@@ -5894,6 +5896,7 @@ const int VERSION_PATCH = 0;
 														txt = before + str.str() + after;
 													}
 												} else break;
+												pos = txt.length() - after.length();
 											}
 											MemSet(txt, dst);
 										}
