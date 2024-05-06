@@ -14,6 +14,7 @@
 - Trailing/member functions
 - Built-in standard math functions
 - Built-in IO operations between virtual devices
+- Built-in key-value objects
 - Synchronized interval functions (timers)
 - `if`/`elseif`/`else` conditionals
 - `while` loops
@@ -276,6 +277,16 @@ To access or modify the value of a specific item in an array, we must use the tr
 Text variables work in a very similar way to arrays. We can use the trail operator `.` to access or modify the value of specific charaters within a text.  
 `$myText.0 = "a"` Set "a" as the first character of $myText  
 
+### Key-Value objects
+
+XenonCode supports its own key-value type that is always stored as text.  
+Simply declare a text variable and assign/read its members using its key as the trailing member
+```xc
+var $myObject = ".a{5}.b{8}" ; you can use the serialization format like so, but you don't have to, you may simply start with an empty text and assign the members one by one
+print($myObject.a) ; will print 5
+$myObject.b += 2 ; adds 2 to b which was 8 and will now be 10
+```
+
 ## The Init function
 The Init function's body will be executed first everytime the virtual computer is powered on.  
 The init function cannot be called by the user. It can only be defined, and the device will automatically call it upon virtual startup.  
@@ -344,14 +355,18 @@ else
 This loops through all items of an array.  
 The block of code under that loop statement will be executed for every item in the array, one by one.  
 ```xc
-foreach $stuff ($item)
-    ; we loop through the array $stuff, and we define $item and its value is the current item's
+foreach $stuff ($index, $item)
+    ; we loop through the array $stuff, and we define $index which contains the 0-based index of this item and $item for the current item's value
     ; note that $item is a copy of its value, so modifying the value of $item will not affect the original array $stuff
-foreach $stuff ($item, $i)
-    ; here we also define $i which contains the 0-based index of this item within the array $stuff
-    ; if we want to persist the modified $item value into the original array, we can use $i to index the element from the array like so:
-    $stuff.$i = $item
-    ; CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
+    ; if we want to persist the modified $item value into the original array, we can use $index to index the element from the array like so:
+    $stuff.$index = $item
+    ; CAUTION: $index is a reference used internally for the loop, don't modify its value unless you actually want to affect the loop
+```
+You may also use the foreach loop with key-value objects
+```xc
+foreach $obj ($key, $value)
+    print($key)
+    print($value)
 ```
 
 ## Repeat loops
@@ -359,7 +374,7 @@ This loop will repeat the execution of the following block a given number of tim
 ```xc
 repeat 5 ($i)
     ; this block will be repeated 5 times, and $i is the 0-based index of this iteration (first time will be 0, last will be 4)
-    ; CAUTION: $i is a reference, don't modify its value unless you actually want to affect the loop
+    ; CAUTION: $i is a reference used internally for the loop, don't modify its value unless you actually want to affect the loop
 ```
 The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
 
@@ -587,6 +602,8 @@ Trailing math functions will use the leading variable as its first argument and 
 ### Text functions
 - `substring`(inputText, start, length) returns a new string
 - `text`(inputTextWithFormatting, vars ...)
+- `size`(inputText) returns the number of characters in $myText
+- `last`(inputText) returns the last character in $myText
 
 #### Formatting
 The `text` function takes a format as the first argument.  
@@ -617,17 +634,15 @@ These functions MUST be called as trailing functions, and they do not return any
 - $myArray.`fill`(qty, value) Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
 - $myArray.`from`(other [, separator]) Set the contents of the array to another array or text. Separator is for splitting with a specific string (only valid when other is a text). This function also works in reverse when executed on a text given an array and a separator.
 
-### Trailing members for Arrays and Texts
+### Trailing members for Arrays
 Using the trail operator `.`, we can also return a specific information about certain types of variables.  
 - $myArray.`size` returns the number of elements in $myArray
-- $myText.`size` returns the number of characters in $myText
 - $myArray.`min` returns the minimum value within a number array
 - $myArray.`max` returns the maximum value within a number array
 - $myArray.`avg` returns the average value within a number array
 - $myArray.`med` returns the median value within a number array
 - $myArray.`sum` returns the sum of all values within a number array
 - $myArray.`last` returns the value of the last item within an array, this also allows to modify that value by assigning an expression
-- $myText.`last` returns the last character of a text variable, this also allows to modify that last character by assigning an expression
 
 ### Other useful helpers
 - `contains`($myText, "str") returns 1 if $myText contains "str", otherwise 0

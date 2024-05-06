@@ -230,6 +230,9 @@
 #ifdef CON
 	#undef CON
 #endif
+#ifdef KEY
+	#undef KEY
+#endif
 #pragma endregion
 
 namespace XenonCode {
@@ -1783,8 +1786,8 @@ const int VERSION_PATCH = 0;
 							if (words.size() < 5) {
 								throw ParseError("Too few words");
 							}
-							// Array accessor
-							if (words[2] == Word::Numeric || words[2] == Word::Varname) {
+							// Array/Object assignment
+							if (words[2] == Word::Numeric || words[2] == Word::Varname || (words[2] == Word::Name && words[3] == Word::AssignmentOperatorGroup)) {
 								if (words[3] == Word::AssignmentOperatorGroup) {
 									if (!ParseExpression(words, 4)) {
 										throw ParseError("Invalid expression after var assignment");
@@ -1800,7 +1803,9 @@ const int VERSION_PATCH = 0;
 										throw ParseError("Invalid argument list after trailing function on var");
 									}
 								} else {
-									throw ParseError("Invalid expression after trailing function on var");
+									if (words[2] == Word::Funcname || words.size() < 4 || words[3] != Word::AssignmentOperatorGroup) {
+										throw ParseError("Invalid expression after trailing function on var");
+									}
 								}
 							} else {
 								throw ParseError("Invalid expression after var assignment");
@@ -1933,6 +1938,7 @@ const int VERSION_PATCH = 0;
 		
 		// Extra references
 		ARRAY_INDEX = 101,
+		OBJ_KEY = 102,
 		DEVICE_FUNCTION_INDEX = 110,
 		INTEGER = 115,
 		ADDR = 120,
@@ -1949,7 +1955,7 @@ const int VERSION_PATCH = 0;
 	}
 	#define DEF_OP(op) inline static constexpr uint32_t op = Interpret3CharsAsInt(#op);
 
-	DEF_OP( SET /* [ARRAY_INDEX ifindexnone[REF_NUM]] REF_DST [REF_VALUE]orZero */ ) // Assign a value
+	DEF_OP( SET /* [(ARRAY_INDEX ifindexnone[REF_NUM]) | (OBJ_KEY REF_KEY)] REF_DST [REF_VALUE]orZero */ ) // Assign a value
 	DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
 	DEF_OP( SUB /* REF_DST REF_A REF_B */ ) // -
 	DEF_OP( MUL /* REF_DST REF_A REF_B */ ) // *
@@ -2010,10 +2016,11 @@ const int VERSION_PATCH = 0;
 	DEF_OP( SUM /* REF_DST (REF_ARR | (REF_NUM [REF_NUM ...])) */ ) // array.sum
 	DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 	DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
-	DEF_OP( IDX /* REF_DST (REF_ARR | REF_TXT) INDEX ifindexnone[REF_NUM] */ ) // get an indexed value from an array or text
+	DEF_OP( IDX /* REF_DST ((REF_ARR ARRAY_INDEX ifindexnone[REF_NUM]) | (REF_TXT ((OBJ_KEY REF_KEY) | (ARRAY_INDEX ifindexnone[REF_NUM])))) */ ) // get an indexed value from an array or text, or a StringObject given a key
 	DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
 	DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
 	DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
+	DEF_OP( KEY /* REF_DST REF_TXT REF_OFFSET */) // returns the next key in a text object, and moves the offset as well
 
 #pragma endregion
 
@@ -2812,6 +2819,16 @@ const int VERSION_PATCH = 0;
 					}
 					return VOID;
 				} else if (func == Word::Name) {
+					if (getReturn && isTrailingFunction && args.size() == 1 && (args[0].type == ROM_CONST_TEXT || args[0].type == RAM_VAR_TEXT || args[0].type == STORAGE_VAR_TEXT)) {
+						ByteCode ret = declareTmpText();
+						write(IDX);
+						write(ret);
+						write(args[0]);
+						write(OBJ_KEY);
+						write(declareVar("", ROM_CONST_TEXT, func));
+						write(VOID);
+						return ret;
+					}
 					CODE_TYPE retType = VOID;
 					ByteCode ret = VOID;
 					ByteCode f = VOID;
@@ -2863,7 +2880,7 @@ const int VERSION_PATCH = 0;
 								case RAM_ARRAY_TEXT:
 									retType = RAM_VAR_TEXT;
 								break;
-								default: throw CompileError("Invalid arguments");
+								default: throw CompileError("Invalid argument type");
 							}
 						} else {
 							throw CompileError("Cannot call", funcName, "here");
@@ -3206,8 +3223,12 @@ const int VERSION_PATCH = 0;
 						write(ref1);
 						if (operand == Word::Varname) {
 							ByteCode ref2 = getVar(operand);
-							validate(IsNumeric(ref2));
-							write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+							if (IsNumeric(ref2)) {
+								write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+							} else {
+								validate(IsText(ref2));
+								write(OBJ_KEY);
+							}
 							write(ref2);
 						} else /*numeric*/{
 							write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
@@ -3231,7 +3252,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::ConcatOperator) {
-						validate(IsText(ref1) && IsText(ref2));
 						ByteCode tmp = declareTmpText();
 						write(CCT);
 						write(tmp);
@@ -3240,7 +3260,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::MulOperatorGroup) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						if (op == "*") {
 							write(MUL);
 						} else if (op == "/") {
@@ -3260,7 +3279,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::AddOperatorGroup) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						if (op == "+") {
 							write(ADD);
 						} else if (op == "-") {
@@ -3276,7 +3294,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::CompareOperatorGroup) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						if (op == "<") {
 							write(LST);
 						} else if (op == ">") {
@@ -3296,40 +3313,20 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::EqualityOperatorGroup) {
-						if (IsNumeric(ref1) && IsNumeric(ref2)) {
-							if (op == "==") {
-								write(EQQ);
-							} else if (op == "!=" || op == "<>") {
-								write(NEQ);
-							} else {
-								validate(false);
-								return VOID;
-							}
-							ByteCode tmp = declareTmpNumeric();
-							write(tmp);
-							write(ref1);
-							write(ref2);
-							write(VOID);
-							return tmp;
-						} else if (IsText(ref1) && IsText(ref2)) {
-							if (op == "==") {
-								write(EQQ);
-							} else if (op == "!=" || op == "<>") {
-								write(NEQ);
-							} else {
-								validate(false);
-								return VOID;
-							}
-							ByteCode tmp = declareTmpNumeric();
-							write(tmp);
-							write(ref1);
-							write(ref2);
-							write(VOID);
-							return tmp;
+						if (op == "==") {
+							write(EQQ);
+						} else if (op == "!=" || op == "<>") {
+							write(NEQ);
 						} else {
 							validate(false);
 							return VOID;
 						}
+						ByteCode tmp = declareTmpNumeric();
+						write(tmp);
+						write(ref1);
+						write(ref2);
+						write(VOID);
+						return tmp;
 					} else if (op == Word::AndOperator) {
 						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						ByteCode tmp = declareTmpNumeric();
@@ -3883,8 +3880,12 @@ const int VERSION_PATCH = 0;
 												write(dst);
 												if (operand == Word::Varname) {
 													ByteCode idx = getVar(operand);
-													validate(IsNumeric(idx));
-													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													if (IsNumeric(idx)) {
+														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													} else {
+														validate(IsText(idx));
+														write(OBJ_KEY);
+													}
 													write(idx);
 												} else /*numeric*/ {
 													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
@@ -3901,8 +3902,12 @@ const int VERSION_PATCH = 0;
 											write(SET);
 											if (operand == Word::Varname) {
 												ByteCode idx = getVar(operand);
-												validate(IsNumeric(idx));
-												write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+												if (IsNumeric(idx)) {
+													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+												} else {
+													validate(IsText(idx));
+													write(OBJ_KEY);
+												}
 												write(idx);
 											} else /*numeric*/ {
 												write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
@@ -3911,22 +3916,55 @@ const int VERSION_PATCH = 0;
 											write(ref);
 											write(VOID);
 										} else if (operand == Word::Funcname || operand == Word::Name) {
-											// Trailing function call statement
-											std::vector<ByteCode> args {};
-											args.push_back(dst);
-											validate(readWord() == Word::ExpressionBegin);
-											while (nextWordIndex < (int)line.words.size()) {
-												int argEnd = GetArgEnd(line.words, nextWordIndex);
-												if (argEnd == -1) {
-													break;
+											// Trailing function call statement or StringObject member assignment
+											Word next = readWord();
+											validate(next);
+											if (next == Word::ExpressionBegin) {
+												// Trailing function call
+												std::vector<ByteCode> args {};
+												args.push_back(dst);
+												while (nextWordIndex < (int)line.words.size()) {
+													int argEnd = GetArgEnd(line.words, nextWordIndex);
+													if (argEnd == -1) {
+														break;
+													}
+													args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+													nextWordIndex = argEnd+1;
+													if (readWord() != Word::CommaOperator) {
+														break;
+													}
 												}
-												args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
-												nextWordIndex = argEnd+1;
-												if (readWord() != Word::CommaOperator) {
-													break;
+												compileFunctionCall(operand, args, false, true);
+											} else if (operand == Word::Name && next == Word::AssignmentOperatorGroup) {
+												// StringObject member assignment
+												validate(IsVar(dst) && IsText(dst));
+												ByteCode op = GetOperator(next);
+												ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+												ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
+												if (op != SET) {
+													ByteCode tmp = declareTmpText();
+													// Assign the current indexed value to tmp
+													write(IDX);
+													write(tmp);
+													write(dst);
+													write(OBJ_KEY);
+													write(key);
+													write(VOID);
+													// Set tmp to the new value
+													write(op);
+													write(tmp);
+													write(tmp);
+													write(ref);
+													write(VOID);
+													ref = tmp;
 												}
-											}
-											compileFunctionCall(operand, args, false, true);
+												write(SET);
+												write(OBJ_KEY);
+												write(key);
+												write(dst);
+												write(ref);
+												write(VOID);
+											} else validate(false);
 										} else validate(false);
 									}break;
 									case Word::SuffixOperatorGroup:{
@@ -4028,84 +4066,120 @@ const int VERSION_PATCH = 0;
 								else if (firstWord == "foreach") {
 									pushStack("loop");
 									ByteCode arr = getVar(readWord(Word::Varname));
-									validate(IsArray(arr));
+									validate(IsArray(arr) || IsText(arr));
 									readWord(Word::ExpressionBegin);
+									Word index = readWord(Word::Varname);
+									readWord(Word::CommaOperator);
 									Word item = readWord(Word::Varname);
-									Word index = Word::Empty;
-									Word next = readWord();
-									if (next == Word::CommaOperator) {
-										index = readWord(Word::Varname);
-										validate(readWord() == Word::ExpressionEnd);
-									} else {
-										validate(next == Word::ExpressionEnd);
-									}
+									validate(readWord() == Word::ExpressionEnd);
 									validate(nextWordIndex == (int)line.words.size());
 									ByteCode itemRef, indexRef;
 									switch (arr.type) {
 										case STORAGE_ARRAY_NUMERIC:
 										case RAM_ARRAY_NUMERIC:
+											indexRef = declareVar(index, RAM_VAR_NUMERIC);
 											itemRef = declareVar(item, RAM_VAR_NUMERIC);
 											break;
-										case STORAGE_VAR_TEXT:
 										case STORAGE_ARRAY_TEXT:
-										case RAM_VAR_TEXT:
 										case RAM_ARRAY_TEXT:
+											indexRef = declareVar(index, RAM_VAR_NUMERIC);
+											itemRef = declareVar(item, RAM_VAR_TEXT);
+											break;
+										case STORAGE_VAR_TEXT:
+										case RAM_VAR_TEXT:
+										case ROM_CONST_TEXT:
+											indexRef = declareVar(index, RAM_VAR_TEXT);
 											itemRef = declareVar(item, RAM_VAR_TEXT);
 											break;
 										default: validate(false);
 									}
-									if (index) {
-										indexRef = declareVar(index, RAM_VAR_NUMERIC);
+									
+									if (indexRef.type == RAM_VAR_TEXT) {
+										// StringObject
+										
+										// Set offset to 0
+										ByteCode offset = declareTmpNumeric();
+										write(SET);
+										write(offset);
+										write(VOID);
+										
+										addPointer("LoopBegin") = addr();
+										
+										// Get key and move offset to next key
+										write(KEY);
+										write(indexRef);
+										write(arr);
+										write(offset);
+										write(VOID);
+										
+										// Check condition (key != "")
+										ByteCode condition = declareTmpNumeric();
+										write(CND);
+										addPointer("LoopContinue") = write(ADDR);
+										addPointer("LoopBreak") = write(ADDR);
+										write(indexRef);
+										write(VOID);
+										
+										applyPointerAddr("LoopContinue");
+										
+										// Set current item
+										write(IDX);
+										write(itemRef);
+										write(arr);
+										write(OBJ_KEY);
+										write(indexRef);
+										write(VOID);
+										
 									} else {
-										indexRef = declareTmpNumeric();
+									
+										// Set index to -1
+										write(SET);
+										write(indexRef);
+										write(VOID);
+										write(DEC);
+										write(indexRef);
+										write(VOID);
+										
+										// Get Array Size
+										ByteCode arrSize = declareTmpNumeric();
+										write(SIZ);
+										write(arrSize);
+										write(arr);
+										write(VOID);
+										
+										addPointer("LoopBegin") = addr();
+										
+										// Increment index
+										write(INC);
+										write(indexRef);
+										write(VOID);
+										
+										// Assign condition
+										ByteCode condition = declareTmpNumeric();
+										write(LST);
+										write(condition);
+										write(indexRef);
+										write(arrSize);
+										write(VOID);
+										
+										// Check condition to continue or break
+										write(CND);
+										addPointer("LoopContinue") = write(ADDR);
+										addPointer("LoopBreak") = write(ADDR);
+										write(condition);
+										write(VOID);
+										
+										applyPointerAddr("LoopContinue");
+										
+										// Set current item
+										write(IDX);
+										write(itemRef);
+										write(arr);
+										write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+										write(indexRef);
+										write(VOID);
+										
 									}
-									
-									// Set index to -1
-									write(SET);
-									write(indexRef);
-									write(VOID);
-									write(DEC);
-									write(indexRef);
-									write(VOID);
-									
-									// Get Array Size
-									ByteCode arrSize = declareTmpNumeric();
-									write(SIZ);
-									write(arrSize);
-									write(arr);
-									write(VOID);
-									
-									addPointer("LoopBegin") = addr();
-									
-									// Increment index
-									write(INC);
-									write(indexRef);
-									write(VOID);
-									
-									// Assign condition
-									ByteCode condition = declareTmpNumeric();
-									write(LST);
-									write(condition);
-									write(indexRef);
-									write(arrSize);
-									write(VOID);
-									
-									// Check condition to continue or break
-									write(CND);
-									addPointer("LoopContinue") = write(ADDR);
-									addPointer("LoopBreak") = write(ADDR);
-									write(condition);
-									write(VOID);
-									
-									applyPointerAddr("LoopContinue");
-									
-									// Set current item
-									write(IDX);
-									write(itemRef);
-									write(arr);
-									write({ARRAY_INDEX, ARRAY_INDEX_NONE});
-									write(indexRef);
-									write(VOID);
 								}
 								// repeat
 								else if (firstWord == "repeat") {
@@ -4362,6 +4436,9 @@ const int VERSION_PATCH = 0;
 							break;
 						case ARRAY_INDEX:
 							std::cout << "ARRAY_INDEX{" << code.value << "} ";
+							break;
+						case OBJ_KEY:
+							std::cout << "OBJ_KEY ";
 							break;
 						case DEVICE_FUNCTION_INDEX:
 							std::cout << "DEVICE_FUNCTION_INDEX{" << code.value << "} ";
@@ -5075,6 +5152,13 @@ const int VERSION_PATCH = 0;
 					if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) throw RuntimeError("Invalid array indexing");
 					arr[arrIndex] = value;
 				}break;
+				case STORAGE_ARRAY_TEXT:
+				case RAM_ARRAY_TEXT:
+				case ROM_CONST_TEXT:
+				case STORAGE_VAR_TEXT:
+				case RAM_VAR_TEXT: {
+					MemSet(ToString(value), dst, arrIndex);
+				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
@@ -5121,6 +5205,14 @@ const int VERSION_PATCH = 0;
 					}
 					arr[arrIndex] = value;
 				}break;
+				case STORAGE_ARRAY_NUMERIC:
+				case RAM_ARRAY_NUMERIC:
+				case ROM_CONST_NUMERIC:
+				case STORAGE_VAR_NUMERIC:
+				case RAM_VAR_NUMERIC: {
+					if (value.length() == 0) MemSet(0.0, dst, arrIndex);
+					else MemSet(std::stod(value), dst, arrIndex);
+				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
@@ -5159,6 +5251,15 @@ const int VERSION_PATCH = 0;
 					return arr[arrIndex];
 				}break;
 				case VOID: return 0.0;
+				case STORAGE_ARRAY_TEXT:
+				case RAM_ARRAY_TEXT:
+				case ROM_CONST_TEXT:
+				case STORAGE_VAR_TEXT:
+				case RAM_VAR_TEXT: {
+					std::string text = MemGetText(ref, arrIndex);
+					if (text.length() == 0) return 0.0;
+					return std::stod(text);
+				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
@@ -5242,6 +5343,13 @@ const int VERSION_PATCH = 0;
 				case VOID: {
 					return "";
 				}
+				case STORAGE_ARRAY_NUMERIC:
+				case RAM_ARRAY_NUMERIC:
+				case ROM_CONST_NUMERIC:
+				case STORAGE_VAR_NUMERIC:
+				case RAM_VAR_NUMERIC: {
+					return ToString(MemGetNumeric(ref, arrIndex));
+				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
 		}
@@ -5492,7 +5600,7 @@ const int VERSION_PATCH = 0;
 						case OP: {
 							ipcCheck();
 							switch (code.rawValue) {
-								case SET: {// [ARRAY_INDEX ifindexnone[REF_NUM]] REF_DST [REF_VALUE]orZero
+								case SET: {// [ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY] REF_DST [REF_VALUE]orZero
 									ByteCode dst = nextCode();
 									uint32_t arr_index = ARRAY_INDEX_NONE;
 									if (dst.type == ARRAY_INDEX) {
@@ -5501,6 +5609,59 @@ const int VERSION_PATCH = 0;
 											arr_index = uint32_t(MemGetNumeric(nextCode()));
 										}
 										dst = nextCode();
+									} else if (dst.type == OBJ_KEY) {
+										ByteCode key = nextCode();
+										dst = nextCode();
+										if (dst.type != STORAGE_VAR_TEXT && dst.type != RAM_VAR_TEXT) {
+											throw RuntimeError("Invalid Object Key indexing");
+										}
+										switch (key.type) {
+											case STORAGE_VAR_TEXT:
+											case RAM_VAR_TEXT:
+											case ROM_CONST_TEXT:{
+												std::string obj = MemGetText(dst);
+												std::string k = MemGetText(key);
+												std::string val = MemGetText(nextCode(), ARRAY_INDEX_NONE);
+												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
+												k = '.' + k + '{';
+												auto it = std::search(
+													obj.begin(), obj.end(),
+													k.begin(), k.end(),
+													[](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); }
+												);
+												if (it == obj.end()) {
+													MemSet(obj + k + val + '}', dst);
+												} else {
+													int exprStack = 0;
+													it += k.length();
+													auto start = it;
+													auto end = obj.end();
+													while (it != obj.end()) {
+														if (*it == '{') ++exprStack;
+														else if (*it == '}') {
+															if (exprStack == 0) {
+																end = it;
+																break;
+															}
+															--exprStack;
+														}
+														++it;
+													}
+													std::string newObj;
+													newObj.reserve(obj.length() + val.length());
+													newObj.append(obj.begin(), start);
+													newObj.append(val);
+													if (end == obj.end()) {
+														newObj.append("}");
+													} else {
+														newObj.append(end, obj.end());
+													}
+													MemSet(newObj, dst);
+												}
+											}break;
+											default: throw RuntimeError("Invalid key");
+										}
+										break;
 									}
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) || (arr_index != ARRAY_INDEX_NONE && (dst.type == STORAGE_ARRAY_NUMERIC || dst.type == RAM_ARRAY_NUMERIC))) {
@@ -5517,67 +5678,53 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
 								}break;
 								case SUB: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
 								}break;
 								case MUL: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
 								}break;
 								case DIV: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										double operand = MemGetNumeric(b);
-										if (operand == 0) throw RuntimeError("Division by zero");
-										MemSet(MemGetNumeric(a) / operand, dst);
-									} else throw RuntimeError("Invalid operation");
+									double operand = MemGetNumeric(b);
+									if (operand == 0) throw RuntimeError("Division by zero");
+									MemSet(MemGetNumeric(a) / operand, dst);
 								}break;
 								case MOD: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										double value = MemGetNumeric(a);
-										double operand = MemGetNumeric(b);
-										if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
-											if (std::round(operand) == 0) throw RuntimeError("Division by zero");
-											MemSet(double(int64_t(std::round(value)) % int64_t(std::round(operand))), dst);
-										} else {
-											if (operand == 0.0) throw RuntimeError("Division by zero");
-											MemSet(std::fmod(value, operand), dst);
-										}
-									} else throw RuntimeError("Invalid operation");
+									double value = MemGetNumeric(a);
+									double operand = MemGetNumeric(b);
+									if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
+										if (std::round(operand) == 0) throw RuntimeError("Division by zero");
+										MemSet(double(int64_t(std::round(value)) % int64_t(std::round(operand))), dst);
+									} else {
+										if (operand == 0.0) throw RuntimeError("Division by zero");
+										MemSet(std::fmod(value, operand), dst);
+									}
 								}break;
 								case POW: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
 								}break;
 								case CCT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsText(dst) && IsText(a) && IsText(b)) {
-										MemSet(MemGetText(a) + MemGetText(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetText(a) + MemGetText(b), dst);
 								}break;
 								case AND: {
 									ByteCode dst = nextCode();
@@ -5613,65 +5760,53 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
-									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
+									if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
+									} else if (IsNumeric(dst) && (IsNumeric(a) || IsNumeric(b))) {
+										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case NEQ: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
-									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
+									if (IsNumeric(dst) && IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
+									} else if (IsNumeric(dst) && (IsNumeric(a) || IsNumeric(b))) {
+										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case LST: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) < MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) < MemGetNumeric(b), dst);
 								}break;
 								case GRT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) > MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) > MemGetNumeric(b), dst);
 								}break;
 								case LTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) <= MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) <= MemGetNumeric(b), dst);
 								}break;
 								case GTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(MemGetNumeric(a) >= MemGetNumeric(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(MemGetNumeric(a) >= MemGetNumeric(b), dst);
 								}break;
 								case INC: {// REF_NUM
 									ByteCode ref = nextCode();
-									if (IsNumeric(ref)) {
-										MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
 								}break;
 								case DEC: {
 									ByteCode ref = nextCode();
-									if (IsNumeric(ref)) {
-										MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
 								}break;
 								case NOT: {// REF_DST REF_VAL
 									ByteCode dst = nextCode();
@@ -5685,151 +5820,115 @@ const int VERSION_PATCH = 0;
 								case FLR: {// REF_DST REF_NUM
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::floor(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::floor(MemGetNumeric(val)), dst);
 								}break;
 								case CIL: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::ceil(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::ceil(MemGetNumeric(val)), dst);
 								}break;
 								case RND: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::round(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::round(MemGetNumeric(val)), dst);
 								}break;
 								case SIN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::sin(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::sin(MemGetNumeric(val)), dst);
 								}break;
 								case COS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::cos(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::cos(MemGetNumeric(val)), dst);
 								}break;
 								case TAN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::tan(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::tan(MemGetNumeric(val)), dst);
 								}break;
 								case ASI: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::asin(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::asin(MemGetNumeric(val)), dst);
 								}break;
 								case ACO: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::acos(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::acos(MemGetNumeric(val)), dst);
 								}break;
 								case ATA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::atan(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::atan(MemGetNumeric(val)), dst);
 								}break;
 								case ABS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::abs(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::abs(MemGetNumeric(val)), dst);
 								}break;
 								case FRA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										double intpart;
-										MemSet(std::modf(MemGetNumeric(val), &intpart), dst);
-									} else throw RuntimeError("Invalid operation");
+									double intpart;
+									MemSet(std::modf(MemGetNumeric(val), &intpart), dst);
 								}break;
 								case SQR: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										MemSet(std::sqrt(MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::sqrt(MemGetNumeric(val)), dst);
 								}break;
 								case SIG: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
-										double num = MemGetNumeric(val);
-										if (num > 0.0) num = 1.0;
-										else if (num < 0.0) num = -1.0;
-										MemSet(num, dst);
-									} else throw RuntimeError("Invalid operation");
+									double num = MemGetNumeric(val);
+									if (num > 0.0) num = 1.0;
+									else if (num < 0.0) num = -1.0;
+									MemSet(num, dst);
 								}break;
 								case LOG: {// REF_DST REF_NUM REF_BASE
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode base = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(base)) {
-										double b = MemGetNumeric(base);
-										if (b == 0) b = 10.0;
-										MemSet(std::log(MemGetNumeric(val)) / std::log(b), dst);
-									} else throw RuntimeError("Invalid operation");
+									double b = MemGetNumeric(base);
+									if (b == 0) b = 10.0;
+									MemSet(std::log(MemGetNumeric(val)) / std::log(b), dst);
 								}break;
 								case CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode min = nextCode();
 									ByteCode max = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(min) && IsNumeric(max)) {
-										double minVal = MemGetNumeric(min);
-										double maxVal = MemGetNumeric(max);
-										if (minVal > maxVal) throw RuntimeError("Invalid operation");
-										MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
-									} else throw RuntimeError("Invalid operation");
+									double minVal = MemGetNumeric(min);
+									double maxVal = MemGetNumeric(max);
+									if (minVal > maxVal) throw RuntimeError("Invalid operation");
+									MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
 								}break;
 								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(t1) && IsNumeric(t2) && (val.type == VOID || IsNumeric(val))) {
-										if (val.type == VOID) {
-											val = t2;
-											MemSet(step(MemGetNumeric(t1), MemGetNumeric(val)), dst);
-										} else {
-											MemSet(step(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
-										}
-									} else throw RuntimeError("Invalid operation");
+									if (val.type == VOID) {
+										val = t2;
+										MemSet(step(MemGetNumeric(t1), MemGetNumeric(val)), dst);
+									} else {
+										MemSet(step(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+									}
 								}break;
 								case SMT: {
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(t1) && IsNumeric(t2)) {
-										MemSet(smoothstep(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(smoothstep(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 								}break;
 								case LRP: {
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val) && IsNumeric(t1) && IsNumeric(t2)) {
-										MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 								}break;
 								case NUM: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
@@ -5867,7 +5966,6 @@ const int VERSION_PATCH = 0;
 												}
 												// {0} {00} {0e} {0e.00} {0.0} {0000.00}
 												else if (format[0] == '0') {
-													if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 													if (format.length() == 1) {
 														// rounded to int
 														txt = before + ToString(int64_t(std::round(MemGetNumeric(c)))) + after;
@@ -6733,33 +6831,72 @@ const int VERSION_PATCH = 0;
 									std::string text = MemGetText(src);
 									int start = (int)std::round(MemGetNumeric(a));
 									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(utf8length(text)-start);
-									if (!IsText(dst)) throw RuntimeError("Invalid operation");
+									// if (!IsText(dst)) throw RuntimeError("Invalid operation");
 									MemSet(utf8substr(text, start, len), dst);
 								}break;
-								case IDX: {// REF_DST REF_ARR|REF_TEXT INDEX ifindexnone[REF_NUM]
+								case IDX: {// REF_DST REF_ARR|REF_TEXT ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY
 									ByteCode dst = nextCode();
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
-									if (idx.type != ARRAY_INDEX) throw RuntimeError("Invalid array index type");
-									uint32_t arr_index = idx.value;
-									if (arr_index == ARRAY_INDEX_NONE) {
-										idx = nextCode();
-										if (!IsNumeric(idx)) throw RuntimeError("Invalid array index type");
-										arr_index = (int)std::round(MemGetNumeric(idx));
-									}
-									switch (arr.type) {
-										case STORAGE_ARRAY_NUMERIC:
-										case RAM_ARRAY_NUMERIC:
-											MemSet(MemGetNumeric(arr, arr_index), dst);
-										break;
-										case STORAGE_ARRAY_TEXT:
-										case STORAGE_VAR_TEXT:
-										case RAM_ARRAY_TEXT:
-										case RAM_VAR_TEXT:
-										case ROM_CONST_TEXT:
-											MemSet(MemGetText(arr, arr_index), dst);
-										break;
-										default: throw RuntimeError("Not an array");
+									if (idx.type != ARRAY_INDEX && idx.type != OBJ_KEY) throw RuntimeError("Invalid indexing type");
+									if (idx.type == ARRAY_INDEX) {
+										uint32_t arr_index = idx.value;
+										if (arr_index == ARRAY_INDEX_NONE) {
+											idx = nextCode();
+											if (!IsNumeric(idx)) throw RuntimeError("Invalid array index type");
+											arr_index = (int)std::round(MemGetNumeric(idx));
+										}
+										switch (arr.type) {
+											case STORAGE_ARRAY_NUMERIC:
+											case RAM_ARRAY_NUMERIC:
+												MemSet(MemGetNumeric(arr, arr_index), dst);
+											break;
+											case STORAGE_ARRAY_TEXT:
+											case STORAGE_VAR_TEXT:
+											case RAM_ARRAY_TEXT:
+											case RAM_VAR_TEXT:
+											case ROM_CONST_TEXT:
+												MemSet(MemGetText(arr, arr_index), dst);
+											break;
+											default: throw RuntimeError("Not an array");
+										}
+									} else {
+										if (arr.type != STORAGE_VAR_TEXT && arr.type != RAM_VAR_TEXT) {
+											throw RuntimeError("Invalid Object Key indexing");
+										}
+										ByteCode key = nextCode();
+										switch (key.type) {
+											case STORAGE_VAR_TEXT:
+											case RAM_VAR_TEXT:
+											case ROM_CONST_TEXT:{
+												std::string obj = MemGetText(arr);
+												std::string k = MemGetText(key);
+												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
+												k = '.' + k + '{';
+												auto it = std::search(
+													obj.begin(), obj.end(),
+													k.begin(), k.end(),
+													[](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); }
+												);
+												if (it == obj.end()) {
+													MemSet("", dst);
+												} else {
+													int exprStack = 0;
+													it += k.length();
+													std::string val;
+													while (it != obj.end()) {
+														if (*it == '{') ++exprStack;
+														else if (*it == '}') {
+															if (exprStack == 0) break;
+															--exprStack;
+														}
+														val += *(it++);
+													}
+													MemSet(val, dst);
+												}
+											}break;
+											default: throw RuntimeError("Invalid key");
+										}
 									}
 								}break;
 								case JMP: {// ADDR
@@ -6788,6 +6925,33 @@ const int VERSION_PATCH = 0;
 									}
 									index = val? addrTrue.value : addrFalse.value;
 									continue;
+								}break;
+								case KEY: {// REF_DST REF_OBJ REF_OFFSET
+									ByteCode dst = nextCode();
+									std::string obj = MemGetText(nextCode());
+									ByteCode offset = nextCode();
+									size_t pos = size_t(round(MemGetNumeric(offset)));
+									size_t dotPos = obj.find('.', pos);
+									if (dotPos == std::string::npos || int(dotPos) >= int(obj.length())-4 || !isalpha_(obj[dotPos+1])) {
+										MemSet("", dst);
+									} else {
+										size_t objPos = obj.find('{', dotPos+1);
+										if (objPos == std::string::npos || objPos == dotPos + 1) {
+											MemSet("", dst);
+										} else {
+											std::string key = obj.substr(dotPos+1, objPos-dotPos-1);
+											MemSet(key, dst);
+											int exprStack = 0;
+											while (objPos++ < obj.length() - 1) {
+												if (obj[objPos] == '{') ++exprStack;
+												else if (obj[objPos] == '}') {
+													if (exprStack == 0) break;
+													--exprStack;
+												}
+											}
+											MemSet(double(objPos + 1), offset);
+										}
+									}
 								}break;
 							}
 						}break;

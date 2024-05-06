@@ -41,7 +41,7 @@ function @RunUnitTests()
 	$results.append($someArray.min)
 	$someArray.sortd()
 	$results.append("---")
-	foreach $someArray ($item)
+	foreach $someArray ($index, $item)
 		if $item > 0
 			$results.append($item)
 		else
@@ -77,25 +77,25 @@ function @RunUnitTests()
 	var $someText = "Hello World!"
 	array $words : text
 	$words.from($someText, " ")
-	foreach $words ($word)
+	foreach $words ($index, $word)
 		$results.append($word)
 	$words.from($someText)
-	foreach $words ($word)
+	foreach $words ($index, $word)
 		$results.append($word)
 	$someText = "12 48 1"
 	array $numbers : number
 	$numbers.from($someText, " ")
-	foreach $numbers ($number)
+	foreach $numbers ($index, $number)
 		$results.append($number)
 	var $aDigit = 5
 	$words.from($aDigit)
 	$results.append($words.0)
 	$someText = "12"
 	$numbers.from($someText)
-	foreach $numbers ($number)
+	foreach $numbers ($index, $number)
 		$results.append($number)
 	$words.from($numbers)
-	foreach $words ($word)
+	foreach $words ($index, $word)
 		$results.append($word)
 	var $serialized = ""
 	$serialized.from($numbers, ", ")
@@ -104,7 +104,7 @@ function @RunUnitTests()
 	; Test 9
 	$results.append("---")
 	var $utf8 = "Il était une fois"
-	$results.append($utf8.last)
+	$results.append(last($utf8))
 	$utf8.substring(2,6)
 	$results.append($utf8)
 	$results.append($utf8.0)
@@ -112,7 +112,7 @@ function @RunUnitTests()
 	$results.append($utf8.2)
 	$utf8.3 = "i"
 	$words.from($utf8)
-	foreach $words ($word)
+	foreach $words ($index, $word)
 		$results.append($word)
 	$utf8.substring(1)
 	$utf8.2 = "à"
@@ -122,7 +122,7 @@ function @RunUnitTests()
 	$results.append($utf8)
 	$utf8.substring(1)
 	$results.append($utf8)
-	$results.append($utf8.last)
+	$results.append(last($utf8))
 	
 	; test 10
 	repeat 10 ($i)
@@ -142,11 +142,25 @@ function @RunUnitTests()
 	; test 13
 	var $ore = "Fe"
 	var $composition = ".Al{0.1}.Fe{0.15}.Cu{0.01}"
-	$composition.substring(find($composition, "."&$ore&"{") + $ore.size + 2)
+	$composition.substring(find($composition, "."&$ore&"{") + size($ore) + 2)
 	if contains($composition, "}")
 		$composition.substring(0, find($composition, "}"))
 	$results.append($composition)
 	
+	; text 14
+	var $obj = ".a{1.2}.b{2}.c{}.d{44}"
+	$obj.a += 2
+	$obj.u = $obj.d
+	$results.append($obj.a)
+	var $aa = "a"
+	var $dd = "d"
+	$obj.$aa += $obj.$dd
+	$results.append($obj.a)
+	$results.append($obj.u)
+	
+	; test 15
+	foreach $obj ($key, $value)
+		$results.append($key & " : " & $value)
 	
 init
 	output.0 ("Hello, World!")
