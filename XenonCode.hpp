@@ -5860,7 +5860,12 @@ const int VERSION_PATCH = 0;
 								case ATA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::atan(MemGetNumeric(val)), dst);
+									ByteCode val2 = nextCode();
+									if (val2) {
+										MemSet(std::atan2(MemGetNumeric(val), MemGetNumeric(val2)), dst);
+									} else {
+										MemSet(std::atan(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case ABS: {
 									ByteCode dst = nextCode();

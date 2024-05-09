@@ -579,7 +579,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `tan`(number)
 - `asin`(number)
 - `acos`(number)
-- `atan`(number)
+- `atan`(number) or (number, number)
 - `abs`(number)
 - `fract`(number)
 - `log`(number, base)
