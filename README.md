@@ -45,7 +45,7 @@ function @myFunction($arg1 : number, $arg2 : text)
 
 ; Declare a user-defined function that returns a value
 function @myFunction2($arg1 : number, $arg2 : text) : number
-	return $arg1 + $arg2.size
+	return $arg1 + size($arg2)
 
 init
 	; Call a user-defined function
