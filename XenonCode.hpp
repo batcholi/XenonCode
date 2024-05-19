@@ -1497,7 +1497,7 @@ const int VERSION_PATCH = 0;
 						if (words[0] == "array") {
 							if ((words.size() > 1 && words[1] != Word::Varname)
 							 || (words.size() > 2 && words[2] != Word::CastOperator && words[2] != "=")
-							 || (words[2] == "=" && words.size() > 3 && words[3] != Word::Varname)
+							 || (words.size() > 3 && words[2] == "=" && words[3] != Word::Varname)
 							) {
 								throw ParseError("Second word must be a variable name (starting with $) followed by either a colon and the array type (number or text) or an assignment to another array variable");
 							}
