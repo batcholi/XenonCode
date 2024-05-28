@@ -5478,6 +5478,10 @@ const int VERSION_PATCH = 0;
 						MemSet(arg.numericValue, dst);
 					} else if (IsText(dst) && arg.type == Var::Text) {
 						MemSet(arg.textValue, dst);
+					} else if (IsNumeric(dst) && arg.type == Var::Text) {
+						MemSet(arg.textValue, dst);
+					} else if (IsText(dst) && arg.type == Var::Numeric) {
+						MemSet(arg.numericValue, dst);
 					} else if (IsObject(dst) && arg.type == Var::Object) {
 						MemSetObject(arg.addrValue, dst); // Reference assignment for objects
 					} else {
