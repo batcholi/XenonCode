@@ -162,6 +162,20 @@ function @RunUnitTests()
 	foreach $obj ($key, $value)
 		$results.append($key & " : " & $value)
 	
+	; test 16
+	$obj.$aa++
+	$results.append($obj.$aa)
+	$obj.$dd!!
+	$results.append($obj.$dd)
+	$obj.$dd!!
+	$results.append($obj.$dd)
+	$obj.a++
+	$results.append($obj.a)
+	$obj.a!!
+	$results.append($obj.a)
+	$obj.a!!
+	$results.append($obj.a)
+	
 init
 	output.0 ("Hello, World!")
 	

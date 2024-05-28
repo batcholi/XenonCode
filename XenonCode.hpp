@@ -1783,14 +1783,21 @@ const int VERSION_PATCH = 0;
 								throw ParseError("Too many words");
 							}
 						} else if (words[1] == Word::TrailOperator) {
-							if (words.size() < 5) {
+							if (words.size() < 4) {
+								throw ParseError("Too few words");
+							}
+							if (words[3] != Word::SuffixOperatorGroup && words.size() < 5) {
 								throw ParseError("Too few words");
 							}
 							// Array/Object assignment
-							if (words[2] == Word::Numeric || words[2] == Word::Varname || (words[2] == Word::Name && words[3] == Word::AssignmentOperatorGroup)) {
+							if (words[2] == Word::Numeric || words[2] == Word::Varname || (words[2] == Word::Name && (words[3] == Word::AssignmentOperatorGroup || words[3] == Word::SuffixOperatorGroup))) {
 								if (words[3] == Word::AssignmentOperatorGroup) {
 									if (!ParseExpression(words, 4)) {
 										throw ParseError("Invalid expression after var assignment");
+									}
+								} else if (words[3] == Word::SuffixOperatorGroup) {
+									if (words.size() > 4) {
+										throw ParseError("Too many words");
 									}
 								} else {
 									throw ParseError("Invalid expression after var assignment");
@@ -1803,7 +1810,7 @@ const int VERSION_PATCH = 0;
 										throw ParseError("Invalid argument list after trailing function on var");
 									}
 								} else {
-									if (words[2] == Word::Funcname || words.size() < 4 || words[3] != Word::AssignmentOperatorGroup) {
+									if (words[2] == Word::Funcname || words.size() < 4 || (words[3] != Word::AssignmentOperatorGroup && words[3] != Word::SuffixOperatorGroup)) {
 										throw ParseError("Invalid expression after trailing function on var");
 									}
 								}
@@ -3856,10 +3863,67 @@ const int VERSION_PATCH = 0;
 										if (operand == Word::Varname || operand == Word::Numeric) {
 											validate(IsArray(dst) || (IsText(dst) && IsVar(dst))); // make sure dst is not const
 											operation = readWord();
-											validate(operation == Word::AssignmentOperatorGroup);
-											ByteCode op = GetOperator(operation);
-											ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-											if (op != SET) {
+											if (operation == Word::AssignmentOperatorGroup) {
+												ByteCode op = GetOperator(operation);
+												ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+												if (op != SET) {
+													ByteCode tmp;
+													switch (dst.type) {
+														case STORAGE_ARRAY_NUMERIC:
+														case RAM_ARRAY_NUMERIC:
+															tmp = declareTmpNumeric();
+															break;
+														case STORAGE_VAR_TEXT:
+														case STORAGE_ARRAY_TEXT:
+														case RAM_VAR_TEXT:
+														case RAM_ARRAY_TEXT:
+															tmp = declareTmpText();
+															break;
+														default: validate(false);
+													}
+													// Assign the current indexed value to tmp
+													write(IDX);
+													write(tmp);
+													write(dst);
+													if (operand == Word::Varname) {
+														ByteCode idx = getVar(operand);
+														if (IsNumeric(idx)) {
+															write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+														} else {
+															validate(IsText(idx));
+															write(OBJ_KEY);
+														}
+														write(idx);
+													} else /*numeric*/ {
+														write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+													}
+													write(VOID);
+													// Set tmp to the new value
+													write(op);
+													write(tmp);
+													write(tmp);
+													write(ref);
+													write(VOID);
+													ref = tmp;
+												}
+												write(SET);
+												if (operand == Word::Varname) {
+													ByteCode idx = getVar(operand);
+													if (IsNumeric(idx)) {
+														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													} else {
+														validate(IsText(idx));
+														write(OBJ_KEY);
+													}
+													write(idx);
+												} else /*numeric*/ {
+													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+												}
+												write(dst);
+												write(ref);
+												write(VOID);
+											} else if (operation == Word::SuffixOperatorGroup) {
+												ByteCode op = GetOperator(operation);
 												ByteCode tmp;
 												switch (dst.type) {
 													case STORAGE_ARRAY_NUMERIC:
@@ -3893,28 +3957,29 @@ const int VERSION_PATCH = 0;
 												write(VOID);
 												// Set tmp to the new value
 												write(op);
+												if (operation == "!!") write(tmp);
 												write(tmp);
-												write(tmp);
-												write(ref);
 												write(VOID);
-												ref = tmp;
-											}
-											write(SET);
-											if (operand == Word::Varname) {
-												ByteCode idx = getVar(operand);
-												if (IsNumeric(idx)) {
-													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
-												} else {
-													validate(IsText(idx));
-													write(OBJ_KEY);
+												// Assign dst to tmp
+												write(SET);
+												if (operand == Word::Varname) {
+													ByteCode idx = getVar(operand);
+													if (IsNumeric(idx)) {
+														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													} else {
+														validate(IsText(idx));
+														write(OBJ_KEY);
+													}
+													write(idx);
+												} else /*numeric*/ {
+													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 												}
-												write(idx);
-											} else /*numeric*/ {
-												write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+												write(dst);
+												write(tmp);
+												write(VOID);
+											} else {
+												validate(false);
 											}
-											write(dst);
-											write(ref);
-											write(VOID);
 										} else if (operand == Word::Funcname || operand == Word::Name) {
 											// Trailing function call statement or StringObject member assignment
 											Word next = readWord();
@@ -3963,6 +4028,31 @@ const int VERSION_PATCH = 0;
 												write(key);
 												write(dst);
 												write(ref);
+												write(VOID);
+											} else if (operand == Word::Name && next == Word::SuffixOperatorGroup) {
+												// StringObject member with suffix operation
+												validate(IsVar(dst) && IsText(dst));
+												ByteCode op = GetOperator(next);
+												ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
+												ByteCode tmp = declareTmpText();
+												// Assign the current indexed value to tmp
+												write(IDX);
+												write(tmp);
+												write(dst);
+												write(OBJ_KEY);
+												write(key);
+												write(VOID);
+												// Set tmp to the new value
+												write(op);
+												if (next == "!!") write(tmp);
+												write(tmp);
+												write(VOID);
+												// Assign dst to tmp
+												write(SET);
+												write(OBJ_KEY);
+												write(key);
+												write(dst);
+												write(tmp);
 												write(VOID);
 											} else validate(false);
 										} else validate(false);
@@ -5817,8 +5907,9 @@ const int VERSION_PATCH = 0;
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsNumeric(val)) {
 										MemSet(double(!MemGetBoolean(val)), dst);
-									} else if (IsText(dst) && IsText(val)) {
-										MemSet(double(MemGetText(val) == ""), dst);
+									} else if (IsText(dst) || IsText(val)) {
+										std::string v = MemGetText(val);
+										MemSet(double(v == "" || v == "0"), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case FLR: {// REF_DST REF_NUM
@@ -6928,7 +7019,8 @@ const int VERSION_PATCH = 0;
 									if (IsNumeric(ref)) {
 										val = MemGetBoolean(ref);
 									} else if (IsText(ref)) {
-										val = MemGetText(ref) != "";
+										std::string v = MemGetText(ref);
+										val = v != "" && v != "0";
 									} else {
 										throw RuntimeError("Invalid operation");
 									}
