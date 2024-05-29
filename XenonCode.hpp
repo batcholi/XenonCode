@@ -3335,7 +3335,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::AndOperator) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						ByteCode tmp = declareTmpNumeric();
 						write(AND);
 						write(tmp);
@@ -3344,7 +3343,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::OrOperator) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						ByteCode tmp = declareTmpNumeric();
 						write(ORR);
 						write(tmp);
@@ -3353,7 +3351,6 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return tmp;
 					} else if (op == Word::XorOperator) {
-						validate(IsNumeric(ref1) && IsNumeric(ref2));
 						ByteCode tmp = declareTmpNumeric();
 						write(XOR);
 						write(tmp);
@@ -5354,6 +5351,10 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		bool MemGetBoolean(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+			if (IsText(ref)) {
+				std::string txt = MemGetText(ref, arrIndex);
+				return txt != "" && txt != "0";
+			}
 			return abs(MemGetNumeric(ref, arrIndex)) > EPSILON_DOUBLE;
 		}
 		const std::string& MemGetText(ByteCode ref) {
@@ -5824,39 +5825,27 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
-									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
-										MemSet(double(MemGetText(a) != "" && MemGetText(b) != ""), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
 								}break;
 								case ORR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
-									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
-										MemSet(double(MemGetText(a) != "" || MemGetText(b) != ""), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
 								}break;
 								case XOR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsNumeric(a) && IsNumeric(b)) {
-										MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
-									} else if (IsNumeric(dst) && IsText(a) && IsText(b)) {
-										MemSet(double((MemGetText(a) != "") != (MemGetText(b) != "")), dst);
-									} else throw RuntimeError("Invalid operation");
+									MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
 								}break;
 								case EQQ: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsText(a) && IsText(b)) {
+									if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
-									} else if (IsNumeric(dst) && (IsNumeric(a) || IsNumeric(b))) {
+									} else if (IsNumeric(a) || IsNumeric(b)) {
 										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -5864,9 +5853,9 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsNumeric(dst) && IsText(a) && IsText(b)) {
+									if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
-									} else if (IsNumeric(dst) && (IsNumeric(a) || IsNumeric(b))) {
+									} else if (IsNumeric(a) || IsNumeric(b)) {
 										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -5905,7 +5894,7 @@ const int VERSION_PATCH = 0;
 								case NOT: {// REF_DST REF_VAL
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(dst) && IsNumeric(val)) {
+									if (IsNumeric(val)) {
 										MemSet(double(!MemGetBoolean(val)), dst);
 									} else if (IsText(dst) || IsText(val)) {
 										std::string v = MemGetText(val);
