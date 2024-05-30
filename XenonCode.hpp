@@ -5298,7 +5298,7 @@ const int VERSION_PATCH = 0;
 				case STORAGE_VAR_NUMERIC:
 				case RAM_VAR_NUMERIC: {
 					if (value.length() == 0) MemSet(0.0, dst, arrIndex);
-					else MemSet(std::stod(value), dst, arrIndex);
+					else MemSet(atof(value.c_str()), dst, arrIndex);
 				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
@@ -5345,7 +5345,7 @@ const int VERSION_PATCH = 0;
 				case RAM_VAR_TEXT: {
 					std::string text = MemGetText(ref, arrIndex);
 					if (text.length() == 0) return 0.0;
-					return std::stod(text);
+					return atof(text.c_str());
 				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
