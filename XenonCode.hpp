@@ -6598,19 +6598,23 @@ const int VERSION_PATCH = 0;
 										switch (ref.type) {
 											case STORAGE_ARRAY_NUMERIC:{
 												auto& array = GetStorage(ref);
+												if (array.size() == 0) throw RuntimeError("Empty array");
 												std::string last = array.back();
 												MemSet(last==""? 0.0 : stod(last), dst);
 											}break;
 											case STORAGE_ARRAY_TEXT:{
 												auto& array = GetStorage(ref);
+												if (array.size() == 0) throw RuntimeError("Empty array");
 												MemSet(array.back(), dst);
 											}break;
 											case RAM_ARRAY_NUMERIC:{
 												auto& array = GetNumericArray(ref);
+												if (array.size() == 0) throw RuntimeError("Empty array");
 												MemSet(array.back(), dst);
 											}break;
 											case RAM_ARRAY_TEXT:{
 												auto& array = GetTextArray(ref);
+												if (array.size() == 0) throw RuntimeError("Empty array");
 												MemSet(array.back(), dst);
 											}break;
 										}
