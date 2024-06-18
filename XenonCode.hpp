@@ -1423,6 +1423,7 @@ const int VERSION_PATCH = 0;
 		"function",
 		"timer",
 		"input",
+		"recursive",
 	};
 	
 	struct Implementation {
@@ -1552,15 +1553,21 @@ const int VERSION_PATCH = 0;
 						} else
 						
 					// function
-						if (words[0] == "function") {
-							if (words.size() > 1 && words[1] != Word::Funcname) {
+						if (words[0] == "function" || words[0] == "recursive") {
+							int offset = 0;
+							if (words[0] == "recursive" && words[1] != "function") {
+								throw ParseError("Recursive is only valid as a modifier of a function");
+							} else {
+								offset++;
+							}
+							if (words.size() > 1 + offset && words[1 + offset] != Word::Funcname) {
 								throw ParseError("Second word must be a valid function name starting with @");
 							}
-							if (words.size() > 2 && words[2] != Word::ExpressionBegin) {
+							if (words.size() > 2 + offset && words[2 + offset] != Word::ExpressionBegin) {
 								throw ParseError("Function name must be followed by a set of parenthesis, optionally containing an argument list");
 							}
-							if (words.size() < 4) throw ParseError("Too few words");
-							int next = ParseDeclarationArgs(words, 2);
+							if (words.size() < 4 + offset) throw ParseError("Too few words");
+							int next = ParseDeclarationArgs(words, 2 + offset);
 							if (next != -1) {
 								if ((int)words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
 									// Valid
@@ -2564,6 +2571,15 @@ const int VERSION_PATCH = 0;
 			int currentStackId = 0;
 			std::vector<Stack> stack {};
 			
+			bool currentFunctionRecursive = false;
+
+			// offset at start of current function
+			uint32_t ram_numericVariables_offset = 0;
+			uint32_t ram_textVariables_offset = 0;
+			uint32_t ram_objectReferences_offset = 0;
+			uint32_t ram_numericArrays_offset = 0;
+			uint32_t ram_textArrays_offset = 0;
+			
 			// Temporary user-defined symbol maps
 			std::unordered_map<std::string/*functionName*/, std::map<int/*stackId*/, std::unordered_map<std::string/*name*/, ByteCode>>> userVars {};
 			
@@ -2742,34 +2758,41 @@ const int VERSION_PATCH = 0;
 			auto openFunction = [&](const std::string& name){
 				assert(currentScope == 0);
 				assert(currentFunctionName == "");
+				ram_numericVariables_offset = ram_numericVariables;
+				ram_textVariables_offset = ram_textVariables;
+				ram_objectReferences_offset = ram_objectReferences;
+				ram_numericArrays_offset = ram_numericArrays;
+				ram_textArrays_offset = ram_textArrays;
+		
 				if (name != "system.timer" && name != "system.input" && !name.starts_with("entrypoint.") && functionRefs.contains(name)) {
 					throw CompileError("Function " + name + " is already defined");
 				}
 				currentFunctionName = name;
 				currentFunctionAddr = addr();
+				if (currentFunctionName == "system.timer") {
+					assert(currentTimerInterval);
+					timers.emplace_back(currentTimerInterval, currentFunctionAddr);
+					currentTimerInterval = 0;
+					userVars["system.timer"].clear();
+				} else if (currentFunctionName == "system.input") {
+					inputs[currentInputPort].addr = currentFunctionAddr;
+					currentInputPort = 0;
+					userVars["system.input"].clear();
+				} else if (currentFunctionName.starts_with("entrypoint.")) {
+					assert(entryPoints.size() > 0);
+					entryPoints.back().addr = currentFunctionAddr;
+					userVars[currentFunctionName].clear();
+				} else if (currentFunctionName != "") {
+					functionRefs.emplace(currentFunctionName, currentFunctionAddr);
+				}
 			};
 			auto closeCurrentFunction = [&](){
 				if (currentFunctionName != "") {
 					write(RETURN);
-					if (currentFunctionName == "system.timer") {
-						assert(currentTimerInterval);
-						timers.emplace_back(currentTimerInterval, currentFunctionAddr);
-						currentTimerInterval = 0;
-						userVars["system.timer"].clear();
-					} else if (currentFunctionName == "system.input") {
-						inputs[currentInputPort].addr = currentFunctionAddr;
-						currentInputPort = 0;
-						userVars["system.input"].clear();
-					} else if (currentFunctionName.starts_with("entrypoint.")) {
-						assert(entryPoints.size() > 0);
-						entryPoints.back().addr = currentFunctionAddr;
-						userVars[currentFunctionName].clear();
-					} else {
-						functionRefs.emplace(currentFunctionName, currentFunctionAddr);
-					}
 					currentFunctionName = "";
-					currentFunctionAddr = 0;
 				}
+				currentFunctionAddr = 0;
+				currentFunctionRecursive = false;
 				currentStackId = 0;
 			};
 			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
@@ -3643,7 +3666,11 @@ const int VERSION_PATCH = 0;
 									pushStack("function");
 								}
 								// function
-								else if (firstWord == "function") {
+								else if (firstWord == "function" || firstWord == "recursive") {
+									if (firstWord == "recursive") {
+										currentFunctionRecursive = true;
+										firstWord = readWord(Word::Name);
+									}
 									std::string name = readWord(Word::Funcname);
 									openFunction(name);
 									readWord(Word::ExpressionBegin);
@@ -4082,8 +4109,29 @@ const int VERSION_PATCH = 0;
 								compileFunctionCall(firstWord, args, false);
 							}break;
 							case Word::Name: {
+								// recursive self
+								if (firstWord == "self") {
+									if (!currentFunctionRecursive) {
+										throw CompileError("Cannot call self in non-recursive function");
+									}
+
+									std::vector<ByteCode> args {};
+									validate(readWord() == Word::ExpressionBegin);
+									while (nextWordIndex < (int)line.words.size()) {
+										int argEnd = GetArgEnd(line.words, nextWordIndex);
+										if (argEnd == -1) {
+											break;
+										}
+										args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+										nextWordIndex = argEnd+1;
+										if (readWord() != Word::CommaOperator) {
+											break;
+										}
+									}
+									compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, false);
+								}
 								// var
-								if (firstWord == "var") {
+								else if (firstWord == "var") {
 									std::string name = readWord(Word::Varname);
 									Word op = readWord(Word::AssignmentOperatorGroup);
 									validate(op == "=");
@@ -4799,6 +4847,14 @@ const int VERSION_PATCH = 0;
 
 #pragma region Interpreter
 
+	struct LocalVars {
+		std::vector<double> numeric;
+		std::vector<std::string> text;
+		std::vector<std::vector<double>> numeric_arrays;
+		std::vector<std::vector<std::string>> text_arrays;
+		std::vector<uint64_t> objects;
+	};
+
 	inline static double GetCurrentTimestamp() {
 		std::chrono::time_point<std::chrono::system_clock, std::chrono::duration<double, std::milli>> time = std::chrono::high_resolution_clock::now();
 		return time.time_since_epoch().count() * 0.001;
@@ -4812,6 +4868,8 @@ const int VERSION_PATCH = 0;
 		std::vector<std::vector<double>> ram_numeric_arrays {};
 		std::vector<std::vector<std::string>> ram_text_arrays {};
 		std::vector<uint64_t> ram_objects {};
+
+		LocalVars recursive_localvars {};
 		
 		std::vector<double> timersLastRun {};
 		
