@@ -16,8 +16,6 @@
 #include <functional>
 #include <cstring>
 
-#define XENONCODE_IMPLEMENTATION
-
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
