@@ -3254,7 +3254,7 @@ const int VERSION_PATCH = 0;
 							opIndex = startIndex + 1;
 						}
 						
-						if (word1 == "self") {
+						if (word1 == "recurse") {
 							ref1 = compileSelfCall(args, true);
 						} else {
 							ref1 = compileFunctionCall(word1, args, true);
@@ -4498,7 +4498,7 @@ const int VERSION_PATCH = 0;
 									}
 									write(RETURN);
 								}
-								else if (Device::deviceFunctionsByName.contains(firstWord.word) || firstWord == "self") {
+								else if (Device::deviceFunctionsByName.contains(firstWord.word) || firstWord == "recurse") {
 									// Device Function call
 									std::vector<ByteCode> args {};
 									validate(readWord() == Word::ExpressionBegin);
@@ -4513,7 +4513,7 @@ const int VERSION_PATCH = 0;
 											break;
 										}
 									}
-									if (firstWord == "self") {
+									if (firstWord == "recurse") {
 										compileSelfCall(args, false);
 									} else {
 										compileFunctionCall(firstWord, args, false);

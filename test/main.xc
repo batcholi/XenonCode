@@ -13,7 +13,7 @@ recursive function @fib($n: number): number
 	elseif $mem.$n != -1
 		return $mem.$n
 	else
-		$mem.$n = self($n - 1) + self($n - 2)
+		$mem.$n = recurse($n - 1) + recurse($n - 2)
 		return $mem.$n
 
 function @increment($v:number):number
@@ -190,7 +190,7 @@ function @RunUnitTests()
 	$obj.a!!
 	$results.append($obj.a)
 	; test 17
-	print(@fib(32))
+	print(@fib(250))
 	
 init
 	output.0 ("Hello, World!")
