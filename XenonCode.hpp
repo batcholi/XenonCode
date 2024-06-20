@@ -16,8 +16,6 @@
 #include <functional>
 #include <cstring>
 
-#define XENONCODE_IMPLEMENTATION
-
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
@@ -275,6 +273,9 @@ const int VERSION_PATCH = 0;
 	#endif
 	#ifndef XC_OBJECT_MEMORY_PENALTY
 		#define XC_OBJECT_MEMORY_PENALTY 16 // memory usage multiplier for objects
+	#ifndef  XC_MAX_CALL_DEPTH
+		#define XC_MAX_CALL_DEPTH 255
+	#endif
 	#endif
 
 #pragma endregion
@@ -5156,16 +5157,27 @@ const int VERSION_PATCH = 0;
 			
 			return Bootup();
 		}
+
+		virtual uint32_t ram_len() {
+			return assembly->ram_numericVariables
+								+ assembly->ram_textVariables * XC_TEXT_MEMORY_PENALTY
+								+ assembly->ram_numericArrays * XC_ARRAY_NUMERIC_MEMORY_PENALTY
+								+ assembly->ram_textArrays * XC_ARRAY_TEXT_MEMORY_PENALTY
+								+ assembly->ram_objectReferences * XC_OBJECT_MEMORY_PENALTY;
+		}
+
+		virtual uint32_t recursive_localvars_len() {
+			return recursive_localvars.numeric.size()
+							+ recursive_localvars.text.size() * XC_TEXT_MEMORY_PENALTY
+							+ recursive_localvars.numeric_arrays.size() * XC_ARRAY_NUMERIC_MEMORY_PENALTY
+							+ recursive_localvars.text_arrays.size() * XC_ARRAY_TEXT_MEMORY_PENALTY
+							+ recursive_localvars.objects.size() * XC_OBJECT_MEMORY_PENALTY;
+		}
 		
 		virtual bool Bootup() {
 			{// Check Capabilities
 				// Do we have enough RAM to run this program?
-				if (capability.ram < assembly->ram_numericVariables
-								+ assembly->ram_textVariables * XC_TEXT_MEMORY_PENALTY
-								+ assembly->ram_numericArrays * XC_ARRAY_NUMERIC_MEMORY_PENALTY
-								+ assembly->ram_textArrays * XC_ARRAY_TEXT_MEMORY_PENALTY
-								+ assembly->ram_objectReferences * XC_OBJECT_MEMORY_PENALTY
-				) {
+				if (capability.ram < ram_len()) {
 					// Not enough RAM
 					return false;
 				}
@@ -5735,6 +5747,7 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
+		uint32_t depth = 0;
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
 			if (!assembly) return;
@@ -7091,7 +7104,12 @@ const int VERSION_PATCH = 0;
 								case JMP: {// ADDR
 									ByteCode addr = nextCode();
 									if (addr.type != ADDR) throw RuntimeError("Invalid address");
+									depth++;
+									if (depth > XC_MAX_CALL_DEPTH) {
+										throw RuntimeError("Max call depth exceeded");
+									}
 									RunCode(program, addr.value);
+									depth--;
 								}break;
 								case GTO: {
 									ByteCode addr = nextCode();
@@ -7144,7 +7162,6 @@ const int VERSION_PATCH = 0;
 									}
 								}break;
 								case STR: {
-									std::cout << "STR ======>" << std::endl;
 									uint32_t addr = nextCode().rawValue;
 									uint32_t len = nextCode().rawValue;
 									uint32_t type = nextCode().type;
@@ -7153,32 +7170,42 @@ const int VERSION_PATCH = 0;
 									switch(type) {
 										case RAM_VAR_NUMERIC: {
 											for (int i = addr; i < addr + len; i++) {
+												if (ram_len() + recursive_localvars_len() + len >= capability.ram) {
+													throw RuntimeError("Recursion ran out of memory");
+												}
 												recursive_localvars.numeric.push_back(ram_numeric[i]);
-												std::cout << "value STR: " << ram_numeric[i] << ", addr: " << i << std::endl;
 											}
 										} break;
 										case RAM_VAR_TEXT: {
+											if (ram_len() + recursive_localvars_len() + len * XC_TEXT_MEMORY_PENALTY >= capability.ram) {
+												throw RuntimeError("Recursion ran out of memory");
+											}
 											for (int i = addr; i < addr + len; i++) {
 												recursive_localvars.text.push_back(ram_text[i]);
-												std::cout << "value STR: " << ram_text[i] << ", addr: " << i << std::endl;
 											}
 										} break;
 										case RAM_OBJECT: {
+											if (ram_len() + recursive_localvars_len() + len * XC_OBJECT_MEMORY_PENALTY >= capability.ram) {
+												throw RuntimeError("Recursion ran out of memory");
+											}
 											for (int i = addr; i < addr + len; i++) {
 												recursive_localvars.objects.push_back(ram_objects[i]);
-												std::cout << "value STR: " << ram_objects[i] << ", addr: " << i << std::endl;
 											}
 										} break;
 										case RAM_ARRAY_NUMERIC: {
+											if (ram_len() + recursive_localvars_len() + len * XC_ARRAY_NUMERIC_MEMORY_PENALTY >= capability.ram) {
+												throw RuntimeError("Recursion ran out of memory");
+											}
 											for (int i = addr; i < addr + len; i++) {
 												recursive_localvars.numeric_arrays.push_back(ram_numeric_arrays[i]);
-												std::cout << "value STR: " << ram_numeric_arrays[i].size() << ", addr: " << i << std::endl;
 											}
 										} break;
 										case RAM_ARRAY_TEXT: {
+											if (ram_len() + recursive_localvars_len() + len * XC_ARRAY_TEXT_MEMORY_PENALTY >= capability.ram) {
+												throw RuntimeError("Recursion ran out of memory");
+											}
 											for (int i = addr; i < addr + len; i++) {
 												recursive_localvars.text_arrays.push_back(ram_text_arrays[i]);
-												std::cout << "value STR: " << ram_text_arrays[i].size() << ", addr: " << i << std::endl;
 											}
 										} break;
 										default:
@@ -7189,40 +7216,34 @@ const int VERSION_PATCH = 0;
 									uint32_t addr = nextCode().rawValue;
 									uint32_t len = nextCode().rawValue;
 									uint32_t type = nextCode().type;
-									std::cout << "RST (" << len  << ") ======>" << std::endl;
 									switch(type) {
 										case RAM_VAR_NUMERIC: {
 											for (int i = 0; i < len; i++) {
 												ram_numeric[addr + i] = recursive_localvars.numeric[recursive_localvars.numeric.size() - len + i];
-												std::cout << "value RST: " << recursive_localvars.numeric[recursive_localvars.numeric.size() - len + i] << ", addr: " << addr + i << std::endl;
 											}
 											recursive_localvars.numeric.resize(recursive_localvars.numeric.size() - len);
 										} break;
 										case RAM_VAR_TEXT: {
 											for (int i = 0; i < len; i++) {
 												ram_text[addr + i] = recursive_localvars.text[recursive_localvars.text.size() - len + i];
-												std::cout << "value RST: " << recursive_localvars.text[recursive_localvars.text.size() - len + i] << ", addr: " << addr + i << std::endl;
 											}
 											recursive_localvars.text.resize(recursive_localvars.text.size() - len);
 										} break;
 										case RAM_OBJECT: {
 											for (int i = 0; i < len; i++) {
 												ram_objects[addr + i] = recursive_localvars.objects[recursive_localvars.objects.size() - len + i];
-												std::cout << "value RST: " << recursive_localvars.objects[recursive_localvars.objects.size() - len + i] << ", addr: " << addr + i << std::endl;
 											}
 											recursive_localvars.objects.resize(recursive_localvars.objects.size() - len);
 										} break;
 										case RAM_ARRAY_NUMERIC: {
 											for (int i = 0; i < len; i++) {
 												ram_numeric_arrays[addr + i] = recursive_localvars.numeric_arrays[recursive_localvars.numeric_arrays.size() - len + i];
-												std::cout << "value RST: " << recursive_localvars.numeric_arrays[recursive_localvars.numeric_arrays.size() - len + i].size() << ", addr: " << addr + i << std::endl;
 											}
 											recursive_localvars.numeric_arrays.resize(recursive_localvars.numeric_arrays.size() - len);
 										} break;
 										case RAM_ARRAY_TEXT: {
 											for (int i = 0; i < len; i++) {
 												ram_text_arrays[addr + i] = recursive_localvars.text_arrays[recursive_localvars.text_arrays.size() - len + i];
-												std::cout << "value RST: " << recursive_localvars.text_arrays[recursive_localvars.text_arrays.size() - len + i].size() << ", addr: " << addr + i << std::endl;
 											}
 											recursive_localvars.text_arrays.resize(recursive_localvars.text_arrays.size() - len);
 										} break;
