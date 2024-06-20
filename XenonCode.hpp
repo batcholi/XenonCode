@@ -2801,10 +2801,10 @@ const int VERSION_PATCH = 0;
 				currentStackId = 0;
 			};
 			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
-			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false) -> ByteCode {
+			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false, bool recursive = false) -> ByteCode {
 				std::string funcName = func;
 				if (func == Word::Funcname) {
-					if (!functionRefs.contains(funcName)) {
+					if (!functionRefs.contains(funcName) || (funcName == currentFunctionName && !recursive)) {
 						throw CompileError("Function", func, "is not defined");
 					}
 					
@@ -2992,7 +2992,7 @@ const int VERSION_PATCH = 0;
 				};
 
 				writeRecurse(STR);
-				auto ref = compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, getReturn);
+				auto ref = compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, getReturn, false, true);
 				writeRecurse(RST);
 				return ref;
 			};
