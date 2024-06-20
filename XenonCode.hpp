@@ -16,6 +16,8 @@
 #include <functional>
 #include <cstring>
 
+#define XENONCODE_IMPLEMENTATION
+
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
@@ -2035,6 +2037,8 @@ const int VERSION_PATCH = 0;
 	DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
 	DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
 	DEF_OP( KEY /* REF_DST REF_TXT REF_OFFSET */) // returns the next key in a text object, and moves the offset as well
+	DEF_OP( STR /* ADDR LEN TYPE */) // stores away local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
+	DEF_OP( RST /* ADDR LEN TYPE */) // restores local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
 
 #pragma endregion
 
@@ -2943,7 +2947,54 @@ const int VERSION_PATCH = 0;
 					throw CompileError("Invalid function name");
 				}
 			};
-			
+
+			auto compileSelfCall = [&](const std::vector<ByteCode>& args, bool getReturn) -> ByteCode {
+				if (!currentFunctionRecursive) {
+					throw CompileError("Cannot call self in non-recursive function or global scope");
+				}
+				uint32_t ram_numericVariables_d = ram_numericVariables - ram_numericVariables_offset;
+				uint32_t ram_textVariables_d = ram_textVariables - ram_textVariables_offset;
+				uint32_t ram_objectReferences_d = ram_objectReferences - ram_objectReferences_offset;
+				uint32_t ram_numericArrays_d = ram_numericArrays - ram_numericArrays_offset;
+				uint32_t ram_textArrays_d = ram_textArrays - ram_textArrays_offset;
+				auto writeRecurse = [&] (uint32_t op) {
+					if (ram_numericVariables_d > 0) {
+						write(op);
+						write(ram_numericVariables_offset);
+						write(ram_numericVariables_d);
+						write(ByteCode(RAM_VAR_NUMERIC));
+					}
+					if (ram_textVariables_d > 0) {
+						write(op);
+						write(ram_textVariables_offset);
+						write(ram_textVariables_d);
+						write(ByteCode(RAM_VAR_TEXT));
+					}
+					if (ram_objectReferences_d > 0) {
+						write(op);
+						write(ram_objectReferences_offset);
+						write(ram_objectReferences_d);
+						write(ByteCode(RAM_OBJECT));
+					}
+					if (ram_numericArrays_d > 0) {
+						write(op);
+						write(ram_numericArrays_offset);
+						write(ram_numericArrays_d);
+						write(ByteCode(RAM_ARRAY_NUMERIC));
+					}
+					if (ram_textArrays_d > 0) {
+						write(op);
+						write(ram_textArrays_offset);
+						write(ram_textArrays_d);
+						write(ByteCode(RAM_ARRAY_TEXT));
+					}
+				};
+
+				writeRecurse(STR);
+				auto ref = compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, getReturn);
+				writeRecurse(RST);
+				return ref;
+			};
 			// Stack helpers
 			auto addPointer = [&](std::string reg) -> uint32_t& {
 				if (reg == "") reg = std::to_string(stack.back().pointers.size()+1);
@@ -3183,7 +3234,12 @@ const int VERSION_PATCH = 0;
 						} else {
 							opIndex = startIndex + 1;
 						}
-						ref1 = compileFunctionCall(word1, args, true);
+						
+						if (word1 == "self") {
+							ref1 = compileSelfCall(args, true);
+						} else {
+							ref1 = compileFunctionCall(word1, args, true);
+						}
 						if (opIndex > endIndex) return ref1;
 						validate(opIndex != endIndex);
 					}break;
@@ -4109,29 +4165,7 @@ const int VERSION_PATCH = 0;
 								compileFunctionCall(firstWord, args, false);
 							}break;
 							case Word::Name: {
-								// recursive self
-								if (firstWord == "self") {
-									if (!currentFunctionRecursive) {
-										throw CompileError("Cannot call self in non-recursive function");
-									}
-
-									std::vector<ByteCode> args {};
-									validate(readWord() == Word::ExpressionBegin);
-									while (nextWordIndex < (int)line.words.size()) {
-										int argEnd = GetArgEnd(line.words, nextWordIndex);
-										if (argEnd == -1) {
-											break;
-										}
-										args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
-										nextWordIndex = argEnd+1;
-										if (readWord() != Word::CommaOperator) {
-											break;
-										}
-									}
-									compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, false);
-								}
-								// var
-								else if (firstWord == "var") {
+								if (firstWord == "var") {
 									std::string name = readWord(Word::Varname);
 									Word op = readWord(Word::AssignmentOperatorGroup);
 									validate(op == "=");
@@ -4444,7 +4478,7 @@ const int VERSION_PATCH = 0;
 									}
 									write(RETURN);
 								}
-								else if (Device::deviceFunctionsByName.contains(firstWord.word)) {
+								else if (Device::deviceFunctionsByName.contains(firstWord.word) || firstWord == "self") {
 									// Device Function call
 									std::vector<ByteCode> args {};
 									validate(readWord() == Word::ExpressionBegin);
@@ -4459,7 +4493,11 @@ const int VERSION_PATCH = 0;
 											break;
 										}
 									}
-									compileFunctionCall(firstWord, args, false);
+									if (firstWord == "self") {
+										compileSelfCall(args, false);
+									} else {
+										compileFunctionCall(firstWord, args, false);
+									}
 								}
 								// ERROR
 								else {
@@ -7105,6 +7143,93 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
+								case STR: {
+									std::cout << "STR ======>" << std::endl;
+									uint32_t addr = nextCode().rawValue;
+									uint32_t len = nextCode().rawValue;
+									uint32_t type = nextCode().type;
+
+									// TODO Implement runtime memory bounds checking.
+									switch(type) {
+										case RAM_VAR_NUMERIC: {
+											for (int i = addr; i < addr + len; i++) {
+												recursive_localvars.numeric.push_back(ram_numeric[i]);
+												std::cout << "value STR: " << ram_numeric[i] << ", addr: " << i << std::endl;
+											}
+										} break;
+										case RAM_VAR_TEXT: {
+											for (int i = addr; i < addr + len; i++) {
+												recursive_localvars.text.push_back(ram_text[i]);
+												std::cout << "value STR: " << ram_text[i] << ", addr: " << i << std::endl;
+											}
+										} break;
+										case RAM_OBJECT: {
+											for (int i = addr; i < addr + len; i++) {
+												recursive_localvars.objects.push_back(ram_objects[i]);
+												std::cout << "value STR: " << ram_objects[i] << ", addr: " << i << std::endl;
+											}
+										} break;
+										case RAM_ARRAY_NUMERIC: {
+											for (int i = addr; i < addr + len; i++) {
+												recursive_localvars.numeric_arrays.push_back(ram_numeric_arrays[i]);
+												std::cout << "value STR: " << ram_numeric_arrays[i].size() << ", addr: " << i << std::endl;
+											}
+										} break;
+										case RAM_ARRAY_TEXT: {
+											for (int i = addr; i < addr + len; i++) {
+												recursive_localvars.text_arrays.push_back(ram_text_arrays[i]);
+												std::cout << "value STR: " << ram_text_arrays[i].size() << ", addr: " << i << std::endl;
+											}
+										} break;
+										default:
+										 throw RuntimeError("TODO this type for self recursion");
+									}
+								}break;
+								case RST: {
+									uint32_t addr = nextCode().rawValue;
+									uint32_t len = nextCode().rawValue;
+									uint32_t type = nextCode().type;
+									std::cout << "RST (" << len  << ") ======>" << std::endl;
+									switch(type) {
+										case RAM_VAR_NUMERIC: {
+											for (int i = 0; i < len; i++) {
+												ram_numeric[addr + i] = recursive_localvars.numeric[recursive_localvars.numeric.size() - len + i];
+												std::cout << "value RST: " << recursive_localvars.numeric[recursive_localvars.numeric.size() - len + i] << ", addr: " << addr + i << std::endl;
+											}
+											recursive_localvars.numeric.resize(recursive_localvars.numeric.size() - len);
+										} break;
+										case RAM_VAR_TEXT: {
+											for (int i = 0; i < len; i++) {
+												ram_text[addr + i] = recursive_localvars.text[recursive_localvars.text.size() - len + i];
+												std::cout << "value RST: " << recursive_localvars.text[recursive_localvars.text.size() - len + i] << ", addr: " << addr + i << std::endl;
+											}
+											recursive_localvars.text.resize(recursive_localvars.text.size() - len);
+										} break;
+										case RAM_OBJECT: {
+											for (int i = 0; i < len; i++) {
+												ram_objects[addr + i] = recursive_localvars.objects[recursive_localvars.objects.size() - len + i];
+												std::cout << "value RST: " << recursive_localvars.objects[recursive_localvars.objects.size() - len + i] << ", addr: " << addr + i << std::endl;
+											}
+											recursive_localvars.objects.resize(recursive_localvars.objects.size() - len);
+										} break;
+										case RAM_ARRAY_NUMERIC: {
+											for (int i = 0; i < len; i++) {
+												ram_numeric_arrays[addr + i] = recursive_localvars.numeric_arrays[recursive_localvars.numeric_arrays.size() - len + i];
+												std::cout << "value RST: " << recursive_localvars.numeric_arrays[recursive_localvars.numeric_arrays.size() - len + i].size() << ", addr: " << addr + i << std::endl;
+											}
+											recursive_localvars.numeric_arrays.resize(recursive_localvars.numeric_arrays.size() - len);
+										} break;
+										case RAM_ARRAY_TEXT: {
+											for (int i = 0; i < len; i++) {
+												ram_text_arrays[addr + i] = recursive_localvars.text_arrays[recursive_localvars.text_arrays.size() - len + i];
+												std::cout << "value RST: " << recursive_localvars.text_arrays[recursive_localvars.text_arrays.size() - len + i].size() << ", addr: " << addr + i << std::endl;
+											}
+											recursive_localvars.text_arrays.resize(recursive_localvars.text_arrays.size() - len);
+										} break;
+										default:
+										 throw RuntimeError("TODO this type for self recursion");
+									}
+								} break;
 							}
 						}break;
 						default: throw RuntimeError("Program Corrupted");
