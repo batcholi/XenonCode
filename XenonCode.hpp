@@ -16,6 +16,8 @@
 #include <functional>
 #include <cstring>
 
+#define XENONCODE_IMPLEMENTATION
+
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
@@ -233,6 +235,12 @@
 #ifdef KEY
 	#undef KEY
 #endif
+#ifdef STR
+	#undef STR
+#endif
+#ifdef RST
+	#undef RST
+#endif
 #pragma endregion
 
 namespace XenonCode {
@@ -273,9 +281,12 @@ const int VERSION_PATCH = 0;
 	#endif
 	#ifndef XC_OBJECT_MEMORY_PENALTY
 		#define XC_OBJECT_MEMORY_PENALTY 16 // memory usage multiplier for objects
+	#endif
 	#ifndef  XC_MAX_CALL_DEPTH
 		#define XC_MAX_CALL_DEPTH 255
 	#endif
+	#ifndef  XC_RECURSIVE_MEMORY_PENALTY
+		#define XC_RECURSIVE_MEMORY_PENALTY 16
 	#endif
 
 #pragma endregion
@@ -1558,9 +1569,13 @@ const int VERSION_PATCH = 0;
 					// function
 						if (words[0] == "function" || words[0] == "recursive") {
 							int offset = 0;
-							if (words[0] == "recursive" && words[1] != "function") {
-								throw ParseError("Recursive is only valid as a modifier of a function");
-							} else if (words[0] == "recursive"){
+							if (words[0] == "recursive") {
+								if (words.size() < 2) {
+									throw ParseError("Too few words");
+								}
+								if (words[1] != "function") {
+									throw ParseError("Recursive is only valid as a modifier of a function");
+								}
 								offset++;
 							}
 							if (words.size() > 1 + offset && words[1 + offset] != Word::Funcname) {
@@ -2804,8 +2819,13 @@ const int VERSION_PATCH = 0;
 			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false, bool recursive = false) -> ByteCode {
 				std::string funcName = func;
 				if (func == Word::Funcname) {
-					if (!functionRefs.contains(funcName) || (funcName == currentFunctionName && !recursive)) {
+					if (!functionRefs.contains(funcName)) {
 						throw CompileError("Function", func, "is not defined");
+					}
+
+					// recursive calls only allowed with self
+					if (funcName == currentFunctionName && !recursive) {
+						throw CompileError("You can only recurse in functions marked as recursive through calling self");
 					}
 					
 					// Set arguments
@@ -4166,6 +4186,7 @@ const int VERSION_PATCH = 0;
 								compileFunctionCall(firstWord, args, false);
 							}break;
 							case Word::Name: {
+								// var
 								if (firstWord == "var") {
 									std::string name = readWord(Word::Varname);
 									Word op = readWord(Word::AssignmentOperatorGroup);
@@ -5158,7 +5179,7 @@ const int VERSION_PATCH = 0;
 			return Bootup();
 		}
 
-		virtual uint32_t ram_len() {
+		virtual uint32_t RamLen() {
 			return assembly->ram_numericVariables
 								+ assembly->ram_textVariables * XC_TEXT_MEMORY_PENALTY
 								+ assembly->ram_numericArrays * XC_ARRAY_NUMERIC_MEMORY_PENALTY
@@ -5166,18 +5187,19 @@ const int VERSION_PATCH = 0;
 								+ assembly->ram_objectReferences * XC_OBJECT_MEMORY_PENALTY;
 		}
 
-		virtual uint32_t recursive_localvars_len() {
-			return recursive_localvars.numeric.size()
+		virtual uint32_t RecursiveLocalVarsLen() {
+			return (recursive_localvars.numeric.size()
 							+ recursive_localvars.text.size() * XC_TEXT_MEMORY_PENALTY
 							+ recursive_localvars.numeric_arrays.size() * XC_ARRAY_NUMERIC_MEMORY_PENALTY
 							+ recursive_localvars.text_arrays.size() * XC_ARRAY_TEXT_MEMORY_PENALTY
-							+ recursive_localvars.objects.size() * XC_OBJECT_MEMORY_PENALTY;
+							+ recursive_localvars.objects.size() * XC_OBJECT_MEMORY_PENALTY
+						 ) * XC_RECURSIVE_MEMORY_PENALTY; 
 		}
 		
 		virtual bool Bootup() {
 			{// Check Capabilities
 				// Do we have enough RAM to run this program?
-				if (capability.ram < ram_len()) {
+				if (capability.ram < RamLen()) {
 					// Not enough RAM
 					return false;
 				}
@@ -7170,14 +7192,14 @@ const int VERSION_PATCH = 0;
 									switch(type) {
 										case RAM_VAR_NUMERIC: {
 											for (int i = addr; i < addr + len; i++) {
-												if (ram_len() + recursive_localvars_len() + len >= capability.ram) {
+												if (RamLen() + RecursiveLocalVarsLen() + len * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 													throw RuntimeError("Recursion ran out of memory");
 												}
 												recursive_localvars.numeric.push_back(ram_numeric[i]);
 											}
 										} break;
 										case RAM_VAR_TEXT: {
-											if (ram_len() + recursive_localvars_len() + len * XC_TEXT_MEMORY_PENALTY >= capability.ram) {
+											if (RamLen() + RecursiveLocalVarsLen() + len * XC_TEXT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
 											for (int i = addr; i < addr + len; i++) {
@@ -7185,7 +7207,7 @@ const int VERSION_PATCH = 0;
 											}
 										} break;
 										case RAM_OBJECT: {
-											if (ram_len() + recursive_localvars_len() + len * XC_OBJECT_MEMORY_PENALTY >= capability.ram) {
+											if (RamLen() + RecursiveLocalVarsLen() + len * XC_OBJECT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
 											for (int i = addr; i < addr + len; i++) {
@@ -7193,7 +7215,7 @@ const int VERSION_PATCH = 0;
 											}
 										} break;
 										case RAM_ARRAY_NUMERIC: {
-											if (ram_len() + recursive_localvars_len() + len * XC_ARRAY_NUMERIC_MEMORY_PENALTY >= capability.ram) {
+											if (RamLen() + RecursiveLocalVarsLen() + len * XC_ARRAY_NUMERIC_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
 											for (int i = addr; i < addr + len; i++) {
@@ -7201,7 +7223,7 @@ const int VERSION_PATCH = 0;
 											}
 										} break;
 										case RAM_ARRAY_TEXT: {
-											if (ram_len() + recursive_localvars_len() + len * XC_ARRAY_TEXT_MEMORY_PENALTY >= capability.ram) {
+											if (RamLen() + RecursiveLocalVarsLen() + len * XC_ARRAY_TEXT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
 											for (int i = addr; i < addr + len; i++) {
