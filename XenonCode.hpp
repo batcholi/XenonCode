@@ -1560,7 +1560,7 @@ const int VERSION_PATCH = 0;
 							int offset = 0;
 							if (words[0] == "recursive" && words[1] != "function") {
 								throw ParseError("Recursive is only valid as a modifier of a function");
-							} else {
+							} else if (words[0] == "recursive"){
 								offset++;
 							}
 							if (words.size() > 1 + offset && words[1 + offset] != Word::Funcname) {

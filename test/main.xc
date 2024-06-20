@@ -1,6 +1,20 @@
 storage array $results:text
 var $someVar = 16
 array $someArray:number
+array $mem: number
+
+recursive function @fib($n: number): number
+	while $mem.size <= $n
+		$mem.append(-1)
+	if $n < 1
+		return 0
+	elseif $n == 1
+		return 1
+	elseif $mem.$n != -1
+		return $mem.$n
+	else
+		$mem.$n = self($n - 1) + self($n - 2)
+		return $mem.$n
 
 function @increment($v:number):number
 	return $v + 1
@@ -175,6 +189,8 @@ function @RunUnitTests()
 	$results.append($obj.a)
 	$obj.a!!
 	$results.append($obj.a)
+	; test 17
+	print(@fib(32))
 	
 init
 	output.0 ("Hello, World!")
