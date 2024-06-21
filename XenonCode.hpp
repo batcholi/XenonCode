@@ -280,10 +280,10 @@ const int VERSION_PATCH = 0;
 	#ifndef XC_OBJECT_MEMORY_PENALTY
 		#define XC_OBJECT_MEMORY_PENALTY 16 // memory usage multiplier for objects
 	#endif
-	#ifndef  XC_MAX_CALL_DEPTH
-		#define XC_MAX_CALL_DEPTH 255
+	#ifndef XC_MAX_CALL_DEPTH
+		#define XC_MAX_CALL_DEPTH 16
 	#endif
-	#ifndef  XC_RECURSIVE_MEMORY_PENALTY
+	#ifndef XC_RECURSIVE_MEMORY_PENALTY
 		#define XC_RECURSIVE_MEMORY_PENALTY 16
 	#endif
 
@@ -2823,7 +2823,7 @@ const int VERSION_PATCH = 0;
 
 					// recursive calls only allowed with self
 					if (funcName == currentFunctionName && !recursive) {
-						throw CompileError("You can only recurse in functions marked as recursive through calling self");
+						throw CompileError("You can only recurse in functions marked as recursive through calling recurse");
 					}
 					
 					// Set arguments
@@ -2969,7 +2969,7 @@ const int VERSION_PATCH = 0;
 
 			auto compileSelfCall = [&](const std::vector<ByteCode>& args, bool getReturn) -> ByteCode {
 				if (!currentFunctionRecursive) {
-					throw CompileError("Cannot call self in non-recursive function or global scope");
+					throw CompileError("Cannot call recurse in non-recursive function or global scope");
 				}
 				uint32_t ram_numericVariables_d = ram_numericVariables - ram_numericVariables_offset;
 				uint32_t ram_textVariables_d = ram_textVariables - ram_textVariables_offset;
@@ -4926,6 +4926,7 @@ const int VERSION_PATCH = 0;
 		std::vector<std::vector<double>> ram_numeric_arrays {};
 		std::vector<std::vector<std::string>> ram_text_arrays {};
 		std::vector<uint64_t> ram_objects {};
+		uint32_t recursion_depth = 0;
 
 		LocalVars recursive_localvars {};
 		
@@ -5154,6 +5155,8 @@ const int VERSION_PATCH = 0;
 				}
 			}
 			
+			recursion_depth = 0;
+			
 			// Ready
 			return true;
 		}
@@ -5223,6 +5226,8 @@ const int VERSION_PATCH = 0;
 			// Prepare timers
 			timersLastRun.clear();
 			timersLastRun.resize(assembly->timers.size());
+			
+			recursion_depth = 0;
 			
 			return true;
 		}
@@ -5767,7 +5772,6 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
-		uint32_t depth = 0;
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
 			if (!assembly) return;
@@ -7124,12 +7128,14 @@ const int VERSION_PATCH = 0;
 								case JMP: {// ADDR
 									ByteCode addr = nextCode();
 									if (addr.type != ADDR) throw RuntimeError("Invalid address");
-									depth++;
-									if (depth > XC_MAX_CALL_DEPTH) {
-										throw RuntimeError("Max call depth exceeded");
+									recursion_depth++;
+									ipcCheck(recursion_depth * 2);
+									if (recursion_depth > XC_MAX_CALL_DEPTH) {
+										throw RuntimeError("Max call recursion_depth exceeded");
 									}
 									RunCode(program, addr.value);
-									depth--;
+									assert(recursion_depth > 0);
+									recursion_depth--;
 								}break;
 								case GTO: {
 									ByteCode addr = nextCode();

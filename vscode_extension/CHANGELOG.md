@@ -1,5 +1,5 @@
 # Change Log
 
-## [Unreleased]
+## 0.0.8
 
-- Initial release
+- Added recursive functionality to XenonCode

@@ -189,8 +189,9 @@ function @RunUnitTests()
 	$results.append($obj.a)
 	$obj.a!!
 	$results.append($obj.a)
+	
 	; test 17
-	print(@fib(250))
+	$results.append(@fib(10))
 	
 init
 	output.0 ("Hello, World!")

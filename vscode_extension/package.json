@@ -2,7 +2,7 @@
   "name": "xenoncode",
   "displayName": "XenonCode",
   "description": "XenonCode syntax highlighter for Visual Studio Code",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "engines": {
     "vscode": "^1.78.0"
   },

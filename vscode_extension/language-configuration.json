@@ -4,7 +4,7 @@
 
     "onEnterRules": [
         {
-            "beforeText": "^\\s*(function|if|foreach|while|else|elseif|init|input|timer|tick|repeat)(\\s+|$)",
+            "beforeText": "^\\s*(recursive|recurse|function|if|foreach|while|else|elseif|init|input|timer|tick|repeat)(\\s+|$)",
             "action": { "indent": "indent" }
         },
         {
