@@ -1576,13 +1576,13 @@ const int VERSION_PATCH = 0;
 								}
 								offset++;
 							}
-							if (words.size() > 1 + offset && words[1 + offset] != Word::Funcname) {
+							if (int(words.size()) > 1 + offset && words[1 + offset] != Word::Funcname) {
 								throw ParseError("Second word must be a valid function name starting with @");
 							}
-							if (words.size() > 2 + offset && words[2 + offset] != Word::ExpressionBegin) {
+							if (int(words.size()) > 2 + offset && words[2 + offset] != Word::ExpressionBegin) {
 								throw ParseError("Function name must be followed by a set of parenthesis, optionally containing an argument list");
 							}
-							if (words.size() < 4 + offset) throw ParseError("Too few words");
+							if (int(words.size()) < 4 + offset) throw ParseError("Too few words");
 							int next = ParseDeclarationArgs(words, 2 + offset);
 							if (next != -1) {
 								if ((int)words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
@@ -5854,39 +5854,58 @@ const int VERSION_PATCH = 0;
 												std::string val = MemGetText(nextCode(), ARRAY_INDEX_NONE);
 												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
 												k = '.' + k + '{';
-												auto it = std::search(
-													obj.begin(), obj.end(),
-													k.begin(), k.end(),
-													[](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); }
-												);
-												if (it == obj.end()) {
+												if (obj.length() < k.length()) {
 													MemSet(obj + k + val + '}', dst);
-												} else {
-													int exprStack = 0;
-													it += k.length();
-													auto start = it;
-													auto end = obj.end();
-													while (it != obj.end()) {
-														if (*it == '{') ++exprStack;
-														else if (*it == '}') {
-															if (exprStack == 0) {
-																end = it;
-																break;
+												} else for (auto it = obj.begin(); it != obj.end(); ++it) {
+													if (it + k.length() > obj.end()) {
+														MemSet(obj + k + val + '}', dst);
+														break;
+													}
+													if (*it == '{') {
+														int exprStack = 0;
+														while (++it != obj.end()) {
+															if (*it == '{') ++exprStack;
+															else if (*it == '}') {
+																if (exprStack == 0) {
+																	++it;
+																	break;
+																}
+																--exprStack;
 															}
-															--exprStack;
 														}
-														++it;
+														if (it == obj.end()) {
+															MemSet(obj + k + val + '}', dst);
+															break;
+														}
 													}
-													std::string newObj;
-													newObj.reserve(obj.length() + val.length());
-													newObj.append(obj.begin(), start);
-													newObj.append(val);
-													if (end == obj.end()) {
-														newObj.append("}");
-													} else {
-														newObj.append(end, obj.end());
+													if (std::equal(k.begin(), k.end(), it, [](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); })) {
+														int exprStack = 0;
+														it += k.length();
+														auto start = it;
+														auto end = obj.end();
+														while (it != obj.end()) {
+															if (*it == '{') ++exprStack;
+															else if (*it == '}') {
+																if (exprStack == 0) {
+																	end = it;
+																	break;
+																}
+																--exprStack;
+															}
+															++it;
+														}
+														std::string newObj;
+														newObj.reserve(obj.length() + val.length());
+														newObj.append(obj.begin(), start);
+														newObj.append(val);
+														if (end == obj.end()) {
+															newObj.append("}");
+														} else {
+															newObj.append(end, obj.end());
+														}
+														MemSet(newObj, dst);
+														break;
 													}
-													MemSet(newObj, dst);
 												}
 											}break;
 											default: throw RuntimeError("Invalid key");
@@ -7101,26 +7120,45 @@ const int VERSION_PATCH = 0;
 												std::string k = MemGetText(key);
 												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
 												k = '.' + k + '{';
-												auto it = std::search(
-													obj.begin(), obj.end(),
-													k.begin(), k.end(),
-													[](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); }
-												);
-												if (it == obj.end()) {
+												if (obj.length() < k.length()) {
 													MemSet("", dst);
-												} else {
-													int exprStack = 0;
-													it += k.length();
-													std::string val;
-													while (it != obj.end()) {
-														if (*it == '{') ++exprStack;
-														else if (*it == '}') {
-															if (exprStack == 0) break;
-															--exprStack;
-														}
-														val += *(it++);
+												} else for (auto it = obj.begin(); it != obj.end(); ++it) {
+													if (it + k.length() > obj.end()) {
+														MemSet("", dst);
+														break;
 													}
-													MemSet(val, dst);
+													if (*it == '{') {
+														int exprStack = 0;
+														while (++it != obj.end()) {
+															if (*it == '{') ++exprStack;
+															else if (*it == '}') {
+																if (exprStack == 0) {
+																	++it;
+																	break;
+																}
+																--exprStack;
+															}
+														}
+														if (it == obj.end()) {
+															MemSet("", dst);
+															break;
+														}
+													}
+													if (std::equal(k.begin(), k.end(), it, [](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); })) {
+														it += k.length();
+														int exprStack = 0;
+														std::string val;
+														while (it != obj.end()) {
+															if (*it == '{') ++exprStack;
+															else if (*it == '}') {
+																if (exprStack == 0) break;
+																--exprStack;
+															}
+															val += *(it++);
+														}
+														MemSet(val, dst);
+														break;
+													}
 												}
 											}break;
 											default: throw RuntimeError("Invalid key");
@@ -7167,6 +7205,19 @@ const int VERSION_PATCH = 0;
 									std::string obj = MemGetText(nextCode());
 									ByteCode offset = nextCode();
 									size_t pos = size_t(round(MemGetNumeric(offset)));
+									if (obj.length() > pos && obj[pos] == '{') {
+										int exprStack = 0;
+										while (++pos < obj.length()) {
+											if (obj[pos] == '{') ++exprStack;
+											else if (obj[pos] == '}') {
+												if (exprStack == 0) {
+													++pos;
+													break;
+												}
+												--exprStack;
+											}
+										}
+									}
 									size_t dotPos = obj.find('.', pos);
 									if (dotPos == std::string::npos || int(dotPos) >= int(obj.length())-4 || !isalpha_(obj[dotPos+1])) {
 										MemSet("", dst);
@@ -7177,15 +7228,7 @@ const int VERSION_PATCH = 0;
 										} else {
 											std::string key = obj.substr(dotPos+1, objPos-dotPos-1);
 											MemSet(key, dst);
-											int exprStack = 0;
-											while (objPos++ < obj.length() - 1) {
-												if (obj[objPos] == '{') ++exprStack;
-												else if (obj[objPos] == '}') {
-													if (exprStack == 0) break;
-													--exprStack;
-												}
-											}
-											MemSet(double(objPos + 1), offset);
+											MemSet(double(objPos), offset);
 										}
 									}
 								}break;
@@ -7197,7 +7240,7 @@ const int VERSION_PATCH = 0;
 									// TODO Implement runtime memory bounds checking.
 									switch(type) {
 										case RAM_VAR_NUMERIC: {
-											for (int i = addr; i < addr + len; i++) {
+											for (uint32_t i = addr; i < addr + len; i++) {
 												if (RamLen() + RecursiveLocalVarsLen() + len * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 													throw RuntimeError("Recursion ran out of memory");
 												}
@@ -7208,7 +7251,7 @@ const int VERSION_PATCH = 0;
 											if (RamLen() + RecursiveLocalVarsLen() + len * XC_TEXT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
-											for (int i = addr; i < addr + len; i++) {
+											for (uint32_t i = addr; i < addr + len; i++) {
 												recursive_localvars.text.push_back(ram_text[i]);
 											}
 										} break;
@@ -7216,7 +7259,7 @@ const int VERSION_PATCH = 0;
 											if (RamLen() + RecursiveLocalVarsLen() + len * XC_OBJECT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
-											for (int i = addr; i < addr + len; i++) {
+											for (uint32_t i = addr; i < addr + len; i++) {
 												recursive_localvars.objects.push_back(ram_objects[i]);
 											}
 										} break;
@@ -7224,7 +7267,7 @@ const int VERSION_PATCH = 0;
 											if (RamLen() + RecursiveLocalVarsLen() + len * XC_ARRAY_NUMERIC_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
-											for (int i = addr; i < addr + len; i++) {
+											for (uint32_t i = addr; i < addr + len; i++) {
 												recursive_localvars.numeric_arrays.push_back(ram_numeric_arrays[i]);
 											}
 										} break;
@@ -7232,7 +7275,7 @@ const int VERSION_PATCH = 0;
 											if (RamLen() + RecursiveLocalVarsLen() + len * XC_ARRAY_TEXT_MEMORY_PENALTY * XC_RECURSIVE_MEMORY_PENALTY >= capability.ram) {
 												throw RuntimeError("Recursion ran out of memory");
 											}
-											for (int i = addr; i < addr + len; i++) {
+											for (uint32_t i = addr; i < addr + len; i++) {
 												recursive_localvars.text_arrays.push_back(ram_text_arrays[i]);
 											}
 										} break;
@@ -7246,31 +7289,31 @@ const int VERSION_PATCH = 0;
 									uint32_t type = nextCode().type;
 									switch(type) {
 										case RAM_VAR_NUMERIC: {
-											for (int i = 0; i < len; i++) {
+											for (uint32_t i = 0; i < len; i++) {
 												ram_numeric[addr + i] = recursive_localvars.numeric[recursive_localvars.numeric.size() - len + i];
 											}
 											recursive_localvars.numeric.resize(recursive_localvars.numeric.size() - len);
 										} break;
 										case RAM_VAR_TEXT: {
-											for (int i = 0; i < len; i++) {
+											for (uint32_t i = 0; i < len; i++) {
 												ram_text[addr + i] = recursive_localvars.text[recursive_localvars.text.size() - len + i];
 											}
 											recursive_localvars.text.resize(recursive_localvars.text.size() - len);
 										} break;
 										case RAM_OBJECT: {
-											for (int i = 0; i < len; i++) {
+											for (uint32_t i = 0; i < len; i++) {
 												ram_objects[addr + i] = recursive_localvars.objects[recursive_localvars.objects.size() - len + i];
 											}
 											recursive_localvars.objects.resize(recursive_localvars.objects.size() - len);
 										} break;
 										case RAM_ARRAY_NUMERIC: {
-											for (int i = 0; i < len; i++) {
+											for (uint32_t i = 0; i < len; i++) {
 												ram_numeric_arrays[addr + i] = recursive_localvars.numeric_arrays[recursive_localvars.numeric_arrays.size() - len + i];
 											}
 											recursive_localvars.numeric_arrays.resize(recursive_localvars.numeric_arrays.size() - len);
 										} break;
 										case RAM_ARRAY_TEXT: {
-											for (int i = 0; i < len; i++) {
+											for (uint32_t i = 0; i < len; i++) {
 												ram_text_arrays[addr + i] = recursive_localvars.text_arrays[recursive_localvars.text_arrays.size() - len + i];
 											}
 											recursive_localvars.text_arrays.resize(recursive_localvars.text_arrays.size() - len);

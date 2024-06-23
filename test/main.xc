@@ -193,6 +193,34 @@ function @RunUnitTests()
 	; test 17
 	$results.append(@fib(10))
 	
+	; test 18
+	$obj = ""
+	$obj.a1 = 0
+	$obj.c4 = 3
+	$obj.d5 = ".a2{44}.b33{55}"
+	$obj.a2 = 1
+	$obj.b33 = 2
+	$obj.dd66 = ".a2{66}"
+	$results.append($obj.a2)
+	$obj.b33++
+	$results.append($obj.b33)
+	$results.append($obj)
+	$results.append($obj.d5)
+	$obj.d5 = 1
+	$obj.dd66 = 0
+	foreach $obj ($key, $value)
+		$obj.$key *= 10
+	$results.append($obj)
+	foreach $obj ($key, $value)
+		$obj.$key = ".a{100}.b{200}"
+	$results.append($obj)
+	foreach $obj ($key, $values)
+		foreach $values ($subkey, $value)
+			var $subObj = $obj.$key
+			$subObj.$subkey /= 100
+			$obj.$key = $subObj
+	$results.append($obj)
+	
 init
 	output.0 ("Hello, World!")
 	
