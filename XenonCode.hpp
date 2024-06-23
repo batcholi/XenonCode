@@ -5391,11 +5391,13 @@ const int VERSION_PATCH = 0;
 					auto& storage = GetStorage(dst);
 					if (arrIndex == ARRAY_INDEX_NONE) {
 						storage[0] = value;
+						storageDirty = true;
 					} else if (utf8length(value) == 1) {
 						if (arrIndex >= utf8length(storage[0])) {
 							throw RuntimeError("Invalid text indexing");
 						}
 						utf8assign(storage[0], arrIndex, value);
+						storageDirty = true;
 					} else {
 						throw RuntimeError("Invalid char assignment");
 					}
