@@ -5710,6 +5710,8 @@ const int VERSION_PATCH = 0;
 						MemSet(arg.numericValue, dst);
 					} else if (IsObject(dst) && arg.type == Var::Object) {
 						MemSetObject(arg.addrValue, dst); // Reference assignment for objects
+					} else if (arg.type == Var::Void) {
+						MemSet("", dst);
 					} else {
 						throw RuntimeError("Input argument type mismatch");
 					}
