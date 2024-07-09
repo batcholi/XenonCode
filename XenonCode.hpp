@@ -6912,7 +6912,7 @@ const int VERSION_PATCH = 0;
 									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
-									double max = std::numeric_limits<double>::min();
+									double max = std::numeric_limits<double>::lowest();
 									if (IsArray(arr)) {
 										switch (arr.type) {
 											case STORAGE_ARRAY_NUMERIC:{
