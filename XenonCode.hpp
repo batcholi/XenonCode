@@ -6359,15 +6359,18 @@ const int VERSION_PATCH = 0;
 										case STORAGE_ARRAY_NUMERIC:
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(arr);
+											if (array.size() == 0) throw RuntimeError("Invalid operation on empty array");
 											array.pop_back();
 											storageDirty = true;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
+											if (array.size() == 0) throw RuntimeError("Invalid operation on empty array");
 											array.pop_back();
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
+											if (array.size() == 0) throw RuntimeError("Invalid operation on empty array");
 											array.pop_back();
 										}break;
 									}
