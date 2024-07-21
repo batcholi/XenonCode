@@ -1509,16 +1509,15 @@ const int VERSION_PATCH = 0;
 					// array
 						if (words[0] == "array") {
 							if ((words.size() > 1 && words[1] != Word::Varname)
-							 || (words.size() > 2 && words[2] != Word::CastOperator && words[2] != "=")
-							 || (words.size() > 3 && words[2] == "=" && words[3] != Word::Varname)
+							 || (words.size() > 2 && words[2] != Word::CastOperator)
 							) {
-								throw ParseError("Second word must be a variable name (starting with $) followed by either a colon and the array type (number or text) or an assignment to another array variable");
+								throw ParseError("Second word must be a variable name (starting with $) followed by a colon and the array type (number or text)");
 							}
-							if (words.size() > 3 && words[3] != "number" && words[3] != "text" && words[3] != Word::Varname) {
+							if (words.size() > 3 && words[3] != "number" && words[3] != "text") {
 								throw ParseError("Invalid array type", words[3], "it must be either 'number' or 'text'");
 							}
 							if (words.size() > 4 && words[4] == "=") {
-								throw ParseError("Cannot initialize array values here");
+								throw ParseError("Cannot initialize array with a value");
 							}
 							if (words.size() > 4) throw ParseError("Too many words");
 							if (words.size() < 4) throw ParseError("Too few words");
