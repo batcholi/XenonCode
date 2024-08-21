@@ -7336,7 +7336,7 @@ const int VERSION_PATCH = 0;
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
 										std::string str = MemGetText(val);
-										MemSet((double)((int64_t)(std::hash<std::string>{}(str)) & ((1l<<53)-1)), dst);
+										MemSet((double)((int64_t)(std::hash<std::string>{}(str)) & ((1ll<<53)-1)), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 							}
