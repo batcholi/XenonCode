@@ -239,6 +239,9 @@
 #ifdef RST
 	#undef RST
 #endif
+#ifdef HSH
+	#undef HSH
+#endif
 #pragma endregion
 
 namespace XenonCode {
@@ -2052,6 +2055,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( KEY /* REF_DST REF_TXT REF_OFFSET */) // returns the next key in a text object, and moves the offset as well
 	DEF_OP( STR /* ADDR LEN TYPE */) // stores away local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
 	DEF_OP( RST /* ADDR LEN TYPE */) // restores local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
+	DEF_OP( HSH /* REF_DST REF_VAL */ ) // hash(text)
 
 #pragma endregion
 
@@ -2430,6 +2434,7 @@ const int VERSION_PATCH = 0;
 		if (func == "sort") {returnType = VOID; return ASC;}
 		if (func == "sortd") {returnType = VOID; return DSC;}
 		if (func == "system.output") {returnType = VOID; return OUT;}
+		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return HSH;}
 		returnType = VOID;
 		return DEV;
 	}
@@ -7326,6 +7331,14 @@ const int VERSION_PATCH = 0;
 										 throw RuntimeError("TODO this type for self recursion");
 									}
 								} break;
+								case HSH: {// REF_DST REF_SRC
+									ByteCode dst = nextCode();
+									ByteCode val = nextCode();
+									if (IsNumeric(dst) && IsText(val)) {
+										std::string str = MemGetText(val);
+										MemSet(std::hash<std::string>{}(str), dst);
+									} else throw RuntimeError("Invalid operation");
+								}break;
 							}
 						}break;
 						default: throw RuntimeError("Program Corrupted");
