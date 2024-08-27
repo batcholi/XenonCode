@@ -262,6 +262,9 @@ const int VERSION_PATCH = 0;
 	#ifndef XC_MAX_TEXT_LENGTH
 		#define XC_MAX_TEXT_LENGTH 4096 // max number of chars in text variables (absolute maximum is 16M)
 	#endif
+	#ifndef XC_MAX_STORAGE_MEMORY_SIZE
+		#define XC_MAX_STORAGE_MEMORY_SIZE 100'000'000u // max storage memory size in bytes
+	#endif
 	#ifndef XC_MAX_ARRAY_SIZE
 		#define XC_MAX_ARRAY_SIZE 65535 // max number of elements in arrays (absolute maximum is 16M)
 	#endif
@@ -4935,7 +4938,7 @@ const int VERSION_PATCH = 0;
 		struct Capability {
 			uint32_t ipc = 0; // instructions per cycle
 			uint32_t ram = 16'000'000; // number of ram variables * their memory penalty
-			uint32_t storage = 256; // number of storage references
+			uint32_t storage = 16; // number of storage variables
 			uint32_t io = 256; // Number of input/output ports
 		} capability;
 		
@@ -5259,10 +5262,14 @@ const int VERSION_PATCH = 0;
 		virtual void SaveStorage(const std::string& storageDir) {
 			if (storageDirty) {
 				std::filesystem::create_directories(storageDir);
+				size_t storageSize = 0;
 				for (const auto& name : assembly->storageRefs) {
 					const auto& storage = storageCache[name];
 					std::ofstream file{storageDir + "/" + name};
 					for (const std::string& value : storage) {
+						if ((storageSize += value.size()) > XC_MAX_STORAGE_MEMORY_SIZE) {
+							throw RuntimeError("Max storage memory exceeded");
+						}
 						file << value << '\n';
 					}
 				}
