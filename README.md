@@ -126,8 +126,9 @@ All user-defined words must start with a prefix character:
 
 ### Comments
 
-Comments are lines that start with either `;` or `//`  
+Comments are lines that start with `;`  
 A code statement may also end with a trailing comment
+NOTE: `//` is deprecated and should NOT be used.  
 
 # Limitations
 This language is designed to potentially be executed Server-side in the context of a multiplayer game, hence for security and performance reasons there are limits to what users can do.
@@ -186,7 +187,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `function` declare a user-defined function
 - `timer` Define the body of a function that will execute repeatedly at a specific frequency in Hz
 - `input` Define an input function
-- `;` or `//` Comments
+- `;` Comments
 - an entry point defined by the implementation
 - one or more tabs, meaning we're within a function body, then the following rules apply:
 
