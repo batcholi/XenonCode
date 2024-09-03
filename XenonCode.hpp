@@ -5348,6 +5348,9 @@ const int VERSION_PATCH = 0;
 		double StorageGetNumeric(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			auto& storage = GetStorage(arr);
 			if (arrIndex == ARRAY_INDEX_NONE) {
+				if (storage.empty()) {
+					throw RuntimeError("Invalid array indexing");
+				}
 				return storage[0]==""? 0.0 : stod(storage[0]);
 			} else{
 				if (arrIndex >= storage.size()) {
@@ -5359,6 +5362,9 @@ const int VERSION_PATCH = 0;
 		const std::string& StorageGetText(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			auto& storage = GetStorage(arr);
 			if (arrIndex == ARRAY_INDEX_NONE) {
+				if (storage.empty()) {
+					throw RuntimeError("Invalid array indexing");
+				}
 				return storage[0];
 			} else{
 				if (arrIndex >= storage.size()) {
