@@ -5792,8 +5792,8 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
-    std::unordered_map<uint32_t, uint32_t> currentLineByAddr;
-    std::unordered_map<uint32_t, std::string> currentFileByAddr;
+		std::unordered_map<uint32_t, uint32_t> currentLineByAddr;
+		std::unordered_map<uint32_t, std::string> currentFileByAddr;
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
@@ -5806,11 +5806,11 @@ const int VERSION_PATCH = 0;
 			for (int32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
 				if (currentLine == 0 && program[tmpIndex].type == LINENUMBER) {
 					currentLine = program[tmpIndex].value;
-          currentLineByAddr[index] = currentLine;
+					currentLineByAddr[index] = currentLine;
 				} else if (currentFile == "" && program[tmpIndex].type == SOURCEFILE) {
 					if (program[tmpIndex].value < assembly->sourceFiles.size()) {
 						currentFile = assembly->sourceFiles[program[tmpIndex].value];
-            currentFileByAddr[index] = currentFile;
+						currentFileByAddr[index] = currentFile;
 					}
 				} else if (currentLine != 0 && currentFile != "") {
 					break;
