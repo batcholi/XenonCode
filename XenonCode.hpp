@@ -4936,6 +4936,8 @@ const int VERSION_PATCH = 0;
 		uint32_t recursion_depth = 0;
 
 		LocalVars recursive_localvars {};
+		std::unordered_map<uint32_t, uint32_t> currentLineByAddr {};
+		std::unordered_map<uint32_t, std::string> currentFileByAddr;
 		
 		std::vector<double> timersLastRun {};
 		
@@ -5235,6 +5237,9 @@ const int VERSION_PATCH = 0;
 			timersLastRun.resize(assembly->timers.size());
 			
 			recursion_depth = 0;
+
+			currentFileByAddr.clear();
+			currentLineByAddr.clear();
 			
 			return true;
 		}
@@ -5792,8 +5797,6 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
-		std::unordered_map<uint32_t, uint32_t> currentLineByAddr;
-		std::unordered_map<uint32_t, std::string> currentFileByAddr;
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
