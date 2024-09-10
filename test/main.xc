@@ -221,6 +221,12 @@ function @RunUnitTests()
 			$obj.$key = $subObj
 	$results.append($obj)
 	
+	; test 19
+	if 0.5 == 0
+		$results.append("ERROR")
+	else
+		$results.append("OK")
+	
 init
 	output.0 ("Hello, World!")
 	

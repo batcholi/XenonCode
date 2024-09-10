@@ -5507,7 +5507,7 @@ const int VERSION_PATCH = 0;
 				std::string txt = MemGetText(ref, arrIndex);
 				return txt != "" && txt != "0";
 			}
-			return abs(MemGetNumeric(ref, arrIndex)) > EPSILON_DOUBLE;
+			return std::abs(MemGetNumeric(ref, arrIndex)) > EPSILON_DOUBLE;
 		}
 		const std::string& MemGetText(ByteCode ref) {
 			switch (ref.type) {
@@ -6019,7 +6019,7 @@ const int VERSION_PATCH = 0;
 									if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
 									} else if (IsNumeric(a) || IsNumeric(b)) {
-										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
+										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case NEQ: {
@@ -6029,7 +6029,7 @@ const int VERSION_PATCH = 0;
 									if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
 									} else if (IsNumeric(a) || IsNumeric(b)) {
-										MemSet(double(abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
+										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case LST: {
