@@ -4936,6 +4936,8 @@ const int VERSION_PATCH = 0;
 		uint32_t recursion_depth = 0;
 
 		LocalVars recursive_localvars {};
+		std::unordered_map<uint32_t, uint32_t> currentLineByAddr {};
+		std::unordered_map<uint32_t, std::string> currentFileByAddr;
 		
 		std::vector<double> timersLastRun {};
 		
@@ -5235,6 +5237,9 @@ const int VERSION_PATCH = 0;
 			timersLastRun.resize(assembly->timers.size());
 			
 			recursion_depth = 0;
+
+			currentFileByAddr.clear();
+			currentLineByAddr.clear();
 			
 			return true;
 		}
@@ -5799,14 +5804,16 @@ const int VERSION_PATCH = 0;
 			if (program.size() <= index) return;
 			
 			// Find current file and line for debug
-			std::string currentFile = "";
-			uint32_t currentLine = 0;
+			std::string currentFile = currentFileByAddr[index];
+			uint32_t currentLine = currentLineByAddr[index];
 			for (int32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
 				if (currentLine == 0 && program[tmpIndex].type == LINENUMBER) {
 					currentLine = program[tmpIndex].value;
+					currentLineByAddr[index] = currentLine;
 				} else if (currentFile == "" && program[tmpIndex].type == SOURCEFILE) {
 					if (program[tmpIndex].value < assembly->sourceFiles.size()) {
 						currentFile = assembly->sourceFiles[program[tmpIndex].value];
+						currentFileByAddr[index] = currentFile;
 					}
 				} else if (currentLine != 0 && currentFile != "") {
 					break;
