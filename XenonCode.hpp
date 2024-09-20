@@ -1904,6 +1904,24 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		
+		static std::string GetExistingFilePath(const std::string& filedir, std::string/*copy*/filename) {
+			std::string filepath = filedir + "/" + filename;
+			if (!std::filesystem::exists(filepath)) {
+				std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+				for (const auto& f : std::filesystem::directory_iterator(filedir)) {
+					std::string fLC = f.path().filename().string();
+					std::transform(fLC.begin(), fLC.end(), fLC.begin(), ::tolower);
+					if (fLC == filename) {
+						return f.path().string();
+					}
+				}
+				throw ParseError("File not found '" + filepath + "'");
+			}
+			return filepath;
+		}
+		
+		SourceFile(const std::string& filedir, const std::string& filename) : SourceFile(GetExistingFilePath(filedir, filename)) {}
+		
 		void DebugParsedLines() {
 			for (auto& line : lines) {
 				if (line) {
@@ -1918,11 +1936,13 @@ const int VERSION_PATCH = 0;
 
 	// This function recursively parses the given file and all included files and returns all lines joined
 	inline static SourceFile GetParsedFile(const std::string& filedir, const std::string& filename, std::set<std::string>& parsedFiles) {
-		if (parsedFiles.contains(filename)) {
+		std::string filenameLC = filename;
+		std::transform(filenameLC.begin(), filenameLC.end(), filenameLC.begin(), ::tolower);
+		if (parsedFiles.contains(filenameLC)) {
 			throw ParseError("Circular dependency detected with file '" + filename + "'");
 		}
-		parsedFiles.insert(filename);
-		SourceFile src(filedir + "/" + filename);
+		parsedFiles.insert(filenameLC);
+		SourceFile src(filedir, filename);
 		// Include other files (and replace the include statement by the lines of the other file, recursively)
 		for (unsigned int i = 0; i < src.lines.size(); ++i) {
 			if (auto& line = src.lines[i]; line) {
