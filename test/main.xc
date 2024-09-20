@@ -19,6 +19,8 @@ recursive function @fib($n: number): number
 function @increment($v:number):number
 	return $v + 1
 
+# tests
+
 function @RunUnitTests()
 	
 	; Test 1

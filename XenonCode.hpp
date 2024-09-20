@@ -481,6 +481,7 @@ const int VERSION_PATCH = 0;
 			Name, // any other alphanumeric word that starts with alpha
 			ExpressionBegin, // (
 			ExpressionEnd, // )
+			HashTag, // #
 			Void, // placeholder for operators with only two parameters
 			
 			// Operators (by order of precedence)
@@ -509,7 +510,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		operator bool() const {
-			return type != Empty && type != Invalid;
+			return type != Empty;
 		}
 		operator double() const {
 			if (type == Numeric)
@@ -552,6 +553,9 @@ const int VERSION_PATCH = 0;
 						}break;
 					case ExpressionEnd:{
 						this->word = ")";
+						}break;
+					case HashTag:{
+						this->word = "#";
 						}break;
 					case TrailOperator:{
 						this->word = ".";
@@ -708,6 +712,12 @@ const int VERSION_PATCH = 0;
 					s = {};
 					return;
 				}
+				// HashTag
+				if (c == '#') {
+					word = c;
+					type = HashTag;
+					return;
+				}
 				// Operators
 				if (isoperator(c)) {
 					word += c;
@@ -812,6 +822,8 @@ const int VERSION_PATCH = 0;
 					words.push_back(Word::ExpressionBegin);
 					ParseWords(word, words, scope);
 					words.push_back(Word::ExpressionEnd);
+				} else if (word == Word::HashTag) {
+					return; // ignore the remaining of the line
 				} else {
 					words.push_back(word);
 				}
