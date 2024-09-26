@@ -1005,10 +1005,11 @@ const int VERSION_PATCH = 0;
 						std::cout << word << " ";
 						break;
 					case Word::AndOperator:
-						std::cout << "&& ";
+						std::cout << "and ";
 						break;
 					case Word::OrOperator:
-						std::cout << "|| ";
+						std::cout << "or ";
+						break;
 					case Word::XorOperator:
 						std::cout << "xor ";
 						break;
