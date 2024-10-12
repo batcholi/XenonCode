@@ -601,6 +601,8 @@ Trailing math functions will use the leading variable as its first argument and 
 - `text`(inputTextWithFormatting, vars ...)
 - `size`(inputText) returns the number of characters in $myText
 - `last`(inputText) returns the last character in $myText
+- `lower`(inputText) returns the lowercase version of $myText
+- `upper`(inputText) returns the uppercase version of $myText
 
 #### Formatting
 The `text` function takes a format as the first argument.  
