@@ -112,7 +112,8 @@
         "charconv": "cpp",
         "format": "cpp",
         "__bits": "cpp",
-        "__verbose_abort": "cpp"
+        "__verbose_abort": "cpp",
+        "text_encoding": "cpp"
     },
     "files.exclude": {
         "**/.git": true,

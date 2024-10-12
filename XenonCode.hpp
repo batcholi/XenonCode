@@ -637,7 +637,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		Word(std::istringstream& s) {
-			for (int c; (c = s.get()) != -1; ) if (c != ' ') {
+			for (int c; int8_t(c = s.get()) != -1; ) if (c != ' ') {
 				switch (c) {
 					case '\t':{
 						word = c;
@@ -704,8 +704,17 @@ const int VERSION_PATCH = 0;
 							}
 							word += s.get();
 						}
+						if (stack < -1) {
+							throw ParseError("Extra parenthesis");
+						}
+						if (stack > -1) {
+							throw ParseError("Missing parenthesis");
+						}
 						type = Expression;
 					}return;
+					case ')':{
+						throw ParseError("Extra parenthesis");
+					}
 				}
 				// Comments
 				if (c == ';' || (c == '/' && s.peek() == '/')) {
@@ -1432,7 +1441,7 @@ const int VERSION_PATCH = 0;
 		if (ParseExpression(words, index+1, end)) {
 			end = GetExpressionEnd(words, index);
 			if (end == -1) {
-				throw ParseError("Invalid expression within function arguments");
+				throw ParseError("Invalid expression within function arguments or missing closing parenthesis");
 			}
 			if (end == int(words.size())-1) return -1;
 			return end + 1;
