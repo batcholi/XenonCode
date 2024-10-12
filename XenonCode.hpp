@@ -242,6 +242,12 @@
 #ifdef HSH
 	#undef HSH
 #endif
+#ifdef UPP
+	#undef UPP
+#endif
+#ifdef LCC
+	#undef LCC
+#endif
 #pragma endregion
 
 namespace XenonCode {
@@ -327,6 +333,10 @@ const int VERSION_PATCH = 0;
 	
 	inline static void strtolower(std::string& str) {
 		std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::tolower(c); });
+	}
+	
+	inline static void strtoupper(std::string& str) {
+		std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c){ return std::toupper(c); });
 	}
 	
 	inline static size_t utf8length(const std::string& str) {
@@ -2101,6 +2111,8 @@ const int VERSION_PATCH = 0;
 	DEF_OP( STR /* ADDR LEN TYPE */) // stores away local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
 	DEF_OP( RST /* ADDR LEN TYPE */) // restores local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
 	DEF_OP( HSH /* REF_DST REF_VAL */ ) // hash(text)
+	DEF_OP( UPP /* REF_DST REF_TXT */ ) // upper(text)
+	DEF_OP( LCC /* REF_DST REF_TXT */ ) // lower(text)
 
 #pragma endregion
 
@@ -2480,6 +2492,8 @@ const int VERSION_PATCH = 0;
 		if (func == "sortd") {returnType = VOID; return DSC;}
 		if (func == "system.output") {returnType = VOID; return OUT;}
 		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return HSH;}
+		if (func == "upper") {returnType = RAM_VAR_TEXT; return UPP;}
+		if (func == "lower") {returnType = RAM_VAR_TEXT; return LCC;}
 		returnType = VOID;
 		return DEV;
 	}
@@ -6212,7 +6226,7 @@ const int VERSION_PATCH = 0;
 									ByteCode max = nextCode();
 									double minVal = MemGetNumeric(min);
 									double maxVal = MemGetNumeric(max);
-									if (minVal > maxVal) throw RuntimeError("Invalid operation");
+									if (minVal > maxVal) throw RuntimeError("Invalid clamp operation (min > max)");
 									MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
 								}break;
 								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
@@ -6793,7 +6807,7 @@ const int VERSION_PATCH = 0;
 								case SIZ: {//size REF_DST (REF_ARR | REF_TXT)
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
 									if (IsArray(ref)) {
 										switch (ref.type) {
@@ -6853,7 +6867,7 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									ByteCode val = nextCode();
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
 									if (IsArray(ref)) {
 										switch (ref.type) {
@@ -6894,7 +6908,7 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									ByteCode val = nextCode();
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
 									if (IsArray(ref)) {
 										switch (ref.type) {
@@ -6934,7 +6948,7 @@ const int VERSION_PATCH = 0;
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
 									double min = std::numeric_limits<double>::max();
@@ -6959,13 +6973,12 @@ const int VERSION_PATCH = 0;
 											}break;
 											case STORAGE_ARRAY_TEXT:
 											case RAM_ARRAY_TEXT:{
-												throw RuntimeError("Invalid operation");
+												throw RuntimeError("Invalid operation (not numbers)");
 											}break;
 										}
 									} else {
 										ipcCheck(args.size());
 										for (const ByteCode& c : args) {
-											if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 											double value = MemGetNumeric(c);
 											if (value < min) min = value;
 										}
@@ -6978,7 +6991,7 @@ const int VERSION_PATCH = 0;
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
 									double max = std::numeric_limits<double>::lowest();
@@ -7009,7 +7022,6 @@ const int VERSION_PATCH = 0;
 									} else {
 										ipcCheck(args.size());
 										for (const ByteCode& c : args) {
-											if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 											double value = MemGetNumeric(c);
 											if (value > max) max = value;
 										}
@@ -7022,7 +7034,7 @@ const int VERSION_PATCH = 0;
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
 									double total = 0;
@@ -7055,7 +7067,6 @@ const int VERSION_PATCH = 0;
 									} else {
 										ipcCheck(args.size());
 										for (const ByteCode& c : args) {
-											if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 											double value = MemGetNumeric(c);
 											total += value;
 										}
@@ -7069,7 +7080,7 @@ const int VERSION_PATCH = 0;
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
 									double total = 0;
@@ -7097,7 +7108,6 @@ const int VERSION_PATCH = 0;
 									} else {
 										ipcCheck(args.size());
 										for (const ByteCode& c : args) {
-											if (!IsNumeric(c)) throw RuntimeError("Invalid operation");
 											double value = MemGetNumeric(c);
 											total += value;
 										}
@@ -7110,7 +7120,7 @@ const int VERSION_PATCH = 0;
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
 										args.emplace_back(c);
 									}
-									if (!IsNumeric(dst)) throw RuntimeError("Invalid operation");
+									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
 									ByteCode arr = args[0];
 									double med = 0;
@@ -7399,7 +7409,25 @@ const int VERSION_PATCH = 0;
 									if (IsNumeric(dst) && IsText(val)) {
 										std::string str = MemGetText(val);
 										MemSet((double)((int64_t)(std::hash<std::string>{}(str)) & ((1ll<<53)-1)), dst);
-									} else throw RuntimeError("Invalid operation");
+									} else throw RuntimeError("Invalid text operation on non-text values");
+								}break;
+								case UPP: {// REF_DST REF_SRC
+									ByteCode dst = nextCode();
+									ByteCode val = nextCode();
+									if (IsText(dst) && IsText(val)) {
+										std::string str = MemGetText(val);
+										strtoupper(str);
+										MemSet(str, dst);
+									} else throw RuntimeError("Invalid text operation on non-text values");
+								}break;
+								case LCC: {// REF_DST REF_SRC
+									ByteCode dst = nextCode();
+									ByteCode val = nextCode();
+									if (IsText(dst) && IsText(val)) {
+										std::string str = MemGetText(val);
+										strtolower(str);
+										MemSet(str, dst);
+									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
 							}
 						}break;

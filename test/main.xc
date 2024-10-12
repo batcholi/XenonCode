@@ -229,6 +229,10 @@ function @RunUnitTests()
 	else
 		$results.append("OK")
 	
+	; test 20
+	$results.append(upper("hello"))
+	$results.append(lower("TEST"))
+	
 init
 	output.0 ("Hello, World!")
 	
