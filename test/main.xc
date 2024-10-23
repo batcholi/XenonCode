@@ -233,6 +233,14 @@ function @RunUnitTests()
 	$results.append(upper("hello"))
 	$results.append(lower("TEST"))
 	
+	; test 21
+	var $txt = "o"
+	$txt.substring(0,0)
+	if $txt == ""
+		$results.append("OK")
+	else
+		$results.append("ERROR")
+	
 init
 	output.0 ("Hello, World!")
 	

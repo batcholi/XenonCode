@@ -349,9 +349,12 @@ const int VERSION_PATCH = 0;
 		return len;
 	}
 	
-	inline static std::string utf8substr(const std::string& str, size_t start, size_t length = 0) {
-		if (length == 0) {
+	inline static std::string utf8substr(const std::string& str, size_t start, int length = -1) {
+		if (length < 0) {
 			length = utf8length(str) - start;
+		}
+		if (start == 0 && length == 0) {
+			return "";
 		}
 		size_t len = 0;
 		size_t i = 0;
@@ -366,7 +369,7 @@ const int VERSION_PATCH = 0;
 		size_t j = i;
 		for (; j < str.length(); ++j) {
 			if ((str[j] & 0xC0) != 0x80) {
-				if (len == start + length) {
+				if (len == start + size_t(length)) {
 					break;
 				}
 				++len;
