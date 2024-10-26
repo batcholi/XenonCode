@@ -3681,62 +3681,71 @@ const int VERSION_PATCH = 0;
 											
 										} else if (value == Word::Name) {
 											
-											ByteCode var;
-											CODE_TYPE retType;
-											rom_vars_init.emplace_back(DEV);
-											std::string funcName = value.word;
+											std::function<ByteCode(const std::string&)> compileConstFunctionCall = [&](const std::string& funcName) -> ByteCode {
 											
-											if (!Device::deviceFunctionsByName.contains(funcName)) {
-												throw CompileError("Function", funcName, "does not exist");
-											}
-											auto& function = Device::deviceFunctionsByName.at(funcName);
-											rom_vars_init.emplace_back(DEVICE_FUNCTION_INDEX, function.id);
-											if (function.returnType == "number") {
-												retType = RAM_VAR_NUMERIC;
-											} else if (function.returnType == "text") {
-												retType = RAM_VAR_TEXT;
-											} else if (function.returnType == "") {
-												throw CompileError("A function call here should return a value, but", funcName, "does not");
-											} else {
-												validate(Device::objectTypesByName.contains(function.returnType));
-												retType = CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(function.returnType).id);
-											}
-											
-											var = declareVar(name, retType);
-											rom_vars_init.emplace_back(var);
-											
-											if (Word nextWord = readWord(); nextWord) {
-												validate(nextWord == Word::ExpressionBegin);
+												CODE_TYPE retType;
 												
-												for (int argIndex = 0; nextWordIndex < (int)line.words.size(); ++argIndex) {
-													int argEnd = GetArgEnd(line.words, nextWordIndex);
-													if (argEnd == -1) {
-														break;
-													}
-													
-													Word arg = readWord();
-													if (arg == Word::CommaOperator) {
-														continue;
-													}
-													if (arg == Word::Varname) {
-														ByteCode ref = getVar(arg);
-														arg = GetConstValue(ref);
-													} else if (arg == Word::ExpressionBegin) {
-														arg = computeConstExpression(line.words, nextWordIndex, argEnd-1);
-													}
-													if (arg == Word::Numeric) {
-														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_NUMERIC, arg));
-													} else if (arg == Word::Text) {
-														rom_vars_init.emplace_back(declareVar(name+".init."+std::to_string(argIndex), ROM_CONST_TEXT, arg));
-													} else {
-														validate(false);
-													}
-													nextWordIndex = argEnd+1;
+												if (!Device::deviceFunctionsByName.contains(funcName)) {
+													throw CompileError("Function", funcName, "does not exist");
 												}
-											}
+												auto& function = Device::deviceFunctionsByName.at(funcName);
+												if (function.returnType == "number") {
+													retType = RAM_VAR_NUMERIC;
+												} else if (function.returnType == "text") {
+													retType = RAM_VAR_TEXT;
+												} else if (function.returnType == "") {
+													throw CompileError("A function call here should return a value, but", funcName, "does not");
+												} else {
+													validate(Device::objectTypesByName.contains(function.returnType));
+													retType = CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(function.returnType).id);
+												}
+												
+												ByteCode var = declareVar(name, retType);
+												name = ""; // Do not declare the variable again for recursive calls
+												std::vector<ByteCode> args {};
+												
+												if (Word nextWord = readWord(); nextWord && nextWord == Word::ExpressionBegin) {
+													for (int argIndex = 0; nextWordIndex < (int)line.words.size(); ++argIndex) {
+														int argEnd = GetArgEnd(line.words, nextWordIndex);
+														if (argEnd == -1) {
+															break;
+														}
+														
+														Word arg = readWord();
+														if (arg == Word::CommaOperator) {
+															continue;
+														}
+														if (arg == Word::Varname) {
+															ByteCode ref = getVar(arg);
+															arg = GetConstValue(ref);
+														} else if (arg == Word::ExpressionBegin) {
+															arg = computeConstExpression(line.words, nextWordIndex, argEnd-1);
+														}
+														if (arg == Word::Numeric) {
+															args.emplace_back(declareVar("", ROM_CONST_NUMERIC, arg));
+														} else if (arg == Word::Text) {
+															args.emplace_back(declareVar("", ROM_CONST_TEXT, arg));
+														} else if (arg == Word::Name) {
+															args.emplace_back(compileConstFunctionCall(arg.word));
+														} else {
+															validate(false);
+														}
+														nextWordIndex = argEnd+1;
+													}
+												}
+												
+												rom_vars_init.emplace_back(DEV);
+												rom_vars_init.emplace_back(DEVICE_FUNCTION_INDEX, function.id);
+												rom_vars_init.emplace_back(var);
+												for (auto arg : args) {
+													rom_vars_init.emplace_back(arg);
+												}
+												rom_vars_init.emplace_back(VOID);
 											
-											rom_vars_init.emplace_back(VOID);
+												return var;
+											};
 											
+											compileConstFunctionCall(value.word);
 										} else {
 											validate(false);
 										}
