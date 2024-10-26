@@ -5017,6 +5017,14 @@ const int VERSION_PATCH = 0;
 			uint32_t io = 256; // Number of input/output ports
 		} capability;
 		
+		enum class CycleState : uint8_t {
+			NONE = 0,
+			BOOT,
+			VARS_INIT,
+			SYSTEM_INIT,
+			RUN,
+		} cycleState = CycleState::NONE;
+		
 		uint64_t currentCycleInstructions = 0;
 		std::unordered_map<std::string, std::vector<std::string>> storageCache {};
 		bool storageDirty = false;
@@ -5275,6 +5283,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		virtual bool Bootup() {
+			cycleState = CycleState::BOOT;
 			{// Check Capabilities
 				// Do we have enough RAM to run this program?
 				if (capability.ram < RamLen()) {
@@ -5317,6 +5326,7 @@ const int VERSION_PATCH = 0;
 				delete assembly;
 				assembly = nullptr;
 			}
+			cycleState = CycleState::NONE;
 		}
 		
 		virtual void Shutdown() {
@@ -5751,8 +5761,10 @@ const int VERSION_PATCH = 0;
 		bool RunInit() {
 			if (assembly) {
 				currentCycleInstructions = 0;
+				cycleState = CycleState::VARS_INIT;
 				RunCode(assembly->rom_vars_init);
 				if (assembly->functionRefs.contains("system.init")) {
+					cycleState = CycleState::SYSTEM_INIT;
 					RunCode(assembly->rom_program, assembly->functionRefs["system.init"]);
 				}
 				return true;
@@ -5761,6 +5773,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		void RunCycle() {
+			cycleState = CycleState::RUN;
 			assert(assembly);
 			currentCycleInstructions = 0;
 			double time = GetCurrentTimestamp();
