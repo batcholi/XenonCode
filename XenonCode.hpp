@@ -6575,7 +6575,7 @@ const int VERSION_PATCH = 0;
 													values.push_back(MemGetText(c));
 												}
 											}
-											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											if (arr_index > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											array.insert(array.begin()+arr_index, values.begin(), values.end());
 											storageDirty = true;
 										}break;
@@ -6587,7 +6587,7 @@ const int VERSION_PATCH = 0;
 											std::vector<double> values{};
 											values.reserve(args.size());
 											for (const auto& c : args) values.push_back(MemGetNumeric(c));
-											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											if (arr_index > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											array.insert(array.begin()+arr_index, values.begin(), values.end());
 										}break;
 										case RAM_ARRAY_TEXT:{
@@ -6598,7 +6598,7 @@ const int VERSION_PATCH = 0;
 											std::vector<std::string> values{};
 											values.reserve(args.size());
 											for (const auto& c : args) values.push_back(MemGetText(c));
-											if (arr_index >= (int)array.size()) throw RuntimeError("Invalid array index");
+											if (arr_index > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											array.insert(array.begin()+arr_index, values.begin(), values.end());
 										}break;
 									}
@@ -6619,7 +6619,7 @@ const int VERSION_PATCH = 0;
 										case STORAGE_ARRAY_NUMERIC:
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(arr);
-											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											if (index2 == arr_index+1) {
 												array.erase(array.begin()+arr_index);
 											} else {
@@ -6629,7 +6629,7 @@ const int VERSION_PATCH = 0;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
-											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											if (index2 == arr_index+1) {
 												array.erase(array.begin()+arr_index);
 											} else {
@@ -6638,7 +6638,7 @@ const int VERSION_PATCH = 0;
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
-											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index");
+											if (index2 > (int)array.size()) throw RuntimeError("Invalid array index out of bounds");
 											if (index2 == arr_index+1) {
 												array.erase(array.begin()+arr_index);
 											} else {

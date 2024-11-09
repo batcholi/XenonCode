@@ -628,7 +628,7 @@ These functions MUST be called as trailing functions, and they do not return any
 - $myArray.`sortd`() Sort an array in Descending order
 - $myArray.`append`(value) Append a new value to an array
 - $myArray.`pop`() Erase the last value in an array, reducing its size by one
-- $myArray.`insert`(index, value) Insert a new value to an array after a position, pushing back all following values by one
+- $myArray.`insert`(index, value) Insert a new value to an array at a specific position, pushing back all following values by one
 - $myArray.`erase`(index) Erase an element from an array at a specific index, pulling back all following values by one
 - $myArray.`fill`(qty, value) Resize and Fill an array with a given size and the specified value for all items (this clears any values previously present in the array)
 - $myArray.`from`(other [, separator]) Set the contents of the array to another array or text. Separator is for splitting with a specific string (only valid when other is a text). This function also works in reverse when executed on a text given an array and a separator.
