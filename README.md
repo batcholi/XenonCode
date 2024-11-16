@@ -136,7 +136,7 @@ This language is designed to potentially be executed Server-side in the context 
 - No pointer nor reference types (except for implementation-defined objects, which must be sanitized by the implementation at runtime)
 - The number of instructions per cycle may be limited, upon which an overflow may cause a virtual crash for the user
 - Arrays may be limited in size at runtime, upon which an overflow may trigger a virtual crash for the user
-- Recursive stack (calling a function recursively) is NOT allowed for the user
+- Recursive stack (calling a function recursively) is allowed with a specific syntax and is limited to 16 recursions
 - Functions MUST be fully defined BEFORE their use, so the order of definition matters (this is what enforces the previous point)
 
 ### Per-Virtual-Computer limitations
@@ -185,6 +185,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `init` Define the body of the init function, which will execute once when the device is powered on
 - `tick` declare the body of the tick function that will execute at each clock cycle
 - `function` declare a user-defined function
+- `recursive function` declare a user-defined function that may call itself recursively
 - `timer` Define the body of a function that will execute repeatedly at a specific frequency in Hz
 - `input` Define an input function
 - `;` Comments
@@ -545,6 +546,19 @@ This returned value may be assigned to a variable like so :
 $value = @func1(4, 6)
 ```
 
+# Recursive functions
+A recursive function is a function that calls itself.
+To define a recursive function, use `recursive function` and `recurse` to call the function itself.
+```xc
+recursive function @recursiveFunc($myVar:number)
+    if $myVar < 15
+        recurse($myVar++)
+```
+This example of a recursive function will call itself as long as the value of $myVar is less than 15.
+Recursive functions are limited to 16 recursive calls.
+
+Note: The `recurse` keyword is only available within recursive functions and is used to call the function itself. The argument list must be the same as the function definition.
+
 # Trailing functions
 Any function may be called as a trailing function, even user-defined functions.  
 The way they work is that under the hood the leading variable is passed as the first argument to that function, and then assigned the returning value.  
@@ -626,7 +640,7 @@ These functions MUST be called as trailing functions, and they do not return any
 - $myArray.`clear`() Empty an array
 - $myArray.`sort`() Sort an array in Ascending order
 - $myArray.`sortd`() Sort an array in Descending order
-- $myArray.`append`(value) Append a new value to an array
+- $myArray.`append`(value1, value2, ...) Append one or more values to the end of an array.
 - $myArray.`pop`() Erase the last value in an array, reducing its size by one
 - $myArray.`insert`(index, value) Insert a new value to an array at a specific position, pushing back all following values by one
 - $myArray.`erase`(index) Erase an element from an array at a specific index, pulling back all following values by one
