@@ -241,6 +241,10 @@ function @RunUnitTests()
 	else
 		$results.append("ERROR")
 	
+	; test 22
+	for 3,8 ($i)
+		$results.append($i)
+	
 init
 	output.0 ("Hello, World!")
 	

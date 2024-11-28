@@ -19,7 +19,8 @@
 - `if`/`elseif`/`else` conditionals
 - `while` loops
 - `foreach` loops for arrays
-- `repeat n` loops (akin to `for (i=0;i<n;i++)` in most other languages)
+- `repeat n` loops
+- `for` loops with first and last index
 
 # Sample code
 
@@ -78,6 +79,10 @@ init
 	repeat 3 ($i)
 		output.1 ($i)
 
+	; for loops
+	for 3,8 ($i)
+		; value of $i will go from 3 to 8 inclusively
+	
 ```
 
 ## Types of developer
@@ -201,6 +206,7 @@ XenonCode is designed to be compiled as byteCode which is very fast to parse by 
 - `foreach` loops through all items of an array
 - `repeat` loops a block of code n times
 - `while` loops as long as a condition evaluates to true
+- `for` loops a block of code, given a first and last index
 - `break` stops a loop here as if it completed all iterations
 - `continue` stops this iteration of a loop here and run the next iteration immediately
 - `if` runs a block of code if a condition evaluates to true
@@ -375,6 +381,13 @@ repeat 5 ($i)
     ; CAUTION: $i is a reference used internally for the loop, don't modify its value unless you actually want to affect the loop
 ```
 The number of times (above specified as 5) may also be specified via a variable or a constant, but not an expression
+
+## For loops
+This loop is similar to repeat but takes in a first and last index instead of a number of repeats
+```xc
+for 3,8 ($i)
+	; $i will start at 3, and end with 8, inclusively, for a total of 6
+```
 
 ## While loops
 This loop will run the following block as long as the given condition evaluates to true.  

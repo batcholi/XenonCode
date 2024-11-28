@@ -1491,6 +1491,7 @@ const int VERSION_PATCH = 0;
 		"foreach",
 		"repeat",
 		"while",
+		"for",
 		"break",
 		"continue",
 		"if",
@@ -1779,6 +1780,23 @@ const int VERSION_PATCH = 0;
 							}
 						} else
 						
+					// for
+						if (words[0] == "for") {
+							if (words.size() < 4 || (words[1] != Word::Numeric && words[1] != Word::Varname)
+								|| words[2] != Word::CommaOperator
+								|| (words[3] != Word::Numeric && words[3] != Word::Varname)) {
+								throw ParseError("For must be followed by start and end values separated by a comma");
+							}
+							// loop variable
+							if (words.size() > 4) {
+								if (words[4] != Word::ExpressionBegin || words.size() < 6 || words[5] != Word::Varname || words[6] != Word::ExpressionEnd) {
+									throw ParseError("For loop optional variable must be within parentheses");
+								}
+							} else {
+								throw ParseError("Too few words");
+							}
+						} else
+						
 					// break
 						if (words[0] == "break") {
 							if (words.size() != 1) throw ParseError("Too many words");
@@ -2060,8 +2078,8 @@ const int VERSION_PATCH = 0;
 	DEF_OP( NEQ /* REF_DST REF_A REF_B */ ) // !=
 	DEF_OP( LST /* REF_DST REF_A REF_B */ ) // <
 	DEF_OP( GRT /* REF_DST REF_A REF_B */ ) // >
-	DEF_OP( LTE /* REF_DST REF_A REF_B */ ) // >=
-	DEF_OP( GTE /* REF_DST REF_A REF_B */ ) // <=
+	DEF_OP( LTE /* REF_DST REF_A REF_B */ ) // <=
+	DEF_OP( GTE /* REF_DST REF_A REF_B */ ) // >=
 	DEF_OP( INC /* REF_NUM */ ) // ++
 	DEF_OP( DEC /* REF_NUM */ ) // --
 	DEF_OP( NOT /* REF_DST REF_VAL */ ) // !
@@ -2368,7 +2386,7 @@ const int VERSION_PATCH = 0;
 
 	struct Stack {
 		int id; // a unique id, at least per function
-		std::string type; // function, if, elseif, else, foreach, while, repeat
+		std::string type; // function, if, elseif, else, foreach, while, repeat, for
 		std::unordered_map<std::string, uint32_t> pointers;
 		Stack(int id_, std::string type_) : id(id_), type(type_), pointers() {}
 	};
@@ -4483,6 +4501,66 @@ const int VERSION_PATCH = 0;
 									write(condition);
 									write(indexRef);
 									write(nRef);
+									write(VOID);
+									
+									// Check condition to continue or break
+									write(CND);
+									addPointer("LoopContinue") = write(ADDR);
+									addPointer("LoopBreak") = write(ADDR);
+									write(condition);
+									write(VOID);
+									
+									applyPointerAddr("LoopContinue");
+								}
+								// for
+								else if (firstWord == "for") {
+									pushStack("loop");
+									
+									Word start = readWord();
+									readWord(Word::CommaOperator);
+									Word end = readWord();
+									
+									ByteCode startRef, endRef;
+									if (start == Word::Varname) {
+										startRef = getVar(start);
+									} else if (start == Word::Numeric) {
+										startRef = declareVar("", ROM_CONST_NUMERIC, start);
+									}
+									if (end == Word::Varname) {
+										endRef = getVar(end);
+									} else if (end == Word::Numeric) {
+										endRef = declareVar("", ROM_CONST_NUMERIC, end);
+									}
+									validate(IsNumeric(startRef) && IsNumeric(endRef));
+									
+									readWord(Word::ExpressionBegin);
+									Word index = readWord(Word::Varname);
+									validate(readWord() == Word::ExpressionEnd);
+									validate(nextWordIndex == (int)line.words.size());
+									ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
+									
+									// Set index to start - 1
+									write(SET);
+									write(indexRef);
+									write(startRef);
+									write(VOID);
+									write(DEC);
+									write(indexRef);
+									write(VOID);
+									
+									addPointer("LoopBegin") = addr();
+									
+									// Increment index
+									write(INC);
+									write(indexRef);
+									write(VOID);
+									
+									// Assign condition
+									ByteCode condition = declareTmpNumeric();
+									write(LTE);
+									write(condition);
+									write(indexRef);
+									write(endRef);
 									write(VOID);
 									
 									// Check condition to continue or break
