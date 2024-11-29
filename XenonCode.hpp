@@ -1782,15 +1782,21 @@ const int VERSION_PATCH = 0;
 						
 					// for
 						if (words[0] == "for") {
-							if (words.size() < 4 || (words[1] != Word::Numeric && words[1] != Word::Varname)
-								|| words[2] != Word::CommaOperator
-								|| (words[3] != Word::Numeric && words[3] != Word::Varname)) {
-								throw ParseError("For must be followed by start and end values separated by a comma");
+							if (words.size() < 7) {
+								throw ParseError("FOR must be followed by start and end values separated by a comma, and a set of parenthesis containing the loop variable");
+							}
+							if (words[1] == Word::AddOperatorGroup && words[2] == Word::Numeric && words[3] == Word::CommaOperator) {
+								words[2].word = words[1].word + words[2].word;
+								words.erase(words.begin() + 1);
+							}
+							if (words[3] == Word::AddOperatorGroup && words[4] == Word::Numeric && words[5] == Word::ExpressionBegin) {
+								words[4].word = words[3].word + words[4].word;
+								words.erase(words.begin() + 3);
 							}
 							// loop variable
-							if (words.size() > 4) {
+							if (words.size() > 6) {
 								if (words[4] != Word::ExpressionBegin || words.size() < 6 || words[5] != Word::Varname || words[6] != Word::ExpressionEnd) {
-									throw ParseError("For loop optional variable must be within parentheses");
+									throw ParseError("For loop variable must be within parentheses");
 								}
 							} else {
 								throw ParseError("Too few words");
@@ -4539,28 +4545,61 @@ const int VERSION_PATCH = 0;
 									validate(nextWordIndex == (int)line.words.size());
 									ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
 									
-									// Set index to start - 1
+									ByteCode diffres = declareTmpNumeric();
+									write(SUB);
+									write(diffres);
+									write(endRef);
+									write(startRef);
+									write(VOID);
+									
+									ByteCode step = declareTmpNumeric();
+									write(SIG);
+									write(step);
+									write(diffres);
+									write(VOID);
+									
+									// Set index to round(start - step)
 									write(SET);
 									write(indexRef);
 									write(startRef);
 									write(VOID);
-									write(DEC);
+									write(SUB);
 									write(indexRef);
+									write(indexRef);
+									write(step);
+									write(VOID);
+									write(RND);
+									write(indexRef);
+									write(indexRef);
+									write(VOID);
+									
+									// Set lastRef to round(end + step)
+									ByteCode lastRef = declareTmpNumeric();
+									write(ADD);
+									write(lastRef);
+									write(endRef);
+									write(step);
+									write(VOID);
+									write(RND);
+									write(lastRef);
+									write(lastRef);
 									write(VOID);
 									
 									addPointer("LoopBegin") = addr();
 									
 									// Increment index
-									write(INC);
+									write(ADD);
 									write(indexRef);
+									write(indexRef);
+									write(step);
 									write(VOID);
 									
 									// Assign condition
 									ByteCode condition = declareTmpNumeric();
-									write(LTE);
+									write(NEQ);
 									write(condition);
 									write(indexRef);
-									write(endRef);
+									write(lastRef);
 									write(VOID);
 									
 									// Check condition to continue or break

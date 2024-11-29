@@ -245,6 +245,10 @@ function @RunUnitTests()
 	for 3,8 ($i)
 		$results.append($i)
 	
+	; test 23
+	for -1,-5 ($i)
+		$results.append($i)
+	
 init
 	output.0 ("Hello, World!")
 	
