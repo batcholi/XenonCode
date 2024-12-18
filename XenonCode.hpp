@@ -16,6 +16,10 @@
 #include <functional>
 #include <cstring>
 
+#ifndef XC_NAMESPACE
+	#define XC_NAMESPACE XenonCode
+#endif
+
 #pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
 #ifdef VOID
 	#undef VOID
@@ -250,7 +254,7 @@
 #endif
 #pragma endregion
 
-namespace XenonCode {
+namespace XC_NAMESPACE {
 
 // Version
 const int VERSION_MAJOR = 0; // Requires assembly compiled with the same major version
@@ -2373,11 +2377,11 @@ const int VERSION_PATCH = 0;
 		Device::objectTypesList.emplace_back(name);
 		assert(Device::objectTypesList.size() == size_t(id));
 		for (auto&[prototype, method] : members) {
-			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](Computer* computer, const std::vector<Var>& args) -> XenonCode::Var {
+			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](Computer* computer, const std::vector<Var>& args) -> Var {
 				if (args.size() > 0) {
 					return method(computer, args[0], std::vector<Var>(args.begin()+1, args.end()));
 				} else {
-					throw XenonCode::RuntimeError("Invalid object member arguments");
+					throw RuntimeError("Invalid object member arguments");
 				}
 			}, id);
 			func.args.insert(func.args.begin(), Device::FunctionInfo::Arg{"_this", name});
@@ -5985,7 +5989,7 @@ const int VERSION_PATCH = 0;
 
 #ifdef XENONCODE_IMPLEMENTATION
 
-	namespace XenonCode {
+	namespace XC_NAMESPACE {
 		
 		std::vector<std::string> Implementation::entryPoints {};
 		std::unordered_map<std::string, ObjectType> Device::objectTypesByName {};
