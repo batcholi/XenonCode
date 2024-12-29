@@ -676,6 +676,12 @@ Using the trail operator `.`, we can also return a specific information about ce
 These also work on arrays.  
 - `isnumeric`($myText) returns 1 if $myText is a number, otherwise 0
 
+### Ternary operator
+The ternary operator is a shorthand conditional expression that returns a value depending on the evaluation of a condition.
+```xc
+$myVar = if($cond, $valTrue, $valFalse)
+```
+
 ### Device functions
 An implementation should define application-specific device functions.  
 Here are examples of basic device functions that MAY or MAY NOT be defined:  
