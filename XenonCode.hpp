@@ -252,6 +252,9 @@
 #ifdef LCC
 	#undef LCC
 #endif
+#ifdef ISN
+	#undef ISN
+#endif
 #pragma endregion
 
 namespace XC_NAMESPACE {
@@ -2144,6 +2147,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( HSH /* REF_DST REF_VAL */ ) // hash(text)
 	DEF_OP( UPP /* REF_DST REF_TXT */ ) // upper(text)
 	DEF_OP( LCC /* REF_DST REF_TXT */ ) // lower(text)
+	DEF_OP( ISN /* REF_DST REF_TXT */ ) // isnumeric(text)
 
 #pragma endregion
 
@@ -2525,6 +2529,7 @@ const int VERSION_PATCH = 0;
 		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return HSH;}
 		if (func == "upper") {returnType = RAM_VAR_TEXT; return UPP;}
 		if (func == "lower") {returnType = RAM_VAR_TEXT; return LCC;}
+		if (func == "isnumeric") {returnType = RAM_VAR_NUMERIC; return ISN;}
 		returnType = VOID;
 		return DEV;
 	}
@@ -7573,6 +7578,20 @@ const int VERSION_PATCH = 0;
 										std::string str = MemGetText(val);
 										strtolower(str);
 										MemSet(str, dst);
+									} else throw RuntimeError("Invalid text operation on non-text values");
+								}break;
+								case ISN: {// REF_DST REF_SRC
+									ByteCode dst = nextCode();
+									ByteCode val = nextCode();
+									if (IsText(val)) {
+										std::string s = MemGetText(val);
+										bool isNum = false;
+										try {
+											size_t pos;
+											std::stod(s, &pos);
+											isNum = (pos == s.size());
+										} catch(...) {}
+										MemSet(isNum, dst);
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
 							}

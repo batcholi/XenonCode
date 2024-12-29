@@ -248,6 +248,12 @@ function @RunUnitTests()
 	; test 23
 	for -1,-5 ($i)
 		$results.append($i)
+		
+	; test 24
+	$results.append(isnumeric("-12364.12"))
+	$results.append(isnumeric("123gg64a"))
+	$results.append(isnumeric("(546)"))
+	$results.append(isnumeric(""))
 	
 init
 	output.0 ("Hello, World!")
