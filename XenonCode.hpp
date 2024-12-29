@@ -252,6 +252,12 @@
 #ifdef LCC
 	#undef LCC
 #endif
+#ifdef ISN
+	#undef ISN
+#endif
+#ifdef IFF
+	#undef IFF
+#endif
 #pragma endregion
 
 namespace XC_NAMESPACE {
@@ -2144,6 +2150,8 @@ const int VERSION_PATCH = 0;
 	DEF_OP( HSH /* REF_DST REF_VAL */ ) // hash(text)
 	DEF_OP( UPP /* REF_DST REF_TXT */ ) // upper(text)
 	DEF_OP( LCC /* REF_DST REF_TXT */ ) // lower(text)
+	DEF_OP( ISN /* REF_DST REF_TXT */ ) // isnumeric(text)
+	DEF_OP( IFF /* REF_DST REF_TXT */ ) // if(cond, valTrue, valFalse)
 
 #pragma endregion
 
@@ -2525,6 +2533,8 @@ const int VERSION_PATCH = 0;
 		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return HSH;}
 		if (func == "upper") {returnType = RAM_VAR_TEXT; return UPP;}
 		if (func == "lower") {returnType = RAM_VAR_TEXT; return LCC;}
+		if (func == "isnumeric") {returnType = RAM_VAR_NUMERIC; return ISN;}
+		if (func == "if") {returnType = VOID /*NUMERIC|TEXT*/; return IFF;}
 		returnType = VOID;
 		return DEV;
 	}
@@ -3025,6 +3035,27 @@ const int VERSION_PATCH = 0;
 								case STORAGE_ARRAY_TEXT:
 								case RAM_VAR_TEXT:
 								case RAM_ARRAY_TEXT:
+									retType = RAM_VAR_TEXT;
+								break;
+								default: throw CompileError("Invalid argument type");
+							}
+						} else {
+							throw CompileError("Cannot call", funcName, "here");
+						}
+					} else if (f == IFF) {
+						if (getReturn) {
+							if (args.size() != 3) {
+								throw CompileError("Invalid arguments");
+							}
+							switch (args[1].type) {
+								case RAM_VAR_NUMERIC:
+								case ROM_CONST_NUMERIC:
+								case STORAGE_VAR_NUMERIC:
+									retType = RAM_VAR_NUMERIC;
+								break;
+								case RAM_VAR_TEXT:
+								case ROM_CONST_TEXT:
+								case STORAGE_VAR_TEXT:
 									retType = RAM_VAR_TEXT;
 								break;
 								default: throw CompileError("Invalid argument type");
@@ -7574,6 +7605,35 @@ const int VERSION_PATCH = 0;
 										strtolower(str);
 										MemSet(str, dst);
 									} else throw RuntimeError("Invalid text operation on non-text values");
+								}break;
+								case ISN: {// REF_DST REF_SRC
+									ByteCode dst = nextCode();
+									ByteCode val = nextCode();
+									if (IsText(val)) {
+										std::string s = MemGetText(val);
+										bool isNum = false;
+										try {
+											size_t pos;
+											std::stod(s, &pos);
+											isNum = (pos == s.size());
+										} catch(...) {}
+										MemSet(isNum, dst);
+									} else throw RuntimeError("Invalid text operation on non-text values");
+								}break;
+								case IFF: { // REF_DST REF_BOOL REF_TRUE REF_FALSE
+									ByteCode dst = nextCode();
+									ByteCode cond = nextCode();
+									ByteCode valTrue = nextCode();
+									ByteCode valFalse = nextCode();
+									if (IsText(valTrue)) {
+										std::string str = MemGetBoolean(cond)? MemGetText(valTrue) : MemGetText(valFalse, ARRAY_INDEX_NONE);
+										MemSet(str, dst);
+									} else if (IsNumeric(valTrue)) {
+										double num = MemGetBoolean(cond)? MemGetNumeric(valTrue) : MemGetNumeric(valFalse);
+										MemSet(num, dst);
+									} else {
+										throw RuntimeError("Invalid operation");
+									}
 								}break;
 							}
 						}break;
