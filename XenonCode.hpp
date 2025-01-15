@@ -5188,11 +5188,18 @@ const int VERSION_PATCH = 0;
 			ClearAssemly();
 		}
 		
+		// Compile to bytecode and write to output stream
+		static bool CompileAssembly(std::ostream& stream, const std::vector<ParsedLine>& lines, bool verbose = false) {
+			Assembly assembly(lines, verbose);
+			assembly.Write(stream);
+			stream.flush(); //TODO: Needed?
+			return true;
+		}
+
 		// Compile to bytecode and save assembly
 		static bool CompileAssembly(const std::string& directory, const std::vector<ParsedLine>& lines, bool verbose = false) {
-			Assembly assembly(lines, verbose);
 			std::ofstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::out | std::ios::trunc | std::ios::binary};
-			assembly.Write(file);
+			CompileAssembly(file, lines, verbose);
 			return file.good();
 		}
 		
@@ -5397,15 +5404,18 @@ const int VERSION_PATCH = 0;
 			// Ready
 			return true;
 		}
+
+		// From an input stream
+		virtual bool LoadProgram(std::istream& stream) {
+			ClearAssemly();
+			assembly = new Assembly(stream);
+			return Bootup();
+		}
 		
 		// From a compiled assembly
 		virtual bool LoadProgram(const std::string& directory) {
 			std::ifstream file{directory + "/" + XC_PROGRAM_EXECUTABLE, std::ios::binary};
-			
-			ClearAssemly();
-			assembly = new Assembly(file);
-			
-			return Bootup();
+			return LoadProgram(file);		
 		}
 		
 		// From a source code
