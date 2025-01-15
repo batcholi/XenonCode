@@ -5192,7 +5192,6 @@ const int VERSION_PATCH = 0;
 		static bool CompileAssembly(std::ostream& stream, const std::vector<ParsedLine>& lines, bool verbose = false) {
 			Assembly assembly(lines, verbose);
 			assembly.Write(stream);
-			stream.flush(); //TODO: Needed?
 			return true;
 		}
 
