@@ -260,6 +260,10 @@ function @RunUnitTests()
 	$results.append(if(0, "OK", 12))
 	$results.append(if(1, 15, "OK"))
 	
+	; test 26
+	for 1,1 ($i)
+		$results.append($i)
+	
 init
 	output.0 ("Hello, World!")
 	

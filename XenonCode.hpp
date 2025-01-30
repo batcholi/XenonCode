@@ -2111,7 +2111,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( ABS /* REF_DST REF_NUM */ ) // abs(number)
 	DEF_OP( FRA /* REF_DST REF_NUM */ ) // fract(number)
 	DEF_OP( SQR /* REF_DST REF_NUM */ ) // sqrt(number)
-	DEF_OP( SIG /* REF_DST REF_NUM */ ) // sign(number)
+	DEF_OP( SIG /* REF_DST REF_NUM */ ) // sign(number [, default])
 	DEF_OP( LOG /* REF_DST REF_NUM REF_BASE */ ) // log(number, base)
 	DEF_OP( CLP /* REF_DST REF_NUM REF_MIN REF_MAX */ ) // clamp(number, min, max)
 	DEF_OP( STP /* REF_DST REF_T1 REF_T2 REF_NUM */ ) // step(t1, t2, number)
@@ -4591,6 +4591,7 @@ const int VERSION_PATCH = 0;
 									write(SIG);
 									write(step);
 									write(diffres);
+									write(declareVar("", ROM_CONST_NUMERIC, Word{1}));
 									write(VOID);
 									
 									// Set index to round(start - step)
@@ -6392,9 +6393,11 @@ const int VERSION_PATCH = 0;
 								case SIG: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
+									ByteCode defaultVal = nextCode();
 									double num = MemGetNumeric(val);
 									if (num > 0.0) num = 1.0;
 									else if (num < 0.0) num = -1.0;
+									else if (defaultVal) num = MemGetNumeric(defaultVal);
 									MemSet(num, dst);
 								}break;
 								case LOG: {// REF_DST REF_NUM REF_BASE
