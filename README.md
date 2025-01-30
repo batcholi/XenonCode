@@ -608,7 +608,7 @@ Trailing math functions will use the leading variable as its first argument and 
 - `fract`(number)
 - `log`(number, base)
 - `sqrt`(number)
-- `sign`(number)
+- `sign`(number [, default])
 - `pow`(number, exponent)
 - `clamp`(number, minimum, maximum)
 - `step`(edge1, edge2, number) or (edge, number)

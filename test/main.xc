@@ -264,6 +264,12 @@ function @RunUnitTests()
 	for 1,1 ($i)
 		$results.append($i)
 	
+	; test 27
+	$results.append(sign(2, -1))
+	$results.append(sign(-2))
+	$results.append(sign(0))
+	$results.append(sign(0, 1))
+	
 init
 	output.0 ("Hello, World!")
 	
