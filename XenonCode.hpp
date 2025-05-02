@@ -1958,13 +1958,13 @@ const int VERSION_PATCH = 0;
 			lines.emplace_back(Word{Word::FileInfo, filepath});
 			
 			int lineNumber = 1;
-			int scope = 0;
+			//int scope = 0;
 			
 			// Parse all lines
 			for (std::string lineStr; getline(stream, lineStr); lineNumber++) {
 				try {
-					auto& line = lines.emplace_back(lineStr, lineNumber);
-					scope = line.scope;
+					//auto& line = lines.emplace_back(lineStr, lineNumber);
+					//scope = line.scope;
 				} catch (ParseError& e) {
 					std::stringstream err {};
 					err << e.what() << " in " << filepath << ":" << lineNumber;
@@ -3144,12 +3144,12 @@ const int VERSION_PATCH = 0;
 				if (reg == "") reg = std::to_string(stack.back().pointers.size()+1);
 				return stack.back().pointers[reg];
 			};
-			auto getPointer = [&](const std::string& reg) -> ByteCode {
-				assert(stack.size() > 0);
-				if (stack.back().pointers.contains(reg)) {
-					return rom_program[stack.back().pointers.at(reg)];
-				}
-			};
+			//auto getPointer = [&](const std::string& reg) -> ByteCode {
+			//	assert(stack.size() > 0);
+			//	if (stack.back().pointers.contains(reg)) {
+			//		return rom_program[stack.back().pointers.at(reg)];
+			//	}
+			//};
 			auto applyPointerAddr = [&](const std::string& reg){
 				assert(stack.size() > 0);
 				if (stack.back().pointers.contains(reg)) {
@@ -4436,7 +4436,7 @@ const int VERSION_PATCH = 0;
 										write(VOID);
 										
 										// Check condition (key != "")
-										ByteCode condition = declareTmpNumeric();
+										//ByteCode condition = declareTmpNumeric();
 										write(CND);
 										addPointer("LoopContinue") = write(ADDR);
 										addPointer("LoopBreak") = write(ADDR);
