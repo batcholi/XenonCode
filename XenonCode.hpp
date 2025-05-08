@@ -4059,6 +4059,7 @@ const int VERSION_PATCH = 0;
 							if (line.scope == currentScope - 1) {
 								if (firstWord == "elseif" || firstWord == "else") {
 									validate(stack.back().type == "if");
+									userVars[currentFunctionName][currentStackId].clear(); // popStack+pushStack would cause our pointers to be lost
 									break;
 								}
 							}
@@ -5996,10 +5997,12 @@ const int VERSION_PATCH = 0;
 			return false;
 		}
 		
-		void RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
+		bool RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
+			bool found = false;
 			strtolower(name);
 			for (const auto& entryPoint : assembly->entryPoints) {
 				if (entryPoint.name == name && EntryPointMatches(entryPoint, ref)) {
+					found = true;
 					
 					// Write args
 					for (size_t i = 0; i < args.size(); ++i) {
@@ -6020,6 +6023,7 @@ const int VERSION_PATCH = 0;
 					RunCode(assembly->rom_program, entryPoint.addr);
 				}
 			}
+			return found;
 		}
 		
 	};
