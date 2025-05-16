@@ -1963,7 +1963,7 @@ const int VERSION_PATCH = 0;
 			// Parse all lines
 			for (std::string lineStr; getline(stream, lineStr); lineNumber++) {
 				try {
-					//auto& line = lines.emplace_back(lineStr, lineNumber);
+					/* auto& line = */ lines.emplace_back(lineStr, lineNumber);
 					//scope = line.scope;
 				} catch (ParseError& e) {
 					std::stringstream err {};
