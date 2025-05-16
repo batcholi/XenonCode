@@ -19,8 +19,6 @@ recursive function @fib($n: number): number
 function @increment($v:number):number
 	return $v + 1
 
-# tests
-
 function @RunUnitTests()
 	
 	; Test 1
@@ -225,9 +223,11 @@ function @RunUnitTests()
 	
 	; test 19
 	if 0.5 == 0
-		$results.append("ERROR")
+		var $msg = "ERROR"
+		$results.append($msg)
 	else
-		$results.append("OK")
+		var $msg = "OK"
+		$results.append($msg)
 	
 	; test 20
 	$results.append(upper("hello"))

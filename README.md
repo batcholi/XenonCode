@@ -161,7 +161,7 @@ These are defined per implementation and may include multiple variants or be cus
 - Variable assignments always copy the value for generic types
 - Implementation-defined objects are always passed by reference
 - Implementation-defined objects cannot be copied unless the implementation provides that functionality through a device function
-- Divisions by zero results in the value zero. It is at the responsibility of the user to make sure to account for it.
+- Divisions by zero results in a runtime error. It is at the responsibility of the user to make sure to account for it.
 
 ### Basic rules
 - Variables may be declared using `var` and optionally assigned an initial value otherwise the generic default is used (0 for number and "" for text)
