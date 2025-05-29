@@ -2781,13 +2781,27 @@ const int VERSION_PATCH = 0;
 						
 					case ROM_CONST_NUMERIC:
 						if (!initialValue) throw CompileError("Const value not provided");
-						index = rom_numericConstants.size();
-						rom_numericConstants.emplace_back(initialValue);
+						{
+							auto it = std::find(rom_numericConstants.cbegin(), rom_numericConstants.cend(), static_cast<double>(initialValue));
+							if (it != rom_numericConstants.cend()) {
+								index = std::distance(rom_numericConstants.cbegin(), it);
+							} else {
+								index = rom_numericConstants.size();
+								rom_numericConstants.emplace_back(initialValue);
+							}	
+						}
 						break;
 					case ROM_CONST_TEXT:
 						if (!initialValue) throw CompileError("Const value not provided");
-						index = rom_textConstants.size();
-						rom_textConstants.emplace_back(initialValue);
+						{
+							auto it = std::find(rom_textConstants.cbegin(), rom_textConstants.cend(), static_cast<std::string>(initialValue));
+							if (it != rom_textConstants.cend()) {
+								index = std::distance(rom_textConstants.cbegin(), it);
+							} else {
+								index = rom_textConstants.size();
+								rom_textConstants.emplace_back(initialValue);
+							}	
+						}
 						break;
 						
 					case RAM_VAR_NUMERIC:
