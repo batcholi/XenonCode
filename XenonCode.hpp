@@ -3031,7 +3031,7 @@ const int VERSION_PATCH = 0;
 								validate(Device::objectTypesByName.contains(function.returnType));
 								retType = CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(function.returnType).id);
 							}
-						} else if (function.returnType != "" && !isTrailingFunction) {
+						} else if (function.returnType != "") {
 							write(DISCARD); // We may discard the return value of a device function
 						}
 					} else if (f == LAS) {
