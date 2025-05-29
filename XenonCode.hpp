@@ -5157,7 +5157,7 @@ const int VERSION_PATCH = 0;
 	};
 
 	inline static double GetCurrentTimestamp() {
-		std::chrono::time_point<std::chrono::system_clock, std::chrono::duration<double, std::milli>> time = std::chrono::high_resolution_clock::now();
+		std::chrono::time_point<std::chrono::system_clock, std::chrono::duration<double, std::milli>> time = std::chrono::system_clock::now();
 		return time.time_since_epoch().count() * 0.001;
 	}
 
@@ -6871,7 +6871,7 @@ const int VERSION_PATCH = 0;
 									ByteCode sep = nextCode();
 									std::string separator = sep.type != VOID? MemGetText(sep) : "";
 									if (!IsArray(arr) && !IsText(arr)) throw RuntimeError("Not an array or text");
-									auto fillArray = [&](std::vector<auto>& dst){
+									auto fillArray = [&](auto& dst){
 										dst.clear();
 										if (IsStorage(val)) {
 											auto& otherArray = GetStorage(val);
