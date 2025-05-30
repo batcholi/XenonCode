@@ -150,3 +150,11 @@ OK
 -1
 0
 1
+Test 29 - Global constants defined in main.cpp
+3.14159
+6.28319
+2
+8
+24
+This is test string 1
+This is test string 2

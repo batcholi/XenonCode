@@ -269,6 +269,16 @@ function @RunUnitTests()
 	$results.append(sign(-2))
 	$results.append(sign(0))
 	$results.append(sign(0, 1))
+
+	; test 29
+	$results.append("Test 29 - Global constants defined in main.cpp")
+	$results.append(pi)
+	$results.append(2pi)
+	$results.append(number_one * 2)
+	$results.append(number_two * 4)
+	$results.append(number_three * 8)
+	$results.append(test_str1)
+	$results.append(test_str2)
 	
 init
 	output.0 ("Hello, World!")

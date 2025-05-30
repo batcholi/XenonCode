@@ -12,6 +12,19 @@ bool isRunning = true;
 int64_t cyclesPerSecond = 0;
 
 void Init() {
+
+	// Define numeric global constants.
+	XenonCode::DeclareGlobalConstant("pi", 3.141592653589793238462643);
+	XenonCode::DeclareGlobalConstant("2pi", 2 * 3.141592653589793238462643);
+	XenonCode::DeclareGlobalConstant("number_one", 1);
+	XenonCode::DeclareGlobalConstant("number_two", 2);
+	XenonCode::DeclareGlobalConstant("number_three", 3);
+
+	// Define text global constants.
+	XenonCode::DeclareGlobalConstant("test_str1", "This is test string 1");
+	XenonCode::DeclareGlobalConstant("test_str2", "This is test string 2");
+
+	// Define callable entrypoints.
 	XenonCode::DeclareEntryPoint("shutdown");
 	
 	// Do NOT change the order of declarations once in production, just append new things after the last one. This is because scripts are compiled using the indices, which are based on the order they were declared.
