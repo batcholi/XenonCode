@@ -6588,10 +6588,11 @@ const int VERSION_PATCH = 0;
 										case STORAGE_ARRAY_NUMERIC:
 										case STORAGE_ARRAY_TEXT:{
 											auto& array = GetStorage(arr);
-											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
+											const auto newArraySize = array.size() + args.size();
+											if (newArraySize > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											array.reserve(args.size());
+											array.reserve(newArraySize);
 											for (const auto& c : args) {
 												if (IsNumeric(c)) {
 													array.push_back(ToString(MemGetNumeric(c)));
@@ -6603,18 +6604,20 @@ const int VERSION_PATCH = 0;
 										}break;
 										case RAM_ARRAY_NUMERIC:{
 											auto& array = GetNumericArray(arr);
-											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
+											const auto newArraySize = array.size() + args.size();
+											if (newArraySize > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											array.reserve(args.size());
+											array.reserve(newArraySize);
 											for (const auto& c : args) array.push_back(MemGetNumeric(c));
 										}break;
 										case RAM_ARRAY_TEXT:{
 											auto& array = GetTextArray(arr);
-											if (array.size() + args.size() > XC_MAX_ARRAY_SIZE) {
+											const auto newArraySize = array.size() + args.size();
+											if (newArraySize > XC_MAX_ARRAY_SIZE) {
 												throw RuntimeError("Maximum array size exceeded");
 											}
-											array.reserve(args.size());
+											array.reserve(newArraySize);
 											for (const auto& c : args) array.push_back(MemGetText(c));
 										}break;
 									}
