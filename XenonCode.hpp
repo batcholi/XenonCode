@@ -1493,6 +1493,8 @@ const int VERSION_PATCH = 0;
 	};
 	
 	struct Implementation {
+		static std::unordered_map<std::string, double> globalNumericConstants;
+		static std::unordered_map<std::string, std::string> globalTextConstants;
 		static std::vector<std::string> entryPoints;
 	};
 
@@ -2348,6 +2350,26 @@ const int VERSION_PATCH = 0;
 		
 		static OutputFunction outputFunction;
 	};
+
+	// Declare a global numeric constant.
+	static void DeclareGlobalConstant(std::string name, double value)
+	{
+		strtolower(name);
+		assert(!name.empty() && name[0] != '$' && name[0] != '@');
+		assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), name) == globalScopeFirstWords.end());
+		assert(!Implementation::globalNumericConstants.contains(name));
+		Implementation::globalNumericConstants.emplace(name, value);
+	}
+
+	// Declare a global text constant.
+	static void DeclareGlobalConstant(std::string name, const std::string& value)
+	{
+		strtolower(name);
+		assert(!name.empty() && name[0] != '$' && name[0] != '@');
+		assert(find(globalScopeFirstWords.begin(), globalScopeFirstWords.end(), name) == globalScopeFirstWords.end());
+		assert(!Implementation::globalTextConstants.contains(name));
+		Implementation::globalTextConstants.emplace(name, value);
+	}
 	
 	// Implementation SHOULD declare entry points
 	inline static void DeclareEntryPoint(std::string entryName) {
@@ -2717,6 +2739,18 @@ const int VERSION_PATCH = 0;
 				}
 			};
 			
+			// Add a rom constant (numeric or text) and return the index, with duplicate detection.
+			auto addRomConstant = []<typename TConstants, typename TValue>(TConstants & romConstants, const TValue & value) -> size_t {
+				auto it = std::find(romConstants.cbegin(), romConstants.cend(), static_cast<TValue>(value));
+				if (it != romConstants.cend()) {
+					return std::distance(romConstants.cbegin(), it);
+				} else {
+					const auto index = romConstants.size();
+					romConstants.emplace_back(value);
+					return index;
+				}
+			};
+
 			// Lambda functions to Get/Add user-defined symbols
 			auto getVar = [&](const std::string& name) -> ByteCode {
 				for (int s = stack.size()-1; s >= -1; --s) {
@@ -2786,27 +2820,11 @@ const int VERSION_PATCH = 0;
 						
 					case ROM_CONST_NUMERIC:
 						if (!initialValue) throw CompileError("Const value not provided");
-						{
-							auto it = std::find(rom_numericConstants.cbegin(), rom_numericConstants.cend(), static_cast<double>(initialValue));
-							if (it != rom_numericConstants.cend()) {
-								index = std::distance(rom_numericConstants.cbegin(), it);
-							} else {
-								index = rom_numericConstants.size();
-								rom_numericConstants.emplace_back(initialValue);
-							}	
-						}
+						index = addRomConstant(rom_numericConstants, static_cast<double>(initialValue));
 						break;
 					case ROM_CONST_TEXT:
 						if (!initialValue) throw CompileError("Const value not provided");
-						{
-							auto it = std::find(rom_textConstants.cbegin(), rom_textConstants.cend(), static_cast<std::string>(initialValue));
-							if (it != rom_textConstants.cend()) {
-								index = std::distance(rom_textConstants.cbegin(), it);
-							} else {
-								index = rom_textConstants.size();
-								rom_textConstants.emplace_back(initialValue);
-							}	
-						}
+						index = addRomConstant(rom_textConstants, static_cast<std::string>(initialValue));
 						break;
 						
 					case RAM_VAR_NUMERIC:
@@ -2995,6 +3013,21 @@ const int VERSION_PATCH = 0;
 					}
 					return VOID;
 				} else if (func == Word::Name) {
+
+					// If non-prefixed identifier without arguments, check if actually a global constant and convert
+					// to a ROM Constant ByteCode.
+					if (args.empty()) {
+						if (Implementation::globalNumericConstants.contains(funcName)) {
+							const auto constantValue = Implementation::globalNumericConstants.at(funcName);
+							const auto index = addRomConstant(rom_numericConstants, constantValue);
+							return { ROM_CONST_NUMERIC, static_cast<uint32_t>(index) };
+						} else if (Implementation::globalTextConstants.contains(funcName)) {
+							const auto constantValue = Implementation::globalTextConstants.at(funcName);
+							const auto index = addRomConstant(rom_textConstants, constantValue);
+							return { ROM_CONST_TEXT, static_cast<uint32_t>(index) };
+						}
+					}
+
 					if (getReturn && isTrailingFunction && args.size() == 1 && (args[0].type == ROM_CONST_TEXT || args[0].type == RAM_VAR_TEXT || args[0].type == STORAGE_VAR_TEXT)) {
 						ByteCode ret = declareTmpText();
 						write(IDX);
@@ -6055,6 +6088,8 @@ const int VERSION_PATCH = 0;
 
 	namespace XC_NAMESPACE {
 		
+		std::unordered_map<std::string, double> Implementation::globalNumericConstants;
+		std::unordered_map<std::string, std::string> Implementation::globalTextConstants;
 		std::vector<std::string> Implementation::entryPoints {};
 		std::unordered_map<std::string, ObjectType> Device::objectTypesByName {};
 		std::unordered_map<uint8_t, std::string> Device::objectNamesById {};

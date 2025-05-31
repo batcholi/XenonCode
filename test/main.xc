@@ -270,7 +270,7 @@ function @RunUnitTests()
 	$results.append(sign(0))
 	$results.append(sign(0, 1))
 
-  	; test 28
+  ; test 28
 	var $rpl = "Hello My Friend!"
 	$results.append(replace($rpl, "Friend!", "XenonCode",0))
 	$rpl.replace("e", "E", 1)
@@ -306,6 +306,15 @@ function @RunUnitTests()
 	$results.append(0.0000123456789)
 	$results.append(0.00000123456789)
 	$results.append(0.000000123456789)
+
+  ; test 30
+	$results.append(pi)
+	$results.append(2pi)
+	$results.append(number_one * 2)
+	$results.append(number_two * 4)
+	$results.append(number_three * 8)
+	$results.append(test_str1)
+	$results.append(test_str2)
 	
 init
 	output.0 ("Hello, World!")
