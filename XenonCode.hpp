@@ -4969,7 +4969,7 @@ const int VERSION_PATCH = 0;
 				
 				// Write Rom data (constants)
 				for (auto& value : rom_numericConstants) {
-					s << value << ' ';
+					s << ToString(value) << ' ';
 				}
 				for (auto& value : rom_textConstants) {
 					s << value << '\0';
