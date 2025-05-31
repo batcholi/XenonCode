@@ -269,6 +269,12 @@ function @RunUnitTests()
 	$results.append(sign(-2))
 	$results.append(sign(0))
 	$results.append(sign(0, 1))
+
+	; test 28
+	var $rpl = "Hello My Friend!"
+	$results.append(replace($rpl, "Friend!", "XenonCode",0))
+	$rpl.replace("e", "E", 1)
+	$results.append($rpl)
 	
 init
 	output.0 ("Hello, World!")

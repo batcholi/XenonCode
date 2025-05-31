@@ -258,6 +258,9 @@
 #ifdef IFF
 	#undef IFF
 #endif
+#ifdef RPL
+	#undef RPL
+#endif
 #pragma endregion
 
 namespace XC_NAMESPACE {
@@ -2152,6 +2155,7 @@ const int VERSION_PATCH = 0;
 	DEF_OP( LCC /* REF_DST REF_TXT */ ) // lower(text)
 	DEF_OP( ISN /* REF_DST REF_TXT */ ) // isnumeric(text)
 	DEF_OP( IFF /* REF_DST REF_TXT */ ) // if(cond, valTrue, valFalse)
+	DEF_OP( RPL /* REF_DST REF_TXT */ ) // replace(text, oldValue, newValue, [count])
 
 #pragma endregion
 
@@ -2535,6 +2539,7 @@ const int VERSION_PATCH = 0;
 		if (func == "lower") {returnType = RAM_VAR_TEXT; return LCC;}
 		if (func == "isnumeric") {returnType = RAM_VAR_NUMERIC; return ISN;}
 		if (func == "if") {returnType = VOID /*NUMERIC|TEXT*/; return IFF;}
+		if (func == "replace") {returnType = RAM_VAR_TEXT; return RPL;}
 		returnType = VOID;
 		return DEV;
 	}
@@ -7668,6 +7673,43 @@ const int VERSION_PATCH = 0;
 										throw RuntimeError("Invalid operation");
 									}
 								}break;
+								case RPL: { // REF_DST REF_SRC REF_OLD REF_NEW [REF_COUNT]
+									ByteCode dst = nextCode();
+									ByteCode src = nextCode();
+									ByteCode oldVal = nextCode();
+									ByteCode newVal = nextCode();
+									ByteCode countVal = nextCode();
+
+									std::string text = MemGetText(src);
+									std::string oldStr = MemGetText(oldVal);
+									std::string newStr = MemGetText(newVal);
+
+									if (!IsText(dst)) throw RuntimeError("Invalid operation");
+
+									int count = -1;
+									if (countVal.type != VOID) {
+										count = int(std::round(MemGetNumeric(countVal)));
+										if (count == 0) {
+											MemSet(text, dst);
+											break;
+										}
+									}
+									
+									if (oldStr.empty()) {
+										MemSet(text, dst);
+										break;
+									}
+
+									size_t pos = 0;
+									int replaced = 0;
+									while ((pos = text.find(oldStr, pos)) != std::string::npos) {
+										text.replace(pos, oldStr.length(), newStr);
+										pos += newStr.length();
+										replaced++;
+										if (count >= 0 && replaced >= count) break;
+									}
+									MemSet(text, dst);
+								} break;
 							}
 						}break;
 						default: throw RuntimeError("Program Corrupted");
