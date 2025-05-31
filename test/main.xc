@@ -270,8 +270,13 @@ function @RunUnitTests()
 	$results.append(sign(0))
 	$results.append(sign(0, 1))
 
-	; test 28
-	$results.append("Test 28 - Default double to text conversion.")
+  	; test 28
+	var $rpl = "Hello My Friend!"
+	$results.append(replace($rpl, "Friend!", "XenonCode",0))
+	$rpl.replace("e", "E", 1)
+	$results.append($rpl)
+
+	; test 29
 	$results.append(2)
 	$results.append(2.0)
 	$results.append(1)
