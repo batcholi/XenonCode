@@ -469,17 +469,12 @@ const int VERSION_PATCH = 0;
 		return isalnum(c) || c == '_';
 	}
 
+	// Convert a double to a string with fixed precision of 6, removing trailing zeros and the 
+	// decimal point if it is the last character.
 	inline static std::string ToString(double value) {
-		std::ostringstream oss;
-		oss << std::fixed << value;
-		std::string str = oss.str();
-		size_t dotPos = str.find('.');
-		if (dotPos != std::string::npos) {
-			str.erase(str.find_last_not_of('0') + 1, std::string::npos);
-			if (str.back() == '.') {
-				str.pop_back();
-			}
-		}
+		auto str = std::to_string(value);
+		str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+		str.erase(str.find_last_not_of('.') + 1, std::string::npos);
 		return str;
 	}
 
