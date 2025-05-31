@@ -624,8 +624,9 @@ Trailing math functions will use the leading variable as its first argument and 
 - `div`(number, number)
 
 ### Text functions
-- `substring`(inputText, start, length) returns a new string
-- `text`(inputTextWithFormatting, vars ...)
+- `text`(inputTextWithFormatting, vars ...) See the section below for more details
+- `substring`($myText, start, length) returns a new string
+- `replace`($myText, searchText, replaceText [, count]) returns a new string with all occurrences of `searchText` replaced by `replaceText`, or up to `count` occurrences if specified
 - `size`($myText) returns the number of characters in $myText
 - `last`($myText) returns the last character in $myText
 - `lower`($myText) returns the lowercase version of $myText
