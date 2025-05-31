@@ -6184,7 +6184,7 @@ const int VERSION_PATCH = 0;
 												if (obj.length() < k.length()) {
 													MemSet(obj + k + val + '}', dst);
 												} else for (auto it = obj.begin(); it != obj.end(); ++it) {
-													if (it + k.length() > obj.end()) {
+													if (std::distance(it, obj.end()) < k.length()) {
 														MemSet(obj + k + val + '}', dst);
 														break;
 													}
