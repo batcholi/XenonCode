@@ -270,9 +270,9 @@ function @RunUnitTests()
 	$results.append(sign(0))
 	$results.append(sign(0, 1))
 
-  ; test 28
+	; test 28
 	var $rpl = "Hello My Friend!"
-	$results.append(replace($rpl, "Friend!", "XenonCode",0))
+	$results.append(replace($rpl, "Friend!", "XenonCode"))
 	$rpl.replace("e", "E", 1)
 	$results.append($rpl)
 
@@ -307,7 +307,7 @@ function @RunUnitTests()
 	$results.append(0.00000123456789)
 	$results.append(0.000000123456789)
 
-  ; test 30
+	; test 30
 	$results.append(pi)
 	$results.append(2pi)
 	$results.append(number_one * 2)
