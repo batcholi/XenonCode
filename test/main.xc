@@ -277,7 +277,6 @@ function @RunUnitTests()
 	$results.append($rpl)
 
 	; test 29
-	$results.append("Test 28 - Default double to text conversion.")
 	$results.append(2)
 	$results.append(2.0)
 	$results.append(1)
