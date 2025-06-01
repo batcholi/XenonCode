@@ -469,15 +469,15 @@ const int VERSION_PATCH = 0;
 		return isalnum(c) || c == '_';
 	}
 
-    // Converts a string to a double, if empty returns 0.0.
-    [[nodiscard]] inline static double ToDouble(const std::string& str) {
-        return str.empty() ? 0.0 : std::stod(str);
-    }
+	// Converts a string to a double, if empty returns 0.0.
+	[[nodiscard]] inline static double ToDouble(const std::string& str) {
+		return str.empty() ? 0.0 : std::stod(str);
+	}
 
-    // Converts a string to a float, if empty returns 0.0.
-    [[nodiscard]] inline static float ToFloat(const std::string& str) {
-        return str.empty() ? 0.0f : std::stof(str);
-    }
+	// Converts a string to a float, if empty returns 0.0.
+	[[nodiscard]] inline static float ToFloat(const std::string& str) {
+		return str.empty() ? 0.0f : std::stof(str);
+	}
 
 	inline static std::string ToString(double value) {
 		std::ostringstream oss;
