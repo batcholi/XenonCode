@@ -3018,8 +3018,7 @@ const int VERSION_PATCH = 0;
 					return VOID;
 				} else if (func == Word::Name) {
 
-					// If non-prefixed identifier without arguments, check if actually a global constant and convert
-					// to a ROM Constant ByteCode.
+					// If non-prefixed identifier without arguments, check if actually a global constant and convert to a ROM Constant ByteCode.
 					if (args.empty()) {
 						if (Implementation::globalNumericConstants.contains(funcName)) {
 							const auto constantValue = Implementation::globalNumericConstants.at(funcName);
@@ -3798,12 +3797,21 @@ const int VERSION_PATCH = 0;
 											
 											std::function<ByteCode(const std::string&)> compileConstFunctionCall = [&](const std::string& funcName) -> ByteCode {
 											
-												CODE_TYPE retType;
+												if (Implementation::globalNumericConstants.contains(funcName)) {
+													const auto constantValue = Implementation::globalNumericConstants.at(funcName);
+													const auto index = addRomConstant(rom_numericConstants, constantValue);
+													return { ROM_CONST_NUMERIC, static_cast<uint32_t>(index) };
+												} else if (Implementation::globalTextConstants.contains(funcName)) {
+													const auto constantValue = Implementation::globalTextConstants.at(funcName);
+													const auto index = addRomConstant(rom_textConstants, constantValue);
+													return { ROM_CONST_TEXT, static_cast<uint32_t>(index) };
+												}
 												
 												if (!Device::deviceFunctionsByName.contains(funcName)) {
 													throw CompileError("Function", funcName, "does not exist");
 												}
 												auto& function = Device::deviceFunctionsByName.at(funcName);
+												CODE_TYPE retType;
 												if (function.returnType == "number") {
 													retType = RAM_VAR_NUMERIC;
 												} else if (function.returnType == "text") {
