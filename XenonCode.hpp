@@ -5170,7 +5170,7 @@ const int VERSION_PATCH = 0;
 				}
 
 				// Discard the \n
-				s.get();
+				if (entryPointsSize > 0) s.get();
 				
 				// Read Rom data (constants)
 				for (size_t i = 0; i < rom_numericConstantsSize; ++i) {
