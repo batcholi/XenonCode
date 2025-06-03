@@ -469,6 +469,16 @@ const int VERSION_PATCH = 0;
 		return isalnum(c) || c == '_';
 	}
 
+	// Converts a string to a double, if empty returns 0.0.
+	[[nodiscard]] inline static double ToDouble(const std::string& str) {
+		return str.empty() ? 0.0 : std::stod(str);
+	}
+
+	// Converts a string to a float, if empty returns 0.0.
+	[[nodiscard]] inline static float ToFloat(const std::string& str) {
+		return str.empty() ? 0.0f : std::stof(str);
+	}
+
 	inline static std::string ToString(double value) {
 		std::ostringstream oss;
 		oss << std::fixed << value;
@@ -2198,12 +2208,12 @@ const int VERSION_PATCH = 0;
 		}
 		operator double() const {
 			if (type == Numeric) return numericValue;
-			else if (type == Text) return textValue==""? 0.0 : stod(textValue);
+			else if (type == Text) return ToDouble(textValue);
 			return 0.0;
 		}
 		operator float() const {
 			if (type == Numeric) return float(numericValue);
-			else if (type == Text) return textValue==""? 0.0f : stof(textValue);
+			else if (type == Text) return ToFloat(textValue);
 			return 0.0f;
 		}
 		operator int64_t() const {
@@ -5649,12 +5659,12 @@ const int VERSION_PATCH = 0;
 				if (storage.empty()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				return storage[0]==""? 0.0 : stod(storage[0]);
+				return ToDouble(storage[0]);
 			} else{
 				if (arrIndex >= storage.size()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				return storage[arrIndex]==""? 0.0 : stod(storage[arrIndex]);
+				return ToDouble(storage[arrIndex]);
 			}
 		}
 		const std::string& StorageGetText(ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
@@ -5911,22 +5921,14 @@ const int VERSION_PATCH = 0;
 				container.push_back(value);
 			}
 			else if constexpr (std::is_same_v<typename CONTAINER::value_type, double> && std::is_same_v<T, std::string>) {
-				if (value == "") {
-					container.push_back(0.0);
-				} else {
-					container.push_back(stod(value));
-				}
+				container.push_back(ToDouble(value));
 			}
 			else if constexpr (std::is_same_v<typename CONTAINER::value_type, std::string> && std::is_same_v<T, double>) {
 				container.push_back(ToString(value));
 			}
 			else if constexpr (std::is_same_v<typename CONTAINER::value_type, double> && std::is_same_v<typename T::value_type, std::string>) {
 				for (const auto& v : value) {
-					if (v == "") {
-						container.push_back(0.0);
-					} else {
-						container.push_back(stod(v));
-					}
+					container.push_back(ToDouble(v));
 				}
 			}
 			else if constexpr (std::is_same_v<typename CONTAINER::value_type, std::string> && std::is_same_v<typename T::value_type, double>) {
@@ -6507,7 +6509,7 @@ const int VERSION_PATCH = 0;
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
 										std::string str = MemGetText(val);
-										MemSet(str==""? 0.0 : stod(str), dst);
+										MemSet(ToDouble(str), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
 								case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
@@ -6714,7 +6716,7 @@ const int VERSION_PATCH = 0;
 											ipcCheck(array.size());
 											std::vector<double> values {};
 											values.reserve(array.size());
-											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
+											for (const auto& val : array) values.push_back(ToDouble(val));
 											sort(values.begin(), values.end());
 											array.clear();
 											for (const auto& val : values) array.push_back(ToString(val));
@@ -6747,7 +6749,7 @@ const int VERSION_PATCH = 0;
 											ipcCheck(array.size());
 											std::vector<double> values {};
 											values.reserve(array.size());
-											for (const auto& val : array) values.push_back(val==""? 0.0 : stod(val));
+											for (const auto& val : array) values.push_back(ToDouble(val));
 											sort(values.begin(), values.end(), std::greater<double>());
 											array.clear();
 											for (const auto& val : values) array.push_back(ToString(val));
@@ -7089,7 +7091,7 @@ const int VERSION_PATCH = 0;
 												auto& array = GetStorage(ref);
 												if (array.size() == 0) throw RuntimeError("Empty array");
 												std::string last = array.back();
-												MemSet(last==""? 0.0 : stod(last), dst);
+												MemSet(ToDouble(last), dst);
 											}break;
 											case STORAGE_ARRAY_TEXT:{
 												auto& array = GetStorage(ref);
@@ -7125,7 +7127,7 @@ const int VERSION_PATCH = 0;
 												bool found = false;
 												auto& array = GetStorage(ref);
 												for (size_t i = 0; i < array.size(); ++i) {
-													if ((array[i]==""? 0.0 : stod(array[i])) == MemGetNumeric(val)) {
+													if (ToDouble(array[i]) == MemGetNumeric(val)) {
 														MemSet(int(i), dst);
 														found = true;
 														break;
@@ -7165,7 +7167,7 @@ const int VERSION_PATCH = 0;
 											case STORAGE_ARRAY_NUMERIC:{
 												auto& array = GetStorage(ref);
 												for (const auto& v : array) {
-													if ((v==""? 0.0 : stod(v)) == MemGetNumeric(val)) {
+													if (ToDouble(v) == MemGetNumeric(val)) {
 														MemSet(1, dst);
 														break;
 													}
@@ -7209,7 +7211,7 @@ const int VERSION_PATCH = 0;
 												ipcCheck(array.size());
 												if (array.size() == 0) min = 0;
 												else for (const auto& val : array) {
-													double value = val==""? 0.0 : stod(val);
+													double value = ToDouble(val);
 													if (value < min) min = value;
 												}
 											}break;
@@ -7252,7 +7254,7 @@ const int VERSION_PATCH = 0;
 												ipcCheck(array.size());
 												if (array.size() == 0) max = 0;
 												else for (const auto& val : array) {
-													double value = val==""? 0.0 : stod(val);
+													double value = ToDouble(val);
 													if (value > max) max = value;
 												}
 											}break;
@@ -7297,7 +7299,7 @@ const int VERSION_PATCH = 0;
 												size = array.size();
 												if (size == 0) size = 1;
 												else for (const auto& value : array) {
-													total += value==""? 0.0 : stod(value);
+													total += ToDouble(value);
 												}
 											}break;
 											case RAM_ARRAY_NUMERIC:{
@@ -7340,7 +7342,7 @@ const int VERSION_PATCH = 0;
 												auto& array = GetStorage(arr);
 												ipcCheck(array.size());
 												for (const auto& value : array) {
-													total += value==""? 0.0 : stod(value);
+													total += ToDouble(value);
 												}
 											}break;
 											case RAM_ARRAY_NUMERIC:{
@@ -7381,7 +7383,7 @@ const int VERSION_PATCH = 0;
 												ipcCheck(array.size());
 												if (array.size() > 0) {
 													std::string val = array[array.size()/2];
-													med = val==""? 0.0 : stod(val);
+													med = ToDouble(val);
 												}
 											}break;
 											case RAM_ARRAY_NUMERIC:{
