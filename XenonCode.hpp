@@ -5776,40 +5776,25 @@ const int VERSION_PATCH = 0;
 		
 		double MemGetNumeric(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			switch (ref.type) {
-				case ROM_CONST_NUMERIC: {
-					if (ref.value >= assembly->rom_numericConstants.size()) {
-						throw RuntimeError("Invalid memory reference");
-					}
-					return assembly->rom_numericConstants[ref.value];
-				}break;
+				case ROM_CONST_NUMERIC:
+					return assembly->rom_numericConstants.at(ref.value);
 				case STORAGE_VAR_NUMERIC:
-				case STORAGE_ARRAY_NUMERIC: {
+				case STORAGE_ARRAY_NUMERIC:
 					return StorageGetNumeric(ref, arrIndex);
-				}break;
-				case RAM_VAR_NUMERIC: {
-					if (ref.value >= ram_numeric.size()) {
-						throw RuntimeError("Invalid memory reference");
-					}
-					return ram_numeric[ref.value];
-				}break;
-				case RAM_ARRAY_NUMERIC: {
-					auto& arr = GetNumericArray(ref);
-					if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) {
-						throw RuntimeError("Invalid array indexing");
-					}
-					return arr[arrIndex];
-				}break;
-				case VOID: return 0.0;
+				case RAM_VAR_NUMERIC:
+					return ram_numeric.at(ref.value);
+				case RAM_ARRAY_NUMERIC:
+					return GetNumericArray(ref).at(arrIndex);
+				case VOID: 
+					return 0.0;
 				case STORAGE_ARRAY_TEXT:
 				case RAM_ARRAY_TEXT:
 				case ROM_CONST_TEXT:
 				case STORAGE_VAR_TEXT:
-				case RAM_VAR_TEXT: {
-					std::string text = MemGetText(ref, arrIndex);
-					if (text.length() == 0) return 0.0;
-					return atof(text.c_str());
-				}break;
-				default: throw RuntimeError("Invalid memory reference");
+				case RAM_VAR_TEXT:
+					return ToDouble(MemGetText(ref, arrIndex));
+				default: 
+					throw RuntimeError("Invalid ByteCode type");
 			}
 		}
 		bool MemGetBoolean(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
