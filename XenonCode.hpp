@@ -471,12 +471,28 @@ const int VERSION_PATCH = 0;
 
 	// Converts a string to a double, if empty returns 0.0.
 	[[nodiscard]] inline static double ToDouble(const std::string& str) {
-		return str.empty() ? 0.0 : std::stod(str);
+		try {
+			return str.empty() ? 0.0 : std::stod(str);
+		}
+		catch (const std::invalid_argument& e) {
+			throw RuntimeError("Invalid text conversion to double");
+		}
+		catch (const std::out_of_range& e) {
+			throw RuntimeError("Out of range text conversion to double");
+		}
 	}
 
 	// Converts a string to a float, if empty returns 0.0.
 	[[nodiscard]] inline static float ToFloat(const std::string& str) {
-		return str.empty() ? 0.0f : std::stof(str);
+		try {
+			return str.empty() ? 0.0f : std::stof(str);
+		}
+		catch (const std::invalid_argument& e) {
+			throw RuntimeError("Invalid text conversion to float");
+		}
+		catch (const std::out_of_range& e) {
+			throw RuntimeError("Out of range text conversion to float");
+		}
 	}
 
 	// Convert a double to a string with fixed precision of 6, removing trailing zeros and the decimal point if it is the last character.
@@ -5805,9 +5821,7 @@ const int VERSION_PATCH = 0;
 				case ROM_CONST_TEXT:
 				case STORAGE_VAR_TEXT:
 				case RAM_VAR_TEXT: {
-					std::string text = MemGetText(ref, arrIndex);
-					if (text.length() == 0) return 0.0;
-					return atof(text.c_str());
+					return ToDouble(MemGetText(ref, arrIndex));
 				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
