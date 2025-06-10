@@ -5821,7 +5821,9 @@ const int VERSION_PATCH = 0;
 				case ROM_CONST_TEXT:
 				case STORAGE_VAR_TEXT:
 				case RAM_VAR_TEXT: {
-					return ToDouble(MemGetText(ref, arrIndex));
+					std::string text = MemGetText(ref, arrIndex);
+					if (text.length() == 0) return 0.0;
+					return atof(text.c_str());
 				}break;
 				default: throw RuntimeError("Invalid memory reference");
 			}
