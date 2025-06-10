@@ -474,11 +474,8 @@ const int VERSION_PATCH = 0;
 		try {
 			return str.empty() ? 0.0 : std::stod(str);
 		}
-		catch (const std::invalid_argument& e) {
-			throw RuntimeError("Invalid text conversion to double");
-		}
-		catch (const std::out_of_range& e) {
-			throw RuntimeError("Out of range text conversion to double");
+		catch (...) {
+			throw RuntimeError("Invalid text conversion to number");
 		}
 	}
 
@@ -487,11 +484,8 @@ const int VERSION_PATCH = 0;
 		try {
 			return str.empty() ? 0.0f : std::stof(str);
 		}
-		catch (const std::invalid_argument& e) {
-			throw RuntimeError("Invalid text conversion to float");
-		}
-		catch (const std::out_of_range& e) {
-			throw RuntimeError("Out of range text conversion to float");
+		catch (...) {
+			throw RuntimeError("Invalid text conversion to number");
 		}
 	}
 
