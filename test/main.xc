@@ -315,7 +315,16 @@ function @RunUnitTests()
 	$results.append(number_three * 8)
 	$results.append(test_str1)
 	$results.append(test_str2)
-	
+
+	; test 31 - Verify that partial or non-numeric storage values are converted to numbers.
+	$results.append("test31")
+	var $test31_arg1 = 42;
+	var $test31_result = $test31_arg1 + $results.last
+	$results.append($test31_result)
+	$results.append("31test")
+	$test31_arg1 = 42;
+	$test31_result = $test31_arg1 + $results.last
+	$results.append($test31_result)
 init
 	output.0 ("Hello, World!")
 	

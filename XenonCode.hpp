@@ -471,12 +471,22 @@ const int VERSION_PATCH = 0;
 
 	// Converts a string to a double, if empty returns 0.0.
 	[[nodiscard]] inline static double ToDouble(const std::string& str) {
-		return str.empty() ? 0.0 : std::stod(str);
+		try {
+			return str.empty() ? 0.0 : std::stod(str);
+		}
+		catch (...) {
+			throw RuntimeError("Invalid text conversion to number");
+		}
 	}
 
 	// Converts a string to a float, if empty returns 0.0.
 	[[nodiscard]] inline static float ToFloat(const std::string& str) {
-		return str.empty() ? 0.0f : std::stof(str);
+		try {
+			return str.empty() ? 0.0f : std::stof(str);
+		}
+		catch (...) {
+			throw RuntimeError("Invalid text conversion to number");
+		}
 	}
 
 	// Convert a double to a string with fixed precision of 6, removing trailing zeros and the decimal point if it is the last character.
