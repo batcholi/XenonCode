@@ -298,7 +298,25 @@ int main(const int argc, const char** argv) {
 					if (directory == "") {
 						cerr << "You must provide a path to a directory containing the XenonCode program to run" << endl;
 					}
-					if (!Run(directory)) return 1;
+
+#if defined(DEV_PROFILE_MEM) && defined(_MSC_VER) && defined(_DEBUG)
+					// Jake: 143092 allocations running "test" before changes.
+					// Jake: 132340 after last changes.
+					_CrtMemState memStateBegin;
+					_CrtMemCheckpoint(&memStateBegin);
+#endif
+					const auto runResult = Run(directory);
+#if defined(DEV_PROFILE_MEM) && defined(_MSC_VER) && defined(_DEBUG)
+					_CrtMemState memStateEnd;
+					_CrtMemCheckpoint(&memStateEnd);
+					_CrtMemState memStateDiff;
+					_CrtMemDifference(&memStateDiff, &memStateBegin, &memStateEnd);
+					_CrtMemDumpStatistics(&memStateDiff);
+					cerr << "Run total memory allocations: " << memStateDiff.lTotalCount << endl;
+#endif
+					if (!runResult) {
+						return 1;
+					}
 				}
 				// Invalid
 				else {
