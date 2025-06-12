@@ -6121,7 +6121,7 @@ const int VERSION_PATCH = 0;
 			if (program.size() <= index) return;
 			
 			// Find current file and line for debug
-			std::string currentFile = currentFileByAddr[index];
+			std::string_view currentFile = currentFileByAddr[index];
 			uint32_t currentLine = currentLineByAddr[index];
 			for (int32_t tmpIndex = index; tmpIndex >= 0; --tmpIndex) {
 				if (currentLine == 0 && program[tmpIndex].type == LINENUMBER) {
@@ -6394,7 +6394,7 @@ const int VERSION_PATCH = 0;
 									if (IsNumeric(val)) {
 										MemSet(double(!MemGetBoolean(val)), dst);
 									} else if (IsText(dst) || IsText(val)) {
-										std::string v = MemGetText(val);
+										const std::string& v = MemGetText(val);
 										MemSet(double(v == "" || v == "0"), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -6522,7 +6522,7 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
-										std::string str = MemGetText(val);
+										const std::string& str = MemGetText(val);
 										MemSet(ToDouble(str), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
@@ -6928,7 +6928,7 @@ const int VERSION_PATCH = 0;
 									ByteCode arr = nextCode();
 									ByteCode val = nextCode();
 									ByteCode sep = nextCode();
-									std::string separator = sep.type != VOID? MemGetText(sep) : "";
+									const std::string& separator = sep.type != VOID? MemGetText(sep) : "";
 									if (!IsArray(arr) && !IsText(arr)) throw RuntimeError("Not an array or text");
 									auto fillArray = [&](auto& dst){
 										dst.clear();
@@ -6976,7 +6976,7 @@ const int VERSION_PATCH = 0;
 										else if (IsNumeric(val)) {
 											if (separator != "") throw RuntimeError("Invalid operation");
 											double value = MemGetNumeric(val);
-											std::string str = ToString(value);
+											const std::string& str = ToString(value);
 											for (char c : str) {
 												ArrayInsertAuto(dst, std::string(1, c));
 											}
@@ -7104,7 +7104,7 @@ const int VERSION_PATCH = 0;
 											case STORAGE_ARRAY_NUMERIC:{
 												auto& array = GetStorage(ref);
 												if (array.size() == 0) throw RuntimeError("Empty array");
-												std::string last = array.back();
+												const std::string& last = array.back();
 												MemSet(ToDouble(last), dst);
 											}break;
 											case STORAGE_ARRAY_TEXT:{
@@ -7396,7 +7396,7 @@ const int VERSION_PATCH = 0;
 												auto& array = GetStorage(arr);
 												ipcCheck(array.size());
 												if (array.size() > 0) {
-													std::string val = array[array.size()/2];
+													const std::string& val = array[array.size()/2];
 													med = ToDouble(val);
 												}
 											}break;
@@ -7422,7 +7422,7 @@ const int VERSION_PATCH = 0;
 									ByteCode src = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									std::string text = MemGetText(src);
+									const std::string& text = MemGetText(src);
 									int start = (int)std::round(MemGetNumeric(a));
 									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(utf8length(text)-start);
 									// if (!IsText(dst)) throw RuntimeError("Invalid operation");
@@ -7463,7 +7463,7 @@ const int VERSION_PATCH = 0;
 											case STORAGE_VAR_TEXT:
 											case RAM_VAR_TEXT:
 											case ROM_CONST_TEXT:{
-												std::string obj = MemGetText(arr);
+												const std::string& obj = MemGetText(arr);
 												std::string k = MemGetText(key);
 												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
 												k = '.' + k + '{';
@@ -7539,7 +7539,7 @@ const int VERSION_PATCH = 0;
 									if (IsNumeric(ref)) {
 										val = MemGetBoolean(ref);
 									} else if (IsText(ref)) {
-										std::string v = MemGetText(ref);
+										const std::string& v = MemGetText(ref);
 										val = v != "" && v != "0";
 									} else {
 										throw RuntimeError("Invalid operation");
@@ -7549,7 +7549,7 @@ const int VERSION_PATCH = 0;
 								}break;
 								case KEY: {// REF_DST REF_OBJ REF_OFFSET
 									ByteCode dst = nextCode();
-									std::string obj = MemGetText(nextCode());
+									const std::string& obj = MemGetText(nextCode());
 									ByteCode offset = nextCode();
 									size_t pos = size_t(round(MemGetNumeric(offset)));
 									if (obj.length() > pos && obj[pos] == '{') {
@@ -7573,7 +7573,7 @@ const int VERSION_PATCH = 0;
 										if (objPos == std::string::npos || objPos == dotPos + 1) {
 											MemSet("", dst);
 										} else {
-											std::string key = obj.substr(dotPos+1, objPos-dotPos-1);
+											const std::string& key = obj.substr(dotPos+1, objPos-dotPos-1);
 											MemSet(key, dst);
 											MemSet(double(objPos), offset);
 										}
@@ -7699,7 +7699,7 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(val)) {
-										std::string s = MemGetText(val);
+										const std::string& s = MemGetText(val);
 										bool isNum = false;
 										try {
 											size_t pos;
@@ -7715,7 +7715,7 @@ const int VERSION_PATCH = 0;
 									ByteCode valTrue = nextCode();
 									ByteCode valFalse = nextCode();
 									if (IsText(valTrue)) {
-										std::string str = MemGetBoolean(cond)? MemGetText(valTrue) : MemGetText(valFalse, ARRAY_INDEX_NONE);
+										const std::string& str = MemGetBoolean(cond)? MemGetText(valTrue) : MemGetText(valFalse, ARRAY_INDEX_NONE);
 										MemSet(str, dst);
 									} else if (IsNumeric(valTrue)) {
 										double num = MemGetBoolean(cond)? MemGetNumeric(valTrue) : MemGetNumeric(valFalse);
@@ -7732,8 +7732,8 @@ const int VERSION_PATCH = 0;
 									ByteCode countVal = nextCode();
 
 									std::string text = MemGetText(src);
-									std::string oldStr = MemGetText(oldVal);
-									std::string newStr = MemGetText(newVal);
+									const std::string& oldStr = MemGetText(oldVal);
+									const std::string& newStr = MemGetText(newVal);
 
 									if (!IsText(dst)) throw RuntimeError("Invalid operation");
 
