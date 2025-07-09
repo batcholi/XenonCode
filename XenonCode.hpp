@@ -3671,10 +3671,12 @@ const int VERSION_PATCH = 0;
 					auto firstWord = readWord();
 					if (line.scope == 0) {
 						// Global Scope
+						if (currentLine) rom_vars_init.emplace_back(ByteCode{LINENUMBER, currentLine});
 						switch (firstWord.type) {
 							case Word::FileInfo:{
 								currentFile = firstWord.word;
 								write({SOURCEFILE, uint32_t(sourceFiles.size())});
+								rom_vars_init.emplace_back(ByteCode{SOURCEFILE, uint32_t(sourceFiles.size())});
 								sourceFiles.emplace_back(currentFile);
 							}break;
 							case Word::Name: {
