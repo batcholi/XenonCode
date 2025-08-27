@@ -5557,6 +5557,10 @@ const int VERSION_PATCH = 0;
 			currentFileByAddr.clear();
 			currentLineByAddr.clear();
 			
+			for (const auto& name : assembly->storageRefs) {
+				storageCache.try_emplace(name, std::vector<std::string>{});
+			}
+			
 			return true;
 		}
 		
@@ -5602,6 +5606,14 @@ const int VERSION_PATCH = 0;
 				}
 				storageDirty = false;
 			}
+		}
+		
+		void LoadStorage(const std::unordered_map<std::string, std::vector<std::string>>& storage) {
+			storageCache = storage;
+		}
+		
+		[[nodiscard]] const std::unordered_map<std::string, std::vector<std::string>>& SaveStorage() const {
+			return storageCache;
 		}
 		
 		virtual void ClearStorage(const std::string& storageDir = "#") {
