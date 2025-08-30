@@ -321,16 +321,16 @@ timer interval 2
 ```
 Note: If the clock speed of the virtual computer is slower than the given interval or frequency, that timer function will not correctly run at the specified interval or frequency, and may be executed at every clock cycle instead.  
 
-## Input functions
-Input functions are a way of accessing the information that we have received from another device.  
+## Input
+Input entry points are a way of accessing the information that we have received from another device.  
 They may be executed any number of times per clock cycle, depending on how much data it has received since the previous clock cycle. The implementation may decide to only run it once per cycle using only the latest data received.  
 Devices may have an upper limit in the receiving buffer which defines the maximum number of times the input function may be called per clock cycle.  
 If that limit has been reached, only the last N values will be kept in the buffer.  
-Input functions are like user-defined functions, containing arguments, but no return value, and also we must specify a port index.  
+Input entry points are like user-defined functions, containing arguments, but no return value, and also we must specify a port index.  
 The port index must be specified after the input keyword and a trail operator `.`  
 The port index may be specified via a constant as well (must be known at compile time).  
 Function arguments must be surrounded with parenthesis and their types must be specified.  
-Input functions cannot be called directly by the user. They can only be defined, then the device will automatically call them if data has been received, at the end of a clock cycle.  
+Entry points cannot be called directly by the user. They can only be defined, then the device will automatically call them if data has been received, at the end of a clock cycle.  
 ```xc
 input.0 ($arg1:number, $arg2:text)
     $stuff = $arg1
