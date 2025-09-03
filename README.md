@@ -598,12 +598,12 @@ Trailing math functions will use the leading variable as its first argument and 
 - `floor`(number)
 - `ceil`(number)
 - `round`(number)
-- `sin`(number)
-- `cos`(number)
-- `tan`(number)
-- `asin`(number)
-- `acos`(number)
-- `atan`(number) or (number, number)
+- `sin`(number) in radians
+- `cos`(number) in radians
+- `tan`(number) in radians
+- `asin`(number) in radians
+- `acos`(number) in radians
+- `atan`(number) or (number, number) in radians
 - `abs`(number)
 - `fract`(number)
 - `log`(number, base)
