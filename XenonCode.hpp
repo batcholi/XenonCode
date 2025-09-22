@@ -6167,6 +6167,17 @@ const int VERSION_PATCH = 0;
 				eol = true;
 				return CODE_TYPE::VOID;
 			};
+			// These comments are for the demo code, will change for actual implementation.
+			//   Strict implementation of three calls to NextCode().
+			auto nextCode3Strict = [&]() -> std::tuple<ByteCode, ByteCode, ByteCode> {
+				if (!eol && index + 3 < program.size()) { // Single boundary check for 3 bytecodes, vs three checks. 
+					const auto dst = program[++index];    // Modern compilers should be smart about this, no need to micro-optimize.
+					const auto a = program[++index];
+					const auto b = program[++index];
+					return { dst, a, b };
+				}
+				throw RuntimeError("Invalid instruction for binary operation");
+			};
 			try {
 				while (index < program.size()) {
 					eol = false;
@@ -6279,21 +6290,15 @@ const int VERSION_PATCH = 0;
 									}
 								}break;
 								case ADD: {// REF_DST REF_A REF_B
-									ByteCode dst = nextCode();
-									ByteCode a = nextCode();
-									ByteCode b = nextCode();
+									const auto [dst, a, b] = nextCode3Strict();         // Example implementation 1, note reduction of code.
 									MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
 								}break;
 								case SUB: {
-									ByteCode dst = nextCode();
-									ByteCode a = nextCode();
-									ByteCode b = nextCode();
+									const auto [dst, a, b] = nextCode3Strict();			// Example implementation 2, note reduction of code.
 									MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
 								}break;
 								case MUL: {
-									ByteCode dst = nextCode();
-									ByteCode a = nextCode();
-									ByteCode b = nextCode();
+									const auto [dst, a, b] = nextCode3Strict();			// Example implementation 3, note reduction of code.
 									MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
 								}break;
 								case DIV: {
