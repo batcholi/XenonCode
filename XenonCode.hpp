@@ -6207,7 +6207,7 @@ const int VERSION_PATCH = 0;
 												std::string obj = MemGetText(dst);
 												std::string k = MemGetText(key);
 												std::string val = MemGetText(nextCode(), ARRAY_INDEX_NONE);
-												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
+												if (k.length() == 0 || std::strchr(".{}", k[0])) throw RuntimeError("Invalid Object Key");
 												k = '.' + k + '{';
 												if (obj.length() < k.length()) {
 													MemSet(obj + k + val + '}', dst);
@@ -7477,7 +7477,7 @@ const int VERSION_PATCH = 0;
 											case ROM_CONST_TEXT:{
 												const std::string& obj = MemGetText(arr);
 												std::string k = MemGetText(key);
-												if (k.length() == 0 || !isalpha_(k[0])) throw RuntimeError("Invalid Object Key");
+												if (k.length() == 0 || std::strchr(".{}", k[0])) throw RuntimeError("Invalid Object Key");
 												k = '.' + k + '{';
 												if (obj.length() < k.length()) {
 													MemSet("", dst);
@@ -7578,7 +7578,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 									size_t dotPos = obj.find('.', pos);
-									if (dotPos == std::string::npos || int(dotPos) >= int(obj.length())-4 || !isalpha_(obj[dotPos+1])) {
+									if (dotPos == std::string::npos || int(dotPos) >= int(obj.length())-4 || std::strchr(".{}", obj[dotPos+1])) {
 										MemSet("", dst);
 									} else {
 										size_t objPos = obj.find('{', dotPos+1);

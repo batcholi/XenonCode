@@ -325,6 +325,15 @@ function @RunUnitTests()
 	$test31_arg1 = 42;
 	$test31_result = $test31_arg1 + $results.last
 	$results.append($test31_result)
+	
+	; test 32
+	var $kv = ".a{10}.b{20}.c{30}.(U235)O2{40}.d{50}.(U238)O2{60}.88{70}"
+	foreach $kv ($key, $value)
+		$results.append($key & " : " & $value & " == " & $kv.$key)
+		$kv.$key = 0
+	foreach $kv ($key, $value)
+		$results.append($key & " : " & $value)
+	
 init
 	output.0 ("Hello, World!")
 	
