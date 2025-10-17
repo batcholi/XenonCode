@@ -1151,7 +1151,7 @@ const int VERSION_PATCH = 0;
 							// Check if not already between parenthesis
 							if (before != Word::ExpressionBegin || after != Word::ExpressionEnd) {
 								if (word == Word::TrailOperator) {
-									if (prev != Word::Varname) {
+									if (prev != Word::Varname && prev != Word::ExpressionEnd) {
 										throw ParseError("A trail operator (.) is not allowed after", prev);
 									}
 									if (next != Word::Numeric && next != Word::Varname && next != Word::Name) {
@@ -1279,6 +1279,7 @@ const int VERSION_PATCH = 0;
 				Word::AndOperator,
 				Word::OrOperator,
 				Word::XorOperator,
+				Word::TrailOperator,
 				Word::CommaOperator,
 			}},
 			{Word::TrailOperator, {
@@ -1898,14 +1899,41 @@ const int VERSION_PATCH = 0;
 							if (words.size() > 2) {
 								throw ParseError("Too many words");
 							}
-						} else if (words[1] == Word::TrailOperator) {
+					} else if (words[1] == Word::TrailOperator) {
+						auto parseAccessorChainTokens = [&](int index) -> int {
+							int i = index;
+							bool expectOperand = true;
+							while (i < (int)words.size()) {
+								if (expectOperand) {
+									Word operand = words[i];
+									if (operand == Word::Numeric || operand == Word::Varname || operand == Word::Name) {
+										++i;
+										expectOperand = false;
+									} else {
+										break;
+									}
+								} else {
+									if (words[i] != Word::TrailOperator) {
+										break;
+									}
+									++i;
+									expectOperand = true;
+								}
+							}
+							if (expectOperand && i > index) {
+								throw ParseError("Invalid expression after var assignment");
+							}
+							return i;
+						};
+						int chainEnd = parseAccessorChainTokens(2);
+						if (chainEnd == 2) {
 							if (words.size() < 4) {
 								throw ParseError("Too few words");
 							}
 							if (words[3] != Word::SuffixOperatorGroup && words.size() < 5) {
 								throw ParseError("Too few words");
 							}
-							// Array/Object assignment
+							// Array/Object assignment without additional chained accessors
 							if (words[2] == Word::Numeric || words[2] == Word::Varname || (words[2] == Word::Name && (words[3] == Word::AssignmentOperatorGroup || words[3] == Word::SuffixOperatorGroup))) {
 								if (words[3] == Word::AssignmentOperatorGroup) {
 									if (!ParseExpression(words, 4)) {
@@ -1918,9 +1946,9 @@ const int VERSION_PATCH = 0;
 								} else {
 									throw ParseError("Invalid expression after var assignment");
 								}
-							} else
-							// Trailing function
-							if (words[2] == Word::Name || words[2] == Word::Funcname) {
+							}
+							// Trailing function on direct var
+							else if (words[2] == Word::Name || words[2] == Word::Funcname) {
 								if (words[3] == Word::ExpressionBegin) {
 									if (ParseArgs(words, 3) != -1) {
 										throw ParseError("Invalid argument list after trailing function on var");
@@ -1934,6 +1962,35 @@ const int VERSION_PATCH = 0;
 								throw ParseError("Invalid expression after var assignment");
 							}
 						} else {
+							Word follow = chainEnd < (int)words.size()? words[chainEnd] : Word::Empty;
+							if (follow == Word::AssignmentOperatorGroup) {
+								if (!ParseExpression(words, chainEnd+1)) {
+									throw ParseError("Invalid expression after var assignment");
+								}
+							} else if (follow == Word::SuffixOperatorGroup) {
+								if (chainEnd+1 != (int)words.size()) {
+									throw ParseError("Too many words");
+								}
+							} else if ((follow == Word::ExpressionBegin || follow == Word::AssignmentOperatorGroup || follow == Word::SuffixOperatorGroup)
+								&& (words[chainEnd-1] == Word::Name || words[chainEnd-1] == Word::Funcname)) {
+								if (follow == Word::ExpressionBegin) {
+									if (ParseArgs(words, chainEnd) != -1) {
+										throw ParseError("Invalid argument list after trailing function on var");
+									}
+								} else if (follow == Word::AssignmentOperatorGroup) {
+									if (!ParseExpression(words, chainEnd+1)) {
+										throw ParseError("Invalid expression after trailing function on var");
+									}
+								} else { // Suffix after trailing function
+									if (chainEnd+1 != (int)words.size()) {
+										throw ParseError("Too many words");
+									}
+								}
+							} else {
+								throw ParseError("Invalid expression after var assignment");
+							}
+						}
+					} else {
 							throw ParseError("Invalid expression after var assignment");
 						}
 					} else
@@ -3458,198 +3515,255 @@ const int VERSION_PATCH = 0;
 					default: validate(false);
 				}
 				
-				// Get Operator
-				Word op = words[opIndex];
-				validate(op.type >= WORD_ENUM_OPERATOR_START);
-				validate(opIndex < endIndex);
-				
-				// Get Word 2 and compile operation
-				if (op == Word::CastOperator) {
-					Word t = words[opIndex+1];
-					if (t == "number") {
-						ByteCode tmp = declareTmpNumeric();
-						write(NUM);
-						write(tmp);
-						write(ref1);
-						write(VOID);
-						return tmp;
-					} else if (t == "text") {
-						ByteCode tmp = declareTmpText();
-						write(TXT);
-						write(tmp);
-						write(ref1);
-						write(VOID);
-						return tmp;
-					} else {
-						throw CompileError("Invalid cast", t);
-					}
-				} else if (op == Word::TrailOperator) {
-					Word operand = words[opIndex+1];
-					if (operand == Word::Name || operand == Word::Funcname) {
-						if (opIndex+1 == endIndex) { // trailing member with no parenthesis, in an expression
-							validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
-							return compileFunctionCall(operand, {ref1}, true, true);
-						} else if (IsObject(ref1)) { // trailing function call, in an expression, on an object
-							validate(words[opIndex+2] == Word::ExpressionBegin);
-							std::vector<ByteCode> args {};
-							args.push_back(ref1);
-							int argBegin = opIndex+3;
-							while (argBegin <= endIndex) {
-								int argEnd = GetArgEnd(words, argBegin, endIndex);
-								if (argEnd == -1) {
-									++argBegin;
-									break;
-								}
-								args.push_back(compileExpression(words, argBegin, argEnd));
-								argBegin = argEnd + 2;
-								if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
-									break;
-								}
-							}
-							return compileFunctionCall(operand, args, true, true);
+				while (opIndex <= endIndex) {
+					Word op = words[opIndex];
+					validate(op.type >= WORD_ENUM_OPERATOR_START);
+					validate(opIndex < endIndex);
+					
+					if (op == Word::CastOperator) {
+						Word t = words[opIndex+1];
+						if (t == "number") {
+							ByteCode tmp = declareTmpNumeric();
+							write(NUM);
+							write(tmp);
+							write(ref1);
+							write(VOID);
+							return tmp;
+						} else if (t == "text") {
+							ByteCode tmp = declareTmpText();
+							write(TXT);
+							write(tmp);
+							write(ref1);
+							write(VOID);
+							return tmp;
 						} else {
-							throw CompileError("A non-object-member trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
+							throw CompileError("Invalid cast", t);
 						}
-					} else if (operand == Word::Numeric || operand == Word::Varname) {
-						validate(IsArray(ref1) || IsText(ref1));
-						ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-						write(IDX);
-						write(tmp);
-						write(ref1);
-						if (operand == Word::Varname) {
-							ByteCode ref2 = getVar(operand);
-							if (IsNumeric(ref2)) {
-								write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+					} else if (op == Word::TrailOperator) {
+						int idx = opIndex;
+						bool consumed = false;
+						while (idx <= endIndex && words[idx] == Word::TrailOperator) {
+							validate(idx + 1 <= endIndex);
+							Word operand = words[idx+1];
+							bool segmentHandled = false;
+							if (operand == Word::Numeric) {
+								validate(IsArray(ref1) || IsText(ref1));
+								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+								write(IDX);
+								write(tmp);
+								write(ref1);
+								write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+								write(VOID);
+								ref1 = tmp;
+								segmentHandled = true;
+							} else if (operand == Word::Varname) {
+								validate(IsArray(ref1) || IsText(ref1));
+								ByteCode ref2 = getVar(operand);
+								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+								write(IDX);
+								write(tmp);
+								write(ref1);
+								if (IsNumeric(ref2)) {
+									write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+								} else {
+									validate(IsText(ref2));
+									validate(IsText(ref1));
+									write(OBJ_KEY);
+								}
+								write(ref2);
+								write(VOID);
+								ref1 = tmp;
+								segmentHandled = true;
+							} else if (operand == Word::Name && IsText(ref1) && !(idx+2 <= endIndex && words[idx+2] == Word::ExpressionBegin)) {
+								ref1 = compileFunctionCall(operand, {ref1}, true, true);
+								segmentHandled = true;
+							}
+							
+							if (!segmentHandled) {
+								break;
+							}
+							consumed = true;
+							idx += 2;
+						}
+						
+						if (consumed) {
+							opIndex = idx;
+							if (opIndex > endIndex) {
+								return ref1;
+							}
+							continue;
+						}
+						
+						Word operand = words[opIndex+1];
+						if (operand == Word::Name || operand == Word::Funcname) {
+							if (opIndex+1 == endIndex) { // trailing member with no parenthesis, in an expression
+								validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
+								return compileFunctionCall(operand, {ref1}, true, true);
+							} else if (IsObject(ref1)) { // trailing function call, in an expression, on an object
+								validate(words[opIndex+2] == Word::ExpressionBegin);
+								std::vector<ByteCode> args {};
+								args.push_back(ref1);
+								int argBegin = opIndex+3;
+								while (argBegin <= endIndex) {
+									int argEnd = GetArgEnd(words, argBegin, endIndex);
+									if (argEnd == -1) {
+										++argBegin;
+										break;
+									}
+									args.push_back(compileExpression(words, argBegin, argEnd));
+									argBegin = argEnd + 2;
+									if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
+										break;
+									}
+								}
+								return compileFunctionCall(operand, args, true, true);
 							} else {
-								validate(IsText(ref2));
-								write(OBJ_KEY);
+								throw CompileError("A non-object-member trailing function call is invalid within an expression"); // because as per the spec, a trailing function call WILL modify the value of the variable that it's called on, defined by what it returns
 							}
-							write(ref2);
-						} else /*numeric*/{
-							write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+						} else if (operand == Word::Numeric || operand == Word::Varname) {
+							validate(IsArray(ref1) || IsText(ref1));
+							ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+							write(IDX);
+							write(tmp);
+							write(ref1);
+							if (operand == Word::Varname) {
+								ByteCode ref2 = getVar(operand);
+								if (IsNumeric(ref2)) {
+									write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+								} else {
+									validate(IsText(ref2));
+									validate(IsText(ref1));
+									write(OBJ_KEY);
+								}
+								write(ref2);
+							} else {
+								write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+							}
+							write(VOID);
+							ref1 = tmp;
+							opIndex += 2;
+							if (opIndex > endIndex) {
+								return ref1;
+							}
+							continue;
+						} else {
+							validate(false);
 						}
-						write(VOID);
-						return tmp;
 					} else {
-						validate(false);
-						return VOID;
+						ByteCode ref2 = compileExpression(words, opIndex+1, endIndex);
+						
+						// Compile operation
+						if (op == Word::NotOperator) {
+							validate(ref1 == VOID);
+							write(NOT);
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::ConcatOperator) {
+							ByteCode tmp = declareTmpText();
+							write(CCT);
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::MulOperatorGroup) {
+							if (op == "*") {
+								write(MUL);
+							} else if (op == "/") {
+								write(DIV);
+							} else if (op == "^") {
+								write(POW);
+							} else if (op == "%") {
+								write(MOD);
+							} else {
+								validate(false);
+							}
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::AddOperatorGroup) {
+							if (op == "+") {
+								write(ADD);
+							} else if (op == "-") {
+								write(SUB);
+							} else {
+								validate(false);
+							}
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::CompareOperatorGroup) {
+							if (op == "<") {
+								write(LST);
+							} else if (op == ">") {
+								write(GRT);
+							} else if (op == "<=") {
+								write(LTE);
+							} else if (op == ">=") {
+								write(GTE);
+							} else {
+								validate(false);
+							}
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::EqualityOperatorGroup) {
+							if (op == "==") {
+								write(EQQ);
+							} else if (op == "!=" || op == "<>") {
+								write(NEQ);
+							} else {
+								validate(false);
+							}
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::AndOperator) {
+							ByteCode tmp = declareTmpNumeric();
+							write(AND);
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::OrOperator) {
+							ByteCode tmp = declareTmpNumeric();
+							write(ORR);
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else if (op == Word::XorOperator) {
+							ByteCode tmp = declareTmpNumeric();
+							write(XOR);
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
+						} else {
+							validate(false);
+						}
 					}
-				} else {
-					ByteCode ref2 = compileExpression(words, opIndex+1, endIndex);
-					
-					// Compile operation
-					if (op == Word::NotOperator) {
-						validate(ref1 == VOID);
-						write(NOT);
-						ByteCode tmp = declareTmpNumeric();
-						write(tmp);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::ConcatOperator) {
-						ByteCode tmp = declareTmpText();
-						write(CCT);
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::MulOperatorGroup) {
-						if (op == "*") {
-							write(MUL);
-						} else if (op == "/") {
-							write(DIV);
-						} else if (op == "^") {
-							write(POW);
-						} else if (op == "%") {
-							write(MOD);
-						} else {
-							validate(false);
-							return VOID;
-						}
-						ByteCode tmp = declareTmpNumeric();
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::AddOperatorGroup) {
-						if (op == "+") {
-							write(ADD);
-						} else if (op == "-") {
-							write(SUB);
-						} else {
-							validate(false);
-							return VOID;
-						}
-						ByteCode tmp = declareTmpNumeric();
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::CompareOperatorGroup) {
-						if (op == "<") {
-							write(LST);
-						} else if (op == ">") {
-							write(GRT);
-						} else if (op == "<=") {
-							write(LTE);
-						} else if (op == ">=") {
-							write(GTE);
-						} else {
-							validate(false);
-							return VOID;
-						}
-						ByteCode tmp = declareTmpNumeric();
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::EqualityOperatorGroup) {
-						if (op == "==") {
-							write(EQQ);
-						} else if (op == "!=" || op == "<>") {
-							write(NEQ);
-						} else {
-							validate(false);
-							return VOID;
-						}
-						ByteCode tmp = declareTmpNumeric();
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::AndOperator) {
-						ByteCode tmp = declareTmpNumeric();
-						write(AND);
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::OrOperator) {
-						ByteCode tmp = declareTmpNumeric();
-						write(ORR);
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					} else if (op == Word::XorOperator) {
-						ByteCode tmp = declareTmpNumeric();
-						write(XOR);
-						write(tmp);
-						write(ref1);
-						write(ref2);
-						write(VOID);
-						return tmp;
-					}
-					
-					throw CompileError("Invalid operator", op);
 				}
+				
+				return ref1;
 			};
 			
 			// Add a Return+VOID at addr 0
@@ -4169,14 +4283,250 @@ const int VERSION_PATCH = 0;
 										}
 									}break;
 									case Word::TrailOperator:{
-										Word operand = readWord();
-										if (operand == Word::Varname || operand == Word::Numeric) {
-											validate(IsArray(dst) || (IsText(dst) && IsVar(dst))); // make sure dst is not const
-											operation = readWord();
-											if (operation == Word::AssignmentOperatorGroup) {
-												ByteCode op = GetOperator(operation);
-												ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+										struct Accessor {
+											enum class Kind {
+												ArrayIndexLiteral,
+												ArrayIndexVar,
+												KeyConst,
+												KeyVar
+											} kind;
+											uint32_t indexLiteral = 0;
+											ByteCode ref {};
+										};
+										
+										auto parseAccessorChain = [&](ByteCode base, int index, std::vector<Accessor>& chain) -> int {
+											ByteCode current = base;
+											int i = index;
+											bool expectOperand = true;
+											int lastProcessed = index;
+											while (i < (int)line.words.size()) {
+												Word word = line.words[i];
+												if (expectOperand) {
+													if (word == Word::Name) {
+														if (!IsText(current)) break;
+														if (i+1 < (int)line.words.size() && line.words[i+1] == Word::ExpressionBegin) break;
+														Accessor acc;
+														acc.kind = Accessor::Kind::KeyConst;
+														acc.ref = declareVar("", ROM_CONST_TEXT, word);
+														chain.emplace_back(acc);
+														current = ByteCode(RAM_VAR_TEXT);
+														++i;
+														expectOperand = false;
+														lastProcessed = i;
+													} else if (word == Word::Varname) {
+														ByteCode ref = getVar(word);
+														if (IsNumeric(ref)) {
+															if (!IsArray(current) && !IsText(current)) break;
+															Accessor acc;
+															acc.kind = Accessor::Kind::ArrayIndexVar;
+															acc.ref = ref;
+															chain.emplace_back(acc);
+															current = ByteCode(GetRamVarType(current.type));
+															++i;
+															expectOperand = false;
+															lastProcessed = i;
+														} else if (IsText(ref)) {
+															if (!IsText(current)) break;
+															Accessor acc;
+															acc.kind = Accessor::Kind::KeyVar;
+															acc.ref = ref;
+															chain.emplace_back(acc);
+															current = ByteCode(RAM_VAR_TEXT);
+															++i;
+															expectOperand = false;
+															lastProcessed = i;
+														} else {
+															break;
+														}
+													} else if (word == Word::Numeric) {
+														if (!IsArray(current) && !IsText(current)) break;
+														Accessor acc;
+														acc.kind = Accessor::Kind::ArrayIndexLiteral;
+														acc.indexLiteral = uint32_t(std::round(double(word)));
+														chain.emplace_back(acc);
+														current = ByteCode(GetRamVarType(current.type));
+														++i;
+														expectOperand = false;
+														lastProcessed = i;
+													} else {
+														break;
+													}
+												} else {
+													if (word != Word::TrailOperator) {
+														break;
+													}
+													expectOperand = true;
+													++i;
+													lastProcessed = i;
+												}
+											}
+											if (expectOperand && !chain.empty()) {
+												validate(false);
+											}
+											return lastProcessed;
+										};
+										
+										auto loadAccessorChain = [&](ByteCode base, const std::vector<Accessor>& chain) -> std::vector<ByteCode> {
+											std::vector<ByteCode> values;
+											ByteCode container = base;
+											for (const auto& seg : chain) {
+												validate(IsArray(container) || IsText(container));
+												ByteCode tmp = declareVar("", GetRamVarType(container.type));
+												write(IDX);
+												write(tmp);
+												write(container);
+												switch (seg.kind) {
+													case Accessor::Kind::ArrayIndexLiteral:
+														write({ARRAY_INDEX, seg.indexLiteral});
+													break;
+													case Accessor::Kind::ArrayIndexVar:
+														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+														write(seg.ref);
+													break;
+													case Accessor::Kind::KeyConst:
+													case Accessor::Kind::KeyVar:
+														write(OBJ_KEY);
+														write(seg.ref);
+													break;
+												}
+												write(VOID);
+												values.emplace_back(tmp);
+												container = tmp;
+											}
+											return values;
+										};
+										
+										auto assignSegment = [&](ByteCode parent, const Accessor& seg, ByteCode value){
+											write(SET);
+											switch (seg.kind) {
+												case Accessor::Kind::ArrayIndexLiteral:
+													write({ARRAY_INDEX, seg.indexLiteral});
+												break;
+												case Accessor::Kind::ArrayIndexVar:
+													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													write(seg.ref);
+												break;
+												case Accessor::Kind::KeyConst:
+												case Accessor::Kind::KeyVar:
+													write(OBJ_KEY);
+													write(seg.ref);
+												break;
+											}
+											write(parent);
+											write(value);
+											write(VOID);
+										};
+										
+										std::vector<Accessor> chain {};
+										int chainEndIndex = parseAccessorChain(dst, nextWordIndex, chain);
+										
+										if (!chain.empty()) {
+											validate(IsArray(dst) || (IsText(dst) && IsVar(dst)));
+											nextWordIndex = chainEndIndex;
+											Word nextToken = readWord();
+											if (nextToken == Word::AssignmentOperatorGroup) {
+												ByteCode op = GetOperator(nextToken);
+												ByteCode rhs = compileExpression(line.words, nextWordIndex, -1);
+												auto values = loadAccessorChain(dst, chain);
+												ByteCode finalValue = values.back();
+												ByteCode newValue = rhs;
 												if (op != SET) {
+													write(op);
+													write(finalValue);
+													write(finalValue);
+													write(rhs);
+													write(VOID);
+													newValue = finalValue;
+												}
+												ByteCode parent = chain.size() > 1? values[values.size()-2] : dst;
+												assignSegment(parent, chain.back(), newValue);
+												for (int i = (int)chain.size() - 2; i >= 0; --i) {
+													ByteCode parentContainer = i == 0? dst : values[i-1];
+													assignSegment(parentContainer, chain[i], values[i]);
+												}
+											} else if (nextToken == Word::SuffixOperatorGroup) {
+												ByteCode op = GetOperator(nextToken);
+												auto values = loadAccessorChain(dst, chain);
+												ByteCode finalValue = values.back();
+												write(op);
+												if (nextToken == "!!") write(finalValue);
+												write(finalValue);
+												write(VOID);
+												ByteCode parent = chain.size() > 1? values[values.size()-2] : dst;
+												assignSegment(parent, chain.back(), finalValue);
+												for (int i = (int)chain.size() - 2; i >= 0; --i) {
+													ByteCode parentContainer = i == 0? dst : values[i-1];
+													assignSegment(parentContainer, chain[i], values[i]);
+												}
+											} else {
+												validate(false);
+											}
+										} else {
+											Word operand = readWord();
+											if (operand == Word::Varname || operand == Word::Numeric) {
+												validate(IsArray(dst) || (IsText(dst) && IsVar(dst))); // make sure dst is not const
+												operation = readWord();
+												if (operation == Word::AssignmentOperatorGroup) {
+													ByteCode op = GetOperator(operation);
+													ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+													if (op != SET) {
+														ByteCode tmp;
+														switch (dst.type) {
+															case STORAGE_ARRAY_NUMERIC:
+															case RAM_ARRAY_NUMERIC:
+																tmp = declareTmpNumeric();
+																break;
+															case STORAGE_VAR_TEXT:
+															case STORAGE_ARRAY_TEXT:
+															case RAM_VAR_TEXT:
+															case RAM_ARRAY_TEXT:
+																tmp = declareTmpText();
+																break;
+															default: validate(false);
+														}
+														// Assign the current indexed value to tmp
+														write(IDX);
+														write(tmp);
+														write(dst);
+														if (operand == Word::Varname) {
+															ByteCode idx = getVar(operand);
+															if (IsNumeric(idx)) {
+																write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+															} else {
+																validate(IsText(idx));
+																write(OBJ_KEY);
+															}
+															write(idx);
+														} else /*numeric*/ {
+															write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+														}
+														write(VOID);
+														// Set tmp to the new value
+														write(op);
+														write(tmp);
+														write(tmp);
+														write(ref);
+														write(VOID);
+														ref = tmp;
+													}
+													write(SET);
+													if (operand == Word::Varname) {
+														ByteCode idx = getVar(operand);
+														if (IsNumeric(idx)) {
+															write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+														} else {
+															validate(IsText(idx));
+															write(OBJ_KEY);
+														}
+														write(idx);
+													} else /*numeric*/ {
+														write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+													}
+													write(dst);
+													write(ref);
+													write(VOID);
+												} else if (operation == Word::SuffixOperatorGroup) {
+													ByteCode op = GetOperator(operation);
 													ByteCode tmp;
 													switch (dst.type) {
 														case STORAGE_ARRAY_NUMERIC:
@@ -4210,113 +4560,83 @@ const int VERSION_PATCH = 0;
 													write(VOID);
 													// Set tmp to the new value
 													write(op);
+													if (operation == "!!") write(tmp);
 													write(tmp);
+													write(VOID);
+													// Assign dst to tmp
+													write(SET);
+													if (operand == Word::Varname) {
+														ByteCode idx = getVar(operand);
+														if (IsNumeric(idx)) {
+															write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+														} else {
+															validate(IsText(idx));
+															write(OBJ_KEY);
+														}
+														write(idx);
+													} else /*numeric*/ {
+														write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
+													}
+													write(dst);
 													write(tmp);
+													write(VOID);
+												} else {
+													validate(false);
+												}
+											} else if (operand == Word::Funcname || operand == Word::Name) {
+												// Trailing function call statement or StringObject member assignment
+												Word next = readWord();
+												validate(next);
+												if (next == Word::ExpressionBegin) {
+													// Trailing function call
+													std::vector<ByteCode> args {};
+													args.push_back(dst);
+													while (nextWordIndex < (int)line.words.size()) {
+														int argEnd = GetArgEnd(line.words, nextWordIndex);
+														if (argEnd == -1) {
+															break;
+														}
+														args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+														nextWordIndex = argEnd+1;
+														if (readWord() != Word::CommaOperator) {
+															break;
+														}
+													}
+													compileFunctionCall(operand, args, false, true);
+												} else if (operand == Word::Name && next == Word::AssignmentOperatorGroup) {
+													// StringObject member assignment
+													validate(IsVar(dst) && IsText(dst));
+													ByteCode op = GetOperator(next);
+													ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+													ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
+													if (op != SET) {
+														ByteCode tmp = declareTmpText();
+														// Assign the current indexed value to tmp
+														write(IDX);
+														write(tmp);
+														write(dst);
+														write(OBJ_KEY);
+														write(key);
+														write(VOID);
+														// Set tmp to the new value
+														write(op);
+														write(tmp);
+														write(tmp);
+														write(ref);
+														write(VOID);
+														ref = tmp;
+													}
+													write(SET);
+													write(OBJ_KEY);
+													write(key);
+													write(dst);
 													write(ref);
 													write(VOID);
-													ref = tmp;
-												}
-												write(SET);
-												if (operand == Word::Varname) {
-													ByteCode idx = getVar(operand);
-													if (IsNumeric(idx)) {
-														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
-													} else {
-														validate(IsText(idx));
-														write(OBJ_KEY);
-													}
-													write(idx);
-												} else /*numeric*/ {
-													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
-												}
-												write(dst);
-												write(ref);
-												write(VOID);
-											} else if (operation == Word::SuffixOperatorGroup) {
-												ByteCode op = GetOperator(operation);
-												ByteCode tmp;
-												switch (dst.type) {
-													case STORAGE_ARRAY_NUMERIC:
-													case RAM_ARRAY_NUMERIC:
-														tmp = declareTmpNumeric();
-														break;
-													case STORAGE_VAR_TEXT:
-													case STORAGE_ARRAY_TEXT:
-													case RAM_VAR_TEXT:
-													case RAM_ARRAY_TEXT:
-														tmp = declareTmpText();
-														break;
-													default: validate(false);
-												}
-												// Assign the current indexed value to tmp
-												write(IDX);
-												write(tmp);
-												write(dst);
-												if (operand == Word::Varname) {
-													ByteCode idx = getVar(operand);
-													if (IsNumeric(idx)) {
-														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
-													} else {
-														validate(IsText(idx));
-														write(OBJ_KEY);
-													}
-													write(idx);
-												} else /*numeric*/ {
-													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
-												}
-												write(VOID);
-												// Set tmp to the new value
-												write(op);
-												if (operation == "!!") write(tmp);
-												write(tmp);
-												write(VOID);
-												// Assign dst to tmp
-												write(SET);
-												if (operand == Word::Varname) {
-													ByteCode idx = getVar(operand);
-													if (IsNumeric(idx)) {
-														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
-													} else {
-														validate(IsText(idx));
-														write(OBJ_KEY);
-													}
-													write(idx);
-												} else /*numeric*/ {
-													write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
-												}
-												write(dst);
-												write(tmp);
-												write(VOID);
-											} else {
-												validate(false);
-											}
-										} else if (operand == Word::Funcname || operand == Word::Name) {
-											// Trailing function call statement or StringObject member assignment
-											Word next = readWord();
-											validate(next);
-											if (next == Word::ExpressionBegin) {
-												// Trailing function call
-												std::vector<ByteCode> args {};
-												args.push_back(dst);
-												while (nextWordIndex < (int)line.words.size()) {
-													int argEnd = GetArgEnd(line.words, nextWordIndex);
-													if (argEnd == -1) {
-														break;
-													}
-													args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
-													nextWordIndex = argEnd+1;
-													if (readWord() != Word::CommaOperator) {
-														break;
-													}
-												}
-												compileFunctionCall(operand, args, false, true);
-											} else if (operand == Word::Name && next == Word::AssignmentOperatorGroup) {
-												// StringObject member assignment
-												validate(IsVar(dst) && IsText(dst));
-												ByteCode op = GetOperator(next);
-												ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-												ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
-												if (op != SET) {
+												} else if (operand == Word::Name && next == Word::SuffixOperatorGroup) {
+													// StringObject member with suffix operation
+													validate(IsVar(dst) && IsText(dst));
+													ByteCode op = GetOperator(next);
+													ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
 													ByteCode tmp = declareTmpText();
 													// Assign the current indexed value to tmp
 													write(IDX);
@@ -4327,45 +4647,23 @@ const int VERSION_PATCH = 0;
 													write(VOID);
 													// Set tmp to the new value
 													write(op);
+													if (next == "!!") write(tmp);
 													write(tmp);
-													write(tmp);
-													write(ref);
 													write(VOID);
-													ref = tmp;
+													// Assign dst to tmp
+													write(SET);
+													write(OBJ_KEY);
+													write(key);
+													write(dst);
+													write(tmp);
+													write(VOID);
+												} else {
+													validate(false);
 												}
-												write(SET);
-												write(OBJ_KEY);
-												write(key);
-												write(dst);
-												write(ref);
-												write(VOID);
-											} else if (operand == Word::Name && next == Word::SuffixOperatorGroup) {
-												// StringObject member with suffix operation
-												validate(IsVar(dst) && IsText(dst));
-												ByteCode op = GetOperator(next);
-												ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
-												ByteCode tmp = declareTmpText();
-												// Assign the current indexed value to tmp
-												write(IDX);
-												write(tmp);
-												write(dst);
-												write(OBJ_KEY);
-												write(key);
-												write(VOID);
-												// Set tmp to the new value
-												write(op);
-												if (next == "!!") write(tmp);
-												write(tmp);
-												write(VOID);
-												// Assign dst to tmp
-												write(SET);
-												write(OBJ_KEY);
-												write(key);
-												write(dst);
-												write(tmp);
-												write(VOID);
-											} else validate(false);
-										} else validate(false);
+											} else {
+												validate(false);
+											}
+										}
 									}break;
 									case Word::SuffixOperatorGroup:{
 										validate(IsNumeric(dst));

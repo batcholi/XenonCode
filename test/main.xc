@@ -334,6 +334,23 @@ function @RunUnitTests()
 	foreach $kv ($key, $value)
 		$results.append($key & " : " & $value)
 	
+	; test 33
+	var $nested = ".outer{.inner{5}.other{7}}"
+	$results.append($nested.outer.inner)
+	$nested.outer.inner += 3
+	$results.append($nested.outer.inner)
+	$nested.outer.inner++
+	$results.append($nested.outer.inner)
+	var $outerKey = "outer"
+	var $innerKey = "inner"
+	var $otherKey = "other"
+	$results.append($nested.$outerKey.$otherKey)
+	$nested.$outerKey.$otherKey = $nested.$outerKey.$otherKey & "!"
+	$results.append($nested.$outerKey.$otherKey)
+	$nested.$outerKey.$innerKey += 2
+	$results.append($nested.$outerKey.$innerKey)
+	$results.append($nested)
+
 init
 	output.0 ("Hello, World!")
 	
