@@ -531,7 +531,8 @@ const int VERSION_PATCH = 0;
 			ConcatOperator, // & (text concatenation operator)
 			SuffixOperatorGroup, // ++ -- !!
 			NotOperator, // !
-			MulOperatorGroup, // ^ % * /
+			PowerOperator, // ^
+			MulOperatorGroup, // % * /
 			AddOperatorGroup, // + -
 			CompareOperatorGroup, // < <= > >=
 			EqualityOperatorGroup, // == != <>
@@ -638,6 +639,9 @@ const int VERSION_PATCH = 0;
 					
 					case SuffixOperatorGroup:
 						this->word = "SuffixOperatorGroup";
+						break;
+					case PowerOperator:
+						this->word = "PowerOperator";
 						break;
 					case MulOperatorGroup:
 						this->word = "MulOperatorGroup";
@@ -842,7 +846,9 @@ const int VERSION_PATCH = 0;
 						word.type = Word::ConcatOperator;
 					else if (word == "!")
 						word.type = Word::NotOperator;
-					else if (word == "*" || word == "/" || word == "^" || word == "%")
+					else if (word == "^")
+						word.type = Word::PowerOperator;
+					else if (word == "*" || word == "/" || word == "%")
 						word.type = Word::MulOperatorGroup;
 					else if (word == "+" || word == "-")
 						word.type = Word::AddOperatorGroup;
@@ -980,6 +986,9 @@ const int VERSION_PATCH = 0;
 					case Word::NotOperator:
 						std::cout << "NotOperator{" << word << "} ";
 						break;
+					case Word::PowerOperator:
+						std::cout << "PowerOperator{" << word << "} ";
+						break;
 					case Word::MulOperatorGroup:
 						std::cout << "MulOperatorGroup{" << word << "} ";
 						break;
@@ -1045,6 +1054,7 @@ const int VERSION_PATCH = 0;
 					case Word::SuffixOperatorGroup:
 					case Word::ConcatOperator:
 					case Word::NotOperator:
+					case Word::PowerOperator:
 					case Word::MulOperatorGroup:
 					case Word::AddOperatorGroup:
 					case Word::CompareOperatorGroup:
@@ -1213,6 +1223,7 @@ const int VERSION_PATCH = 0;
 			{Word::Numeric, {
 				Word::ExpressionEnd,
 				Word::CastOperator,
+				Word::PowerOperator,
 				Word::MulOperatorGroup,
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
@@ -1232,6 +1243,7 @@ const int VERSION_PATCH = 0;
 				Word::ExpressionEnd,
 				Word::TrailOperator,
 				Word::CastOperator,
+				Word::PowerOperator,
 				Word::MulOperatorGroup,
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
@@ -1250,6 +1262,7 @@ const int VERSION_PATCH = 0;
 				Word::ExpressionEnd,
 				Word::ConcatOperator,
 				Word::CastOperator,
+				Word::PowerOperator,
 				Word::MulOperatorGroup,
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
@@ -1272,6 +1285,7 @@ const int VERSION_PATCH = 0;
 				Word::ConcatOperator,
 				Word::ExpressionEnd,
 				Word::CastOperator,
+				Word::PowerOperator,
 				Word::MulOperatorGroup,
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
@@ -1293,6 +1307,13 @@ const int VERSION_PATCH = 0;
 			}},
 			// {Word::SuffixOperatorGroup, {}}, // Not allowed within expressions
 			{Word::NotOperator, {
+				Word::Numeric,
+				Word::Varname,
+				Word::Funcname,
+				Word::Name,
+				Word::ExpressionBegin,
+			}},
+			{Word::PowerOperator, {
 				Word::Numeric,
 				Word::Varname,
 				Word::Funcname,
@@ -1375,6 +1396,7 @@ const int VERSION_PATCH = 0;
 			{Word::Name, {{Word::CastOperator, {
 				Word::ConcatOperator,
 				Word::ExpressionEnd,
+				Word::PowerOperator,
 				Word::MulOperatorGroup,
 				Word::AddOperatorGroup,
 				Word::CompareOperatorGroup,
@@ -3376,6 +3398,9 @@ const int VERSION_PATCH = 0;
 					validate(word1 == Word::Text && word2 == Word::Text);
 					word1.word += word2.word;
 					return word1;
+				} else if (op == Word::PowerOperator) {
+					validate(word1 == Word::Numeric && word2 == Word::Numeric);
+					return Word{std::pow(double(word1), double(word2))};
 				} else if (op == Word::MulOperatorGroup) {
 					validate(word1 == Word::Numeric && word2 == Word::Numeric);
 					if (op == "*") {
@@ -3385,8 +3410,6 @@ const int VERSION_PATCH = 0;
 							throw CompileError("Division by zero in const expression");
 						}
 						return Word{double(word1) / double(word2)};
-					} else if (op == "^") {
-						return Word{std::pow(double(word1), double(word2))};
 					} else if (op == "%") {
 						if (double(word2) == 0.0) {
 							throw CompileError("Division by zero in const expression");
@@ -3669,13 +3692,20 @@ const int VERSION_PATCH = 0;
 							write(ref2);
 							write(VOID);
 							return tmp;
+						} else if (op == Word::PowerOperator) {
+							validate(op == "^");
+							write(POW);
+							ByteCode tmp = declareTmpNumeric();
+							write(tmp);
+							write(ref1);
+							write(ref2);
+							write(VOID);
+							return tmp;
 						} else if (op == Word::MulOperatorGroup) {
 							if (op == "*") {
 								write(MUL);
 							} else if (op == "/") {
 								write(DIV);
-							} else if (op == "^") {
-								write(POW);
 							} else if (op == "%") {
 								write(MOD);
 							} else {

@@ -351,6 +351,9 @@ function @RunUnitTests()
 	$results.append($nested.$outerKey.$innerKey)
 	$results.append($nested)
 
+	; test 34
+	$results.append(2*3^2)
+	
 init
 	output.0 ("Hello, World!")
 	
