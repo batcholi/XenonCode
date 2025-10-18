@@ -3,6 +3,8 @@ var $someVar = 16
 array $someArray:number
 array $mem: number
 
+const $smallconst = 10^-10
+
 recursive function @fib($n: number): number
 	while $mem.size <= $n
 		$mem.append(-1)
@@ -353,6 +355,10 @@ function @RunUnitTests()
 
 	; test 34
 	$results.append(2*3^2)
+	var $smallvar = 10^-10
+	$results.append(text("{0.0000000000000}", 10^-10))
+	$results.append(text("{0.0000000000000}", $smallconst))
+	$results.append(text("{0.0000000000000}", $smallvar))
 	
 init
 	output.0 ("Hello, World!")

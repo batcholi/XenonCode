@@ -497,6 +497,16 @@ const int VERSION_PATCH = 0;
 		return str;
 	}
 
+	// Convert a double to a string with a given precision, removing trailing zeros and the decimal point if it is the last character.
+	inline static std::string ToStringHighPrecision(double value, int precision = 15) {
+		std::ostringstream oss;
+		oss << std::fixed << std::setprecision(precision) << value;
+		std::string str = oss.str();
+		str.erase(str.find_last_not_of('0') + 1, std::string::npos);
+		str.erase(str.find_last_not_of('.') + 1, std::string::npos);
+		return str;
+	}
+
 	inline static const int WORD_ENUM_FINAL_TYPE_START = 11;
 	inline static const int WORD_ENUM_OPERATOR_START = 101;
 
@@ -664,7 +674,7 @@ const int VERSION_PATCH = 0;
 			}
 		}
 		explicit Word(const std::string& value) : word(value), type(Text) {}
-		explicit Word(double value) : word(ToString(value)), type(Numeric) {}
+		explicit Word(double value) : word(ToStringHighPrecision(value)), type(Numeric) {}
 		Word(const Word& other) = default;
 		Word(Word&& other) = default;
 		Word& operator= (const Word& other) = default;
@@ -5354,7 +5364,7 @@ const int VERSION_PATCH = 0;
 				
 				// Write Rom data (constants)
 				for (auto& value : rom_numericConstants) {
-					s << ToString(value) << ' ';
+					s << ToStringHighPrecision(value) << ' ';
 				}
 				for (auto& value : rom_textConstants) {
 					s << value << '\0';
@@ -5985,12 +5995,12 @@ const int VERSION_PATCH = 0;
 		void StorageSet(double value, ByteCode arr, uint32_t arrIndex = ARRAY_INDEX_NONE) {
 			auto& storage = GetStorage(arr);
 			if (arrIndex == ARRAY_INDEX_NONE) {
-				storage[0] = ToString(value);
+				storage[0] = ToStringHighPrecision(value);
 			} else{
 				if (arrIndex >= storage.size()) {
 					throw RuntimeError("Invalid array indexing");
 				}
-				storage[arrIndex] = ToString(value);
+				storage[arrIndex] = ToStringHighPrecision(value);
 			}
 			storageDirty = true;
 		}
