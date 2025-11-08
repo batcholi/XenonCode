@@ -2489,7 +2489,7 @@ const int VERSION_PATCH = 0;
 			auto& existingFuncRef = Device::deviceFunctionsByName.at(f.name);
 			existingFuncRef.args = f.args;
 			existingFuncRef.returnType = f.returnType;
-			Device::deviceFunctionsById[existingFuncRef.id] = forward<DeviceFunction>(func);
+			Device::deviceFunctionsById[existingFuncRef.id] = std::forward<DeviceFunction>(func);
 			return existingFuncRef;
 		}
 		static std::map<uint8_t, uint32_t> nextID {};
@@ -2498,7 +2498,7 @@ const int VERSION_PATCH = 0;
 		f.id = id;
 		Device::deviceFunctionsByName.emplace(f.name, f);
 		Device::deviceFunctionNamesById.emplace(id, f.name);
-		Device::deviceFunctionsById.emplace(id, forward<DeviceFunction>(func));
+		Device::deviceFunctionsById.emplace(id, std::forward<DeviceFunction>(func));
 		Device::deviceFunctionsList[base].emplace_back(f.key);
 		assert(Device::deviceFunctionsList[base].size() == size_t(nextID[base]));
 		return Device::deviceFunctionsByName.at(f.name);
@@ -2528,7 +2528,7 @@ const int VERSION_PATCH = 0;
 
 	// Implementation SHOULD set this function
 	inline static void SetOutputFunction(OutputFunction&& func) {
-		Device::outputFunction = forward<OutputFunction>(func);
+		Device::outputFunction = std::forward<OutputFunction>(func);
 	}
 
 	struct Stack {
@@ -2945,13 +2945,14 @@ const int VERSION_PATCH = 0;
 					
 					case VOID:
 						assert(!"Invalid var type VOID");
-						break;
+						return ByteCode{};
 						
 					default:
 						if (type >= RAM_OBJECT) {
 							index = ram_objectReferences++;
 						} else {
 							assert(!"Invalid CODE_TYPE");
+							return ByteCode{};
 						}
 				}
 				
@@ -3297,12 +3298,6 @@ const int VERSION_PATCH = 0;
 			auto addPointer = [&](std::string reg) -> uint32_t& {
 				if (reg == "") reg = std::to_string(stack.back().pointers.size()+1);
 				return stack.back().pointers[reg];
-			};
-			auto getPointer = [&](const std::string& reg) -> ByteCode {
-				assert(stack.size() > 0);
-				if (stack.back().pointers.contains(reg)) {
-					return rom_program[stack.back().pointers.at(reg)];
-				}
 			};
 			auto applyPointerAddr = [&](const std::string& reg){
 				assert(stack.size() > 0);
