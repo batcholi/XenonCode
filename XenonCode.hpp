@@ -5,6 +5,7 @@
 #include <sstream>
 #include <fstream>
 #include <vector>
+#include <initializer_list>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -15,6 +16,7 @@
 #include <filesystem>
 #include <functional>
 #include <cstring>
+#include <utility>
 
 #ifndef XC_NAMESPACE
 	#define XC_NAMESPACE XenonCode
@@ -2291,6 +2293,13 @@ const int VERSION_PATCH = 0;
 		Var(const char* value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const std::string& value) : type(Text), textValue(value), numericValue(0) {}
 		Var(const Var& other) : type(other.type), textValue(other.textValue), numericValue(other.numericValue) {}
+		Var& operator=(const Var& other) {
+			if (this == &other) return *this;
+			type = other.type;
+			textValue = other.textValue;
+			numericValue = other.numericValue;
+			return *this;
+		}
 		Var(Type type_, uint64_t objAddr) : type(type_), textValue(""), addrValue(objAddr) {}
 		
 		operator bool() const {
@@ -6410,16 +6419,20 @@ const int VERSION_PATCH = 0;
 			return false;
 		}
 		
-		bool RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
+	private:
+		bool RunEntryPointInternal(std::string name, const Var& ref, std::vector<Var>& args) {
+			if (!assembly) {
+				return false;
+			}
 			bool found = false;
 			strtolower(name);
 			for (const auto& entryPoint : assembly->entryPoints) {
 				if (entryPoint.name == name && EntryPointMatches(entryPoint, ref)) {
 					found = true;
+					size_t entryArgCount = entryPoint.args.size();
+					size_t sharedArgs = std::min(args.size(), entryArgCount);
 					
-					// Write args
-					for (size_t i = 0; i < args.size(); ++i) {
-						if (i >= entryPoint.args.size()) break;
+					for (size_t i = 0; i < sharedArgs; ++i) {
 						const Var& arg = args[i];
 						ByteCode dst = entryPoint.args[i];
 						if (IsNumeric(dst) && arg.type == Var::Numeric) {
@@ -6434,9 +6447,54 @@ const int VERSION_PATCH = 0;
 					}
 					
 					RunCode(assembly->rom_program, entryPoint.addr);
+					
+					for (size_t i = 0; i < sharedArgs; ++i) {
+						ByteCode src = entryPoint.args[i];
+						if (IsNumeric(src)) {
+							args[i] = Var{MemGetNumeric(src)};
+						} else if (IsText(src)) {
+							args[i] = Var{MemGetText(src)};
+						} else if (IsObject(src)) {
+							args[i] = MemGetObject(src);
+						}
+					}
 				}
 			}
 			return found;
+		}
+		
+	public:
+		bool RunEntryPoint(std::string name, const Var& ref = {}, const std::vector<Var>& args = {}) {
+			std::vector<Var> copy = args;
+			return RunEntryPointInternal(std::move(name), ref, copy);
+		}
+
+		bool RunEntryPoint(std::string name, const Var& ref, std::vector<Var>& args) {
+			return RunEntryPointInternal(std::move(name), ref, args);
+		}
+
+		bool RunEntryPoint(std::string name, const Var& ref, std::vector<Var*>& args) {
+			std::vector<Var> localArgs;
+			localArgs.reserve(args.size());
+			for (Var* arg : args) {
+				if (arg) {
+					localArgs.emplace_back(*arg);
+				} else {
+					localArgs.emplace_back();
+				}
+			}
+			bool found = RunEntryPointInternal(std::move(name), ref, localArgs);
+			for (size_t i = 0; i < args.size() && i < localArgs.size(); ++i) {
+				if (Var* out = args[i]) {
+					*out = localArgs[i];
+				}
+			}
+			return found;
+		}
+
+		bool RunEntryPoint(std::string name, const Var& ref, std::initializer_list<Var*> args) {
+			std::vector<Var*> refVector(args.begin(), args.end());
+			return RunEntryPoint(std::move(name), ref, refVector);
 		}
 		
 	};
