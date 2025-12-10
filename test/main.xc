@@ -21,6 +21,9 @@ recursive function @fib($n: number): number
 function @increment($v:number):number
 	return $v + 1
 
+function @makeTextObj():text
+	return ".user{dev}.nested{.val{123}}"
+
 function @RunUnitTests()
 	
 	; Test 1
@@ -359,6 +362,14 @@ function @RunUnitTests()
 	$results.append(text("{0.0000000000000}", 10^-10))
 	$results.append(text("{0.0000000000000}", $smallconst))
 	$results.append(text("{0.0000000000000}", $smallvar))
+	
+	; test 35
+	$results.append(@makeTextObj().user)
+	$results.append(@makeTextObj().nested.val)
+	var $pos = position()
+	$results.append($pos.xyz)
+	$results.append($pos.xyz().y * 2)
+	$results.append($pos.xyz.z * 2)
 	
 init
 	output.0 ("Hello, World!")

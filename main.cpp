@@ -32,13 +32,17 @@ void Init() {
 	auto positionType = XenonCode::DeclareObjectType("position", {
 		// Those are the members, may be used either as functions (using args, modifying the object, returning void) or as properties (ignoring args, returning a value)
 		{"x:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
-			return 0.0;
+			return 1.0;
 		}},
 		{"y:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
-			return 0.0;
+			return 2.0;
 		}},
 		{"z:number", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
-			return 0.0;
+			return 3.0;
+		}},
+		{"xyz():text", [](XenonCode::Computer*, const XenonCode::Var&, const vector<XenonCode::Var>&) -> XenonCode::Var {
+			// Return a simple KV text containing coordinates.
+			return XenonCode::Var(".x{1}.y{2}.z{3}");
 		}},
 		{"normalize()", [](XenonCode::Computer*, const XenonCode::Var& obj, const vector<XenonCode::Var>& args) -> XenonCode::Var {
 			//...
