@@ -4,6 +4,11 @@ array $someArray:number
 array $mem: number
 
 const $smallconst = 10^-10
+const $pi_const = pi
+const $two_pi_expr = pi * 2
+const $numbers_sum_const = number_one + number_two
+const $text_const = test_str1
+const $text_combo_const = test_str1 & " | " & test_str2
 
 recursive function @fib($n: number): number
 	while $mem.size <= $n
@@ -370,6 +375,14 @@ function @RunUnitTests()
 	$results.append($pos.xyz)
 	$results.append($pos.xyz().y * 2)
 	$results.append($pos.xyz.z * 2)
+
+	; test 36
+	$results.append("test36")
+	$results.append($pi_const)
+	$results.append($two_pi_expr)
+	$results.append($numbers_sum_const)
+	$results.append($text_const)
+	$results.append($text_combo_const)
 	
 init
 	output.0 ("Hello, World!")

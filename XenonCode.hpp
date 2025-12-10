@@ -3343,6 +3343,23 @@ const int VERSION_PATCH = 0;
 				assert(currentScope == (int)stack.size());
 			};
 			
+			// Resolve a word to its constant value when possible.
+			auto getConstWord = [&](Word word) -> Word {
+				if (word == Word::Varname) {
+					return GetConstValue(getVar(word));
+				}
+				if (word == Word::Name) {
+					if (Implementation::globalNumericConstants.contains(word.word)) {
+						return Word{Implementation::globalNumericConstants.at(word.word)};
+					}
+					if (Implementation::globalTextConstants.contains(word.word)) {
+						return Word{Implementation::globalTextConstants.at(word.word)};
+					}
+					throw CompileError("Const", word.word, "is undefined or not a constant");
+				}
+				return word;
+			};
+			
 			// Expression helpers
 			/*computeConstExpression*/ std::function<Word(const std::vector<Word>&, int, int)> computeConstExpression = [&](const std::vector<Word>& words, int startIndex, int endIndex = -1) -> Word {
 				if (endIndex < 0) endIndex += words.size();
@@ -3358,9 +3375,7 @@ const int VERSION_PATCH = 0;
 					validate(closing + 1 < endIndex);
 					opIndex = closing + 1;
 				}
-				if (word1 == Word::Varname) {
-					word1 = GetConstValue(getVar(word1));
-				}
+				word1 = getConstWord(word1);
 				validate(word1 == Word::Numeric || word1 == Word::Text || word1 == Word::Void);
 				
 				// Get Operator
@@ -3377,9 +3392,7 @@ const int VERSION_PATCH = 0;
 					validate(closing == endIndex); // Is there no more words remaining?
 					word2Index = closing;
 				}
-				if (word2 == Word::Varname) {
-					word2 = GetConstValue(getVar(word2));
-				}
+				word2 = getConstWord(word2);
 				validate(word2 == Word::Numeric || word2 == Word::Text || word2 == Word::Void);
 				
 				// Validate that there are no more words remaining
@@ -3869,6 +3882,18 @@ const int VERSION_PATCH = 0;
 									else if (value == Word::Varname) {
 										ByteCode ref = getVar(value);
 										declareVar(name, CODE_TYPE(ref.type), GetConstValue(ref));
+										validate(!readWord());
+									}
+									// Global constant name
+									else if (value == Word::Name) {
+										value = getConstWord(value);
+										if (value == Word::Numeric) {
+											declareVar(name, ROM_CONST_NUMERIC, value);
+										} else if (value == Word::Text) {
+											declareVar(name, ROM_CONST_TEXT, value);
+										} else {
+											validate(false);
+										}
 										validate(!readWord());
 									}
 									// Expression
