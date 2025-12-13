@@ -3995,11 +3995,35 @@ const int VERSION_PATCH = 0;
 												if (Implementation::globalNumericConstants.contains(funcName)) {
 													const auto constantValue = Implementation::globalNumericConstants.at(funcName);
 													const auto index = addRomConstant(rom_numericConstants, constantValue);
-													return { ROM_CONST_NUMERIC, static_cast<uint32_t>(index) };
+													ByteCode constantRef{ ROM_CONST_NUMERIC, static_cast<uint32_t>(index) };
+													if (name != "") {
+														ByteCode var = declareVar(name, RAM_VAR_NUMERIC);
+														name = "";
+														if (constantValue != 0.0) {
+															rom_vars_init.emplace_back(SET);
+															rom_vars_init.emplace_back(var);
+															rom_vars_init.emplace_back(constantRef);
+															rom_vars_init.emplace_back(VOID);
+														}
+														return var;
+													}
+													return constantRef;
 												} else if (Implementation::globalTextConstants.contains(funcName)) {
 													const auto constantValue = Implementation::globalTextConstants.at(funcName);
 													const auto index = addRomConstant(rom_textConstants, constantValue);
-													return { ROM_CONST_TEXT, static_cast<uint32_t>(index) };
+													ByteCode constantRef{ ROM_CONST_TEXT, static_cast<uint32_t>(index) };
+													if (name != "") {
+														ByteCode var = declareVar(name, RAM_VAR_TEXT);
+														name = "";
+														if (!constantValue.empty()) {
+															rom_vars_init.emplace_back(SET);
+															rom_vars_init.emplace_back(var);
+															rom_vars_init.emplace_back(constantRef);
+															rom_vars_init.emplace_back(VOID);
+														}
+														return var;
+													}
+													return constantRef;
 												}
 												
 												if (!Device::deviceFunctionsByName.contains(funcName)) {

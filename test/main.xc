@@ -1,5 +1,6 @@
 storage array $results:text
 var $someVar = 16
+var $constVar = number_one
 array $someArray:number
 array $mem: number
 
@@ -383,6 +384,9 @@ function @RunUnitTests()
 	$results.append($numbers_sum_const)
 	$results.append($text_const)
 	$results.append($text_combo_const)
+	
+	; Test 37
+	$results.append($constVar)
 	
 init
 	output.0 ("Hello, World!")
