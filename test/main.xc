@@ -3,6 +3,8 @@ var $someVar = 16
 array $someArray:number
 array $mem: number
 
+include "../include_test.xc"
+
 const $smallconst = 10^-10
 
 recursive function @fib($n: number): number
@@ -359,6 +361,9 @@ function @RunUnitTests()
 	$results.append(text("{0.0000000000000}", 10^-10))
 	$results.append(text("{0.0000000000000}", $smallconst))
 	$results.append(text("{0.0000000000000}", $smallvar))
+
+	; test 35
+	$results.append(@test_include())
 	
 init
 	output.0 ("Hello, World!")

@@ -2084,7 +2084,10 @@ const int VERSION_PATCH = 0;
 		}
 		
 		static std::string GetExistingFilePath(const std::string& filedir, std::string/*copy*/filename) {
+			// replace .. with the parent directory
 			std::string filepath = filedir + "/" + filename;
+			filepath = std::filesystem::path(filepath).lexically_normal().string();
+
 			if (!std::filesystem::exists(filepath)) {
 				std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
 				for (const auto& f : std::filesystem::directory_iterator(filedir)) {
