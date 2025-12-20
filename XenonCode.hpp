@@ -2072,6 +2072,10 @@ const int VERSION_PATCH = 0;
 			
 			// Parse all lines
 			for (std::string lineStr; getline(stream, lineStr); lineNumber++) {
+				// Remove trailing carriage return for Windows (CRLF) line endings compatibility
+				if (!lineStr.empty() && lineStr.back() == '\r') {
+					lineStr.pop_back();
+				}
 				try {
 					auto& line = lines.emplace_back(lineStr, lineNumber);
 					scope = line.scope;
