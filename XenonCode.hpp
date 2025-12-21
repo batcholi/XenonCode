@@ -2088,19 +2088,20 @@ const int VERSION_PATCH = 0;
 		}
 		
 		static std::string GetExistingFilePath(const std::string& filedir, std::string/*copy*/filename) {
-			std::string filepath = filedir + "/" + filename;
+			auto filepath = std::filesystem::path(filedir + "/" + filename).lexically_normal();
 			if (!std::filesystem::exists(filepath)) {
+				filename = filepath.filename().string();
 				std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
-				for (const auto& f : std::filesystem::directory_iterator(filedir)) {
+				for (const auto& f : std::filesystem::directory_iterator(filepath.parent_path())) {
 					std::string fLC = f.path().filename().string();
 					std::transform(fLC.begin(), fLC.end(), fLC.begin(), ::tolower);
 					if (fLC == filename) {
 						return f.path().string();
 					}
 				}
-				throw ParseError("File not found '" + filepath + "'");
+				throw ParseError("File not found '" + filepath.string() + "'");
 			}
-			return filepath;
+			return filepath.string();
 		}
 		
 		SourceFile(const std::string& filedir, const std::string& filename) : SourceFile(GetExistingFilePath(filedir, filename)) {}
