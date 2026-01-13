@@ -399,6 +399,7 @@ class XenonScreen {
 	uint32_t _click_y = 0;
 	bool _clicked = false;
 	bool _clickHold = false;
+	int _scroll = 0;
 	
 	XenonFontRenderer fontRenderer;
 
@@ -441,6 +442,16 @@ public:
 	
 	uint32_t GetClickX() {return _click_x;}
 	uint32_t GetClickY() {return _click_y;}
+	
+	virtual void Scroll(int scroll) {
+		_scroll = scroll;
+	}
+	
+	virtual void ResetScroll() {
+		_scroll = 0;
+	}
+	
+	int GetScroll() const {return _scroll;}
 	
 	uint32_t GetWidth() const {return _width;}
 	uint32_t GetHeight() const {return _height;}
