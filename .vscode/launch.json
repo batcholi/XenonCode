@@ -26,6 +26,29 @@
                 }
             ],
             "preLaunchTask": "Debug XenonCode",
+        },
+        {
+            "name": "Build and Run Benchmark",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/xenoncode-benchmark",
+            // "args": ["-verbose", "-parse-file", "../test/main.xc"],
+            // "args": ["-verbose", "-compile", "../test"],
+            "args": ["-verbose", "-compile", "../test", "-hz", "10", "-run", "../test"],
+            // "args": ["-verbose", "-run", "../test"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build Benchmark",
         }
     ]
 }

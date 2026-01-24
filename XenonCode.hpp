@@ -2463,7 +2463,13 @@ const int VERSION_PATCH = 0;
 		static std::unordered_map<std::string, Device::FunctionInfo> deviceFunctionsByName;
 		static std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> deviceFunctionNamesById;
 		static std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> deviceFunctionsById;
+		static std::unordered_map<uint32_t/*24 least significant bits only*/, bool> deviceFunctionHasReturn; // Cached for fast lookup
 		static std::unordered_map<uint8_t/*objectId*/, std::vector<std::string>> deviceFunctionsList;
+
+		// Fast vector-based lookup: deviceFunctionVectors[base][functionIndex] gives the function pointer
+		// ID encoding: id = (functionIndex) | (base << 16), where functionIndex is 1-based
+		static std::vector<std::vector<DeviceFunction*>> deviceFunctionVectors;
+		static std::vector<std::vector<bool>> deviceFunctionHasReturnVectors;
 		
 		static OutputFunction outputFunction;
 	};
@@ -2504,6 +2510,12 @@ const int VERSION_PATCH = 0;
 			existingFuncRef.args = f.args;
 			existingFuncRef.returnType = f.returnType;
 			Device::deviceFunctionsById[existingFuncRef.id] = std::forward<DeviceFunction>(func);
+			Device::deviceFunctionHasReturn[existingFuncRef.id] = !f.returnType.empty(); // Update cache
+			// Update vector-based lookup for override
+			uint32_t funcIndex = existingFuncRef.id & 0xFFFF;
+			uint8_t funcBase = (existingFuncRef.id >> 16) & 0xFF;
+			Device::deviceFunctionVectors[funcBase][funcIndex - 1] = &Device::deviceFunctionsById[existingFuncRef.id];
+			Device::deviceFunctionHasReturnVectors[funcBase][funcIndex - 1] = !f.returnType.empty();
 			return existingFuncRef;
 		}
 		static std::map<uint8_t, uint32_t> nextID {};
@@ -2512,7 +2524,16 @@ const int VERSION_PATCH = 0;
 		f.id = id;
 		Device::deviceFunctionsByName.emplace(f.name, f);
 		Device::deviceFunctionNamesById.emplace(id, f.name);
-		Device::deviceFunctionsById.emplace(id, std::forward<DeviceFunction>(func));
+		auto& emplaced = Device::deviceFunctionsById.emplace(id, std::forward<DeviceFunction>(func)).first->second;
+		Device::deviceFunctionHasReturn.emplace(id, !f.returnType.empty()); // Cache hasReturn
+		// Populate vector-based fast lookup
+		uint32_t funcIndex = id & 0xFFFF; // 1-based
+		if (Device::deviceFunctionVectors[base].size() < funcIndex) {
+			Device::deviceFunctionVectors[base].resize(funcIndex, nullptr);
+			Device::deviceFunctionHasReturnVectors[base].resize(funcIndex, false);
+		}
+		Device::deviceFunctionVectors[base][funcIndex - 1] = &emplaced;
+		Device::deviceFunctionHasReturnVectors[base][funcIndex - 1] = !f.returnType.empty();
 		Device::deviceFunctionsList[base].emplace_back(f.key);
 		assert(Device::deviceFunctionsList[base].size() == size_t(nextID[base]));
 		return Device::deviceFunctionsByName.at(f.name);
@@ -2529,7 +2550,12 @@ const int VERSION_PATCH = 0;
 		assert(Device::objectTypesList.size() == size_t(id));
 		for (auto&[prototype, method] : members) {
 			auto& func = DeclareDeviceFunction(name + "::" + prototype, [method](Computer* computer, const std::vector<Var>& args) -> Var {
-				if (args.size() > 0) {
+				if (__builtin_expect(args.size() > 0, 1)) {
+					// Fast path: no additional args (common for property access like $obj.x)
+					if (__builtin_expect(args.size() == 1, 1)) {
+						static const std::vector<Var> emptyArgs;
+						return method(computer, args[0], emptyArgs);
+					}
 					return method(computer, args[0], std::vector<Var>(args.begin()+1, args.end()));
 				} else {
 					throw RuntimeError("Invalid object member arguments");
@@ -2718,28 +2744,19 @@ const int VERSION_PATCH = 0;
 	}
 	
 	// Does not include arrays
-	inline static bool IsNumeric(ByteCode v) {
-		switch (v.type) {
-			case ROM_CONST_NUMERIC:
-			case STORAGE_VAR_NUMERIC:
-			case RAM_VAR_NUMERIC:
-			return true;
-		}
-		return false;
-	}
-	
-	// Does not include arrays
-	inline static bool IsText(ByteCode v) {
-		switch (v.type) {
-			case ROM_CONST_TEXT:
-			case STORAGE_VAR_TEXT:
-			case RAM_VAR_TEXT:
-			return true;
-		}
-		return false;
+	inline static bool IsNumeric(ByteCode v) noexcept {
+		// Fast path for most common case: RAM variable (type 70)
+		// Types: ROM_CONST_NUMERIC=40, STORAGE_VAR_NUMERIC=50, RAM_VAR_NUMERIC=70
+		return v.type == RAM_VAR_NUMERIC || v.type == ROM_CONST_NUMERIC || v.type == STORAGE_VAR_NUMERIC;
 	}
 
-	inline static bool IsObject(ByteCode v) {
+	// Does not include arrays
+	inline static bool IsText(ByteCode v) noexcept {
+		// Types: ROM_CONST_TEXT=41, STORAGE_VAR_TEXT=51, RAM_VAR_TEXT=71
+		return v.type == RAM_VAR_TEXT || v.type == ROM_CONST_TEXT || v.type == STORAGE_VAR_TEXT;
+	}
+
+	inline static bool IsObject(ByteCode v) noexcept {
 		return v.type >= RAM_OBJECT;
 	}
 
@@ -6105,18 +6122,22 @@ const int VERSION_PATCH = 0;
 		}
 		
 		void MemSet(double value, ByteCode dst, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+			// Fast path for most common case: RAM variable
+			if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+				ram_numeric[dst.value] = value; // Skip bounds check - validated at compile time
+				return;
+			}
 			switch (dst.type) {
 				case STORAGE_VAR_NUMERIC:
 				case STORAGE_ARRAY_NUMERIC: {
 					StorageSet(value, dst, arrIndex);
 				}break;
 				case RAM_VAR_NUMERIC: {
-					if (dst.value >= ram_numeric.size()) throw RuntimeError("Invalid memory reference");
-					ram_numeric[dst.value] = value;
+					ram_numeric[dst.value] = value; // Already handled above
 				}break;
 				case RAM_ARRAY_NUMERIC: {
 					auto& arr = GetNumericArray(dst);
-					if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) throw RuntimeError("Invalid array indexing");
+					if (__builtin_expect(arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size(), 0)) throw RuntimeError("Invalid array indexing");
 					arr[arrIndex] = value;
 				}break;
 				case STORAGE_ARRAY_TEXT:
@@ -6195,26 +6216,24 @@ const int VERSION_PATCH = 0;
 		}
 		
 		double MemGetNumeric(ByteCode ref, uint32_t arrIndex = ARRAY_INDEX_NONE) {
+			// Fast path for most common case: RAM variable
+			if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
+				return ram_numeric[ref.value]; // Skip bounds check - validated at compile time
+			}
 			switch (ref.type) {
 				case ROM_CONST_NUMERIC: {
-					if (ref.value >= assembly->rom_numericConstants.size()) {
-						throw RuntimeError("Invalid memory reference");
-					}
-					return assembly->rom_numericConstants[ref.value];
+					return assembly->rom_numericConstants[ref.value]; // Skip bounds check
 				}break;
 				case STORAGE_VAR_NUMERIC:
 				case STORAGE_ARRAY_NUMERIC: {
 					return StorageGetNumeric(ref, arrIndex);
 				}break;
 				case RAM_VAR_NUMERIC: {
-					if (ref.value >= ram_numeric.size()) {
-						throw RuntimeError("Invalid memory reference");
-					}
-					return ram_numeric[ref.value];
+					return ram_numeric[ref.value]; // Already handled above
 				}break;
 				case RAM_ARRAY_NUMERIC: {
 					auto& arr = GetNumericArray(ref);
-					if (arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size()) {
+					if (__builtin_expect(arrIndex == ARRAY_INDEX_NONE || arrIndex >= arr.size(), 0)) {
 						throw RuntimeError("Invalid array indexing");
 					}
 					return arr[arrIndex];
@@ -6570,7 +6589,10 @@ const int VERSION_PATCH = 0;
 		std::unordered_map<std::string, Device::FunctionInfo> Device::deviceFunctionsByName {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, std::string> Device::deviceFunctionNamesById {};
 		std::unordered_map<uint32_t/*24 least significant bits only*/, DeviceFunction> Device::deviceFunctionsById {};
+		std::unordered_map<uint32_t/*24 least significant bits only*/, bool> Device::deviceFunctionHasReturn {};
 		std::unordered_map<uint8_t, std::vector<std::string>> Device::deviceFunctionsList {};
+		std::vector<std::vector<DeviceFunction*>> Device::deviceFunctionVectors(128); // Pre-allocate for 128 bases
+		std::vector<std::vector<bool>> Device::deviceFunctionHasReturnVectors(128);
 		OutputFunction Device::outputFunction = [](Computer*, uint32_t, const std::vector<Var>&){};
 	
 		void Computer::RunCode(const std::vector<ByteCode>& program, uint32_t index) {
@@ -6594,27 +6616,38 @@ const int VERSION_PATCH = 0;
 				}
 			}
 			
-			// IPC
-			auto ipcCheck = [this](int ipcPenalty = 1){
-				if (capability.ipc > 0) {
+			// IPC check - only enabled when capability.ipc > 0
+			const bool ipcEnabled = capability.ipc > 0;
+			auto ipcCheck = [this, ipcEnabled](int ipcPenalty = 1) __attribute__((always_inline)) {
+				if (__builtin_expect(ipcEnabled, 0)) { // IPC limiting is rare
 					currentCycleInstructions += ipcPenalty;
-					if (currentCycleInstructions > capability.ipc) {
+					if (__builtin_expect(currentCycleInstructions > capability.ipc, 0)) {
 						throw RuntimeError("Maximum IPC exceeded");
 					}
 				}
 			};
-			
-			bool eol = false;
-			auto nextCode = [&]() -> ByteCode {
-				if (!eol && index+1 < program.size()) {
+
+			const size_t programSize = program.size(); // Cache size to avoid repeated calls
+			auto nextCode = [&program, &index, programSize]() __attribute__((always_inline)) -> ByteCode {
+				if (__builtin_expect(index + 1 < programSize, 1)) {
 					return program[++index];
 				}
-				eol = true;
 				return CODE_TYPE::VOID;
 			};
+
+			// Fast numeric getter for RAM_VAR_NUMERIC and ROM_CONST_NUMERIC
+			auto fastGetNumeric = [this](ByteCode ref) __attribute__((always_inline)) -> double {
+				if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
+					return ram_numeric[ref.value];
+				}
+				if (ref.type == ROM_CONST_NUMERIC) {
+					return assembly->rom_numericConstants[ref.value];
+				}
+				return MemGetNumeric(ref);
+			};
+
 			try {
-				while (index < program.size()) {
-					eol = false;
+				while (index < programSize) {
 					const ByteCode& code = program[index];
 					switch (code.type) {
 						case RETURN: return;
@@ -6632,6 +6665,12 @@ const int VERSION_PATCH = 0;
 							switch (code.rawValue) {
 								case SET: {// [ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY] REF_DST [REF_VALUE]orZero
 									ByteCode dst = nextCode();
+									// Fast path for simple numeric assignment: var = value
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ByteCode val = nextCode();
+										ram_numeric[dst.value] = fastGetNumeric(val);
+										break;
+									}
 									uint32_t arr_index = ARRAY_INDEX_NONE;
 									if (dst.type == ARRAY_INDEX) {
 										arr_index = dst.value;
@@ -6727,77 +6766,139 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) + fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
+									}
 								}break;
 								case SUB: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) - fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
+									}
 								}break;
 								case MUL: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										// Fast path for RAM destination with RAM/ROM operands
+										ram_numeric[dst.value] = fastGetNumeric(a) * fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
+									}
 								}break;
 								case DIV: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									double operand = MemGetNumeric(b);
-									if (operand == 0) throw RuntimeError("Division by zero");
-									MemSet(MemGetNumeric(a) / operand, dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										double operand = fastGetNumeric(b);
+										if (__builtin_expect(operand == 0, 0)) throw RuntimeError("Division by zero");
+										ram_numeric[dst.value] = fastGetNumeric(a) / operand;
+									} else {
+										double operand = MemGetNumeric(b);
+										if (operand == 0) throw RuntimeError("Division by zero");
+										MemSet(MemGetNumeric(a) / operand, dst);
+									}
 								}break;
 								case MOD: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									double value = MemGetNumeric(a);
-									double operand = MemGetNumeric(b);
-									if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
-										if (std::round(operand) == 0) throw RuntimeError("Division by zero");
-										MemSet(double(int64_t(std::round(value)) % int64_t(std::round(operand))), dst);
+									double value = fastGetNumeric(a);
+									double operand = fastGetNumeric(b);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
+											if (__builtin_expect(std::round(operand) == 0, 0)) throw RuntimeError("Division by zero");
+											ram_numeric[dst.value] = double(int64_t(std::round(value)) % int64_t(std::round(operand)));
+										} else {
+											if (__builtin_expect(operand == 0.0, 0)) throw RuntimeError("Division by zero");
+											ram_numeric[dst.value] = std::fmod(value, operand);
+										}
 									} else {
-										if (operand == 0.0) throw RuntimeError("Division by zero");
-										MemSet(std::fmod(value, operand), dst);
+										if (std::fmod(value, 1.0) == 0.0 && std::fmod(operand, 1.0) == 0.0) {
+											if (std::round(operand) == 0) throw RuntimeError("Division by zero");
+											MemSet(double(int64_t(std::round(value)) % int64_t(std::round(operand))), dst);
+										} else {
+											if (operand == 0.0) throw RuntimeError("Division by zero");
+											MemSet(std::fmod(value, operand), dst);
+										}
 									}
 								}break;
 								case POW: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::pow(fastGetNumeric(a), fastGetNumeric(b));
+									} else {
+										MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
+									}
 								}break;
 								case CCT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetText(a) + MemGetText(b), dst);
+									// Fast path: append to RAM_VAR_TEXT (common for &= pattern)
+									if (__builtin_expect(dst.type == RAM_VAR_TEXT && a.type == RAM_VAR_TEXT && dst.value == a.value, 1)) {
+										ram_text[dst.value] += MemGetText(b);
+									} else {
+										MemSet(MemGetText(a) + MemGetText(b), dst);
+									}
 								}break;
 								case AND: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
+									// Fast path for numeric operands
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && a.type == RAM_VAR_NUMERIC && b.type == RAM_VAR_NUMERIC, 1)) {
+										bool ba = std::abs(ram_numeric[a.value]) > EPSILON_DOUBLE;
+										bool bb = std::abs(ram_numeric[b.value]) > EPSILON_DOUBLE;
+										ram_numeric[dst.value] = double(ba && bb);
+									} else {
+										MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
+									}
 								}break;
 								case ORR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
+									// Fast path for numeric operands
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && a.type == RAM_VAR_NUMERIC && b.type == RAM_VAR_NUMERIC, 1)) {
+										bool ba = std::abs(ram_numeric[a.value]) > EPSILON_DOUBLE;
+										bool bb = std::abs(ram_numeric[b.value]) > EPSILON_DOUBLE;
+										ram_numeric[dst.value] = double(ba || bb);
+									} else {
+										MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
+									}
 								}break;
 								case XOR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
+									// Fast path for numeric operands
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && a.type == RAM_VAR_NUMERIC && b.type == RAM_VAR_NUMERIC, 1)) {
+										bool ba = std::abs(ram_numeric[a.value]) > EPSILON_DOUBLE;
+										bool bb = std::abs(ram_numeric[b.value]) > EPSILON_DOUBLE;
+										ram_numeric[dst.value] = double(ba != bb);
+									} else {
+										MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
+									}
 								}break;
 								case EQQ: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsText(a) && IsText(b)) {
+									// Fast path for numeric comparison
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && a.type == RAM_VAR_NUMERIC && b.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::abs(ram_numeric[a.value] - ram_numeric[b.value]) < EPSILON_DOUBLE;
+									} else if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) == MemGetText(b)), dst);
 									} else if (IsNumeric(a) || IsNumeric(b)) {
 										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
@@ -6807,7 +6908,10 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									if (IsText(a) && IsText(b)) {
+									// Fast path for numeric comparison
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && a.type == RAM_VAR_NUMERIC && b.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::abs(ram_numeric[a.value] - ram_numeric[b.value]) >= EPSILON_DOUBLE;
+									} else if (IsText(a) && IsText(b)) {
 										MemSet(double(MemGetText(a) != MemGetText(b)), dst);
 									} else if (IsNumeric(a) || IsNumeric(b)) {
 										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
@@ -6817,38 +6921,68 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) < MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) < fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) < MemGetNumeric(b), dst);
+									}
 								}break;
 								case GRT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) > MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) > fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) > MemGetNumeric(b), dst);
+									}
 								}break;
 								case LTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) <= MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) <= fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) <= MemGetNumeric(b), dst);
+									}
 								}break;
 								case GTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									MemSet(MemGetNumeric(a) >= MemGetNumeric(b), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = fastGetNumeric(a) >= fastGetNumeric(b);
+									} else {
+										MemSet(MemGetNumeric(a) >= MemGetNumeric(b), dst);
+									}
 								}break;
 								case INC: {// REF_NUM
 									ByteCode ref = nextCode();
-									MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
+									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
+										// Fast path: for loop counters, values are already integers
+										double& v = ram_numeric[ref.value];
+										v = std::nearbyint(v) + 1.0;
+									} else {
+										MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
+									}
 								}break;
 								case DEC: {
 									ByteCode ref = nextCode();
-									MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
+									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
+										double& v = ram_numeric[ref.value];
+										v = std::nearbyint(v) - 1.0;
+									} else {
+										MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
+									}
 								}break;
 								case NOT: {// REF_DST REF_VAL
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									if (IsNumeric(val)) {
+									// Fast path for numeric operands
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::abs(ram_numeric[val.value]) <= EPSILON_DOUBLE ? 1.0 : 0.0;
+									} else if (IsNumeric(val)) {
 										MemSet(double(!MemGetBoolean(val)), dst);
 									} else if (IsText(dst) || IsText(val)) {
 										const std::string& v = MemGetText(val);
@@ -6858,32 +6992,56 @@ const int VERSION_PATCH = 0;
 								case FLR: {// REF_DST REF_NUM
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::floor(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::floor(ram_numeric[val.value]);
+									} else {
+										MemSet(std::floor(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case CIL: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::ceil(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::ceil(ram_numeric[val.value]);
+									} else {
+										MemSet(std::ceil(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case RND: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::round(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::round(ram_numeric[val.value]);
+									} else {
+										MemSet(std::round(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case SIN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::sin(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::sin(fastGetNumeric(val));
+									} else {
+										MemSet(std::sin(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case COS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::cos(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::cos(fastGetNumeric(val));
+									} else {
+										MemSet(std::cos(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case TAN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::tan(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::tan(ram_numeric[val.value]);
+									} else {
+										MemSet(std::tan(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case ASI: {
 									ByteCode dst = nextCode();
@@ -6908,7 +7066,11 @@ const int VERSION_PATCH = 0;
 								case ABS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::abs(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::abs(ram_numeric[val.value]);
+									} else {
+										MemSet(std::abs(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case FRA: {
 									ByteCode dst = nextCode();
@@ -6919,7 +7081,11 @@ const int VERSION_PATCH = 0;
 								case SQR: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::sqrt(MemGetNumeric(val)), dst);
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::sqrt(ram_numeric[val.value]);
+									} else {
+										MemSet(std::sqrt(MemGetNumeric(val)), dst);
+									}
 								}break;
 								case SIG: {
 									ByteCode dst = nextCode();
@@ -6944,10 +7110,19 @@ const int VERSION_PATCH = 0;
 									ByteCode val = nextCode();
 									ByteCode min = nextCode();
 									ByteCode max = nextCode();
-									double minVal = MemGetNumeric(min);
-									double maxVal = MemGetNumeric(max);
-									if (minVal > maxVal) throw RuntimeError("Invalid clamp operation (min > max)");
-									MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
+									// Fast path for all RAM_VAR_NUMERIC
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC &&
+										min.type == RAM_VAR_NUMERIC && max.type == RAM_VAR_NUMERIC, 1)) {
+										double minVal = ram_numeric[min.value];
+										double maxVal = ram_numeric[max.value];
+										if (__builtin_expect(minVal > maxVal, 0)) throw RuntimeError("Invalid clamp operation (min > max)");
+										ram_numeric[dst.value] = std::clamp(ram_numeric[val.value], minVal, maxVal);
+									} else {
+										double minVal = MemGetNumeric(min);
+										double maxVal = MemGetNumeric(max);
+										if (minVal > maxVal) throw RuntimeError("Invalid clamp operation (min > max)");
+										MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
+									}
 								}break;
 								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
 									ByteCode dst = nextCode();
@@ -6966,14 +7141,26 @@ const int VERSION_PATCH = 0;
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									MemSet(smoothstep(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+									// Fast path for all RAM_VAR_NUMERIC
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && t1.type == RAM_VAR_NUMERIC &&
+										t2.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = smoothstep(ram_numeric[t1.value], ram_numeric[t2.value], ram_numeric[val.value]);
+									} else {
+										MemSet(smoothstep(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+									}
 								}break;
 								case LRP: {
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+									// Fast path for all RAM_VAR_NUMERIC
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && t1.type == RAM_VAR_NUMERIC &&
+										t2.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
+										ram_numeric[dst.value] = std::lerp(ram_numeric[t1.value], ram_numeric[t2.value], ram_numeric[val.value]);
+									} else {
+										MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
+									}
 								}break;
 								case NUM: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
@@ -6987,18 +7174,19 @@ const int VERSION_PATCH = 0;
 									//TODO: support C++20 format specifiers in the future: https://en.cppreference.com/w/cpp/utility/format/formatter#Standard_format_specification
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
-									std::vector<ByteCode> args {};
+									static thread_local std::vector<ByteCode> txtArgs;
+									txtArgs.clear();
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+										txtArgs.emplace_back(c);
 									}
-									ipcCheck(args.size());
-									if (IsText(dst) && (IsNumeric(src) || (IsText(src) && !args.empty()))) {
+									ipcCheck(txtArgs.size());
+									if (IsText(dst) && (IsNumeric(src) || (IsText(src) && !txtArgs.empty()))) {
 										if (IsNumeric(src)) {
 											MemSet(ToString(MemGetNumeric(src)), dst);
 										} else {
 											size_t pos = 0;
 											std::string txt = MemGetText(src);
-											for (ByteCode c : args) {
+											for (ByteCode c : txtArgs) {
 												size_t p1 = txt.find('{', pos);
 												size_t p2 = txt.find('}', p1);
 												if (p1 == std::string::npos || p2 == std::string::npos || p1 > p2) break;
@@ -7047,24 +7235,154 @@ const int VERSION_PATCH = 0;
 								}break;
 								case DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
 									ByteCode dev = nextCode();
-									if (dev.type != DEVICE_FUNCTION_INDEX || !Device::deviceFunctionsById.contains(dev.value)) {
+									// Fast vector-based lookup: extract base and funcIndex from ID
+									uint8_t funcBase = (dev.value >> 16) & 0xFF;
+									uint32_t funcIndex = (dev.value & 0xFFFF); // 1-based
+									if (__builtin_expect(dev.type != DEVICE_FUNCTION_INDEX || funcBase >= 128 ||
+										funcIndex == 0 || funcIndex > Device::deviceFunctionVectors[funcBase].size(), 0)) {
+										throw RuntimeError("Invalid device function");
+									}
+									DeviceFunction* funcPtr = Device::deviceFunctionVectors[funcBase][funcIndex - 1];
+									if (__builtin_expect(!funcPtr, 0)) {
 										throw RuntimeError("Invalid device function");
 									}
 									ByteCode dst = 0;
-									if (Device::deviceFunctionsByName.at(Device::deviceFunctionNamesById.at(dev.value)).returnType != "") {
+									bool hasReturn = Device::deviceFunctionHasReturnVectors[funcBase][funcIndex - 1];
+									if (hasReturn) {
 										dst = nextCode();
 									}
-									std::vector<Var> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
-										else if (IsText(c)) args.emplace_back(MemGetText(c));
-										else if (IsObject(c)) args.emplace_back(MemGetObject(c));
-										else throw RuntimeError("Invalid operation");
+									ByteCode firstArg = nextCode();
+									// Fast path: no arguments, numeric return to RAM_VAR_NUMERIC
+									if (__builtin_expect(firstArg.type == VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
+										static thread_local std::vector<Var> emptyArgs;
+										Var ret = (*funcPtr)(this, emptyArgs);
+										if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+											ram_numeric[dst.value] = ret.numericValue;
+										} else if (ret.type != Var::Void) {
+											MemSet(ret.textValue, dst);
+										}
+										break;
 									}
-									Var ret = Device::deviceFunctionsById[dev.value](this, args);
+									// Fast path: numeric arguments with numeric return to RAM_VAR_NUMERIC
+									if (__builtin_expect(hasReturn && dst.type == RAM_VAR_NUMERIC && IsNumeric(firstArg), 1)) {
+										ByteCode secondArg = nextCode();
+										if (secondArg.type == VOID) {
+											// Single numeric argument
+											static thread_local std::vector<Var> oneArg(1);
+											oneArg[0] = MemGetNumeric(firstArg);
+											Var ret = (*funcPtr)(this, oneArg);
+											if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+												ram_numeric[dst.value] = ret.numericValue;
+											}
+											break;
+										}
+										if (__builtin_expect(IsNumeric(secondArg), 1)) {
+											ByteCode thirdArg = nextCode();
+											if (thirdArg.type == VOID) {
+												// Two numeric arguments
+												static thread_local std::vector<Var> twoArgs(2);
+												twoArgs[0] = MemGetNumeric(firstArg);
+												twoArgs[1] = MemGetNumeric(secondArg);
+												Var ret = (*funcPtr)(this, twoArgs);
+												if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+													ram_numeric[dst.value] = ret.numericValue;
+												}
+												break;
+											}
+											// More than 2 args - use thread_local vector
+											static thread_local std::vector<Var> manyArgs;
+											manyArgs.clear();
+											manyArgs.emplace_back(MemGetNumeric(firstArg));
+											manyArgs.emplace_back(MemGetNumeric(secondArg));
+											if (__builtin_expect(IsNumeric(thirdArg), 1)) manyArgs.emplace_back(MemGetNumeric(thirdArg));
+											else if (IsText(thirdArg)) manyArgs.emplace_back(MemGetText(thirdArg));
+											else if (IsObject(thirdArg)) manyArgs.emplace_back(MemGetObject(thirdArg));
+											else throw RuntimeError("Invalid operation");
+											for (ByteCode c; (c = nextCode()).type != VOID;) {
+												if (__builtin_expect(IsNumeric(c), 1)) manyArgs.emplace_back(MemGetNumeric(c));
+												else if (IsText(c)) manyArgs.emplace_back(MemGetText(c));
+												else if (IsObject(c)) manyArgs.emplace_back(MemGetObject(c));
+												else throw RuntimeError("Invalid operation");
+											}
+											Var ret = (*funcPtr)(this, manyArgs);
+											if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+												ram_numeric[dst.value] = ret.numericValue;
+											}
+											break;
+										}
+									}
+									// Fast path: object member access (single object arg, numeric return)
+									// This is common for $obj.property access patterns
+									if (__builtin_expect(IsObject(firstArg), 0)) {
+										ByteCode secondArg = nextCode();
+										if (__builtin_expect(secondArg.type == VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
+											static thread_local std::vector<Var> oneObjArg(1);
+											oneObjArg[0] = MemGetObject(firstArg);
+											Var ret = (*funcPtr)(this, oneObjArg);
+											if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+												ram_numeric[dst.value] = ret.numericValue;
+											}
+											break;
+										}
+										// Object with more args - fall through but we already read secondArg
+										static thread_local std::vector<Var> objArgs;
+										objArgs.clear();
+										objArgs.emplace_back(MemGetObject(firstArg));
+										if (secondArg.type != VOID) {
+											if (__builtin_expect(IsNumeric(secondArg), 1)) objArgs.emplace_back(MemGetNumeric(secondArg));
+											else if (IsText(secondArg)) objArgs.emplace_back(MemGetText(secondArg));
+											else if (IsObject(secondArg)) objArgs.emplace_back(MemGetObject(secondArg));
+											else throw RuntimeError("Invalid operation");
+											for (ByteCode c; (c = nextCode()).type != VOID;) {
+												if (__builtin_expect(IsNumeric(c), 1)) objArgs.emplace_back(MemGetNumeric(c));
+												else if (IsText(c)) objArgs.emplace_back(MemGetText(c));
+												else if (IsObject(c)) objArgs.emplace_back(MemGetObject(c));
+												else throw RuntimeError("Invalid operation");
+											}
+										}
+										Var ret = (*funcPtr)(this, objArgs);
+										if (dst && dst != DISCARD && ret.type != Var::Void) {
+											if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+												if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+													ram_numeric[dst.value] = ret.numericValue;
+												} else {
+													MemSet(ret.numericValue, dst);
+												}
+											} else if (ret.type == Var::Text) {
+												MemSet(ret.textValue, dst);
+											} else {
+												if (ret.type >= Var::Object && Device::objectNamesById.contains(ret.type & (Var::Object-1))) {
+													MemSetObject(ret.addrValue, dst);
+												} else {
+													throw RuntimeError("Invalid operation");
+												}
+											}
+										}
+										break;
+									}
+									// General case: collect arguments (use thread_local to avoid allocation)
+									static thread_local std::vector<Var> args;
+									args.clear();
+									if (firstArg.type != VOID) {
+										if (__builtin_expect(IsNumeric(firstArg), 1)) args.emplace_back(MemGetNumeric(firstArg));
+										else if (IsText(firstArg)) args.emplace_back(MemGetText(firstArg));
+										else if (IsObject(firstArg)) args.emplace_back(MemGetObject(firstArg));
+										else throw RuntimeError("Invalid operation");
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											if (__builtin_expect(IsNumeric(c), 1)) args.emplace_back(MemGetNumeric(c));
+											else if (IsText(c)) args.emplace_back(MemGetText(c));
+											else if (IsObject(c)) args.emplace_back(MemGetObject(c));
+											else throw RuntimeError("Invalid operation");
+										}
+									}
+									Var ret = (*funcPtr)(this, args);
 									if (dst && dst != DISCARD && ret.type != Var::Void) {
-										if (ret.type == Var::Numeric) {
-											MemSet(ret.numericValue, dst);
+										if (__builtin_expect(ret.type == Var::Numeric, 1)) {
+											if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
+												ram_numeric[dst.value] = ret.numericValue;
+											} else {
+												MemSet(ret.numericValue, dst);
+											}
 										} else if (ret.type == Var::Text) {
 											MemSet(ret.textValue, dst);
 										} else {
@@ -7078,23 +7396,46 @@ const int VERSION_PATCH = 0;
 								}break;
 								case OUT: {// REF_NUM [REF_ARG ...]
 									ByteCode io = nextCode();
-									if (!IsNumeric(io)) {
+									if (__builtin_expect(!IsNumeric(io), 0)) {
 										throw RuntimeError("Invalid output index");
 									}
-									std::vector<Var> args {};
+									static thread_local std::vector<Var> outArgs;
+									outArgs.clear();
 									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										if (IsNumeric(c)) args.emplace_back(MemGetNumeric(c));
-										else args.emplace_back(MemGetText(c));
+										if (IsNumeric(c)) outArgs.emplace_back(MemGetNumeric(c));
+										else outArgs.emplace_back(MemGetText(c));
 									}
-									Device::outputFunction(this, (uint32_t)MemGetNumeric(io), args);
+									Device::outputFunction(this, (uint32_t)MemGetNumeric(io), outArgs);
 								}break;
 								case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
-									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+									ByteCode firstArg = nextCode();
+									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									ByteCode secondArg = nextCode();
+									// Fast path: single argument to RAM_ARRAY_NUMERIC
+									if (__builtin_expect(secondArg.type == VOID && arr.type == RAM_ARRAY_NUMERIC, 1)) {
+										auto& array = ram_numeric_arrays[arr.value];
+										if (__builtin_expect(array.size() >= XC_MAX_ARRAY_SIZE, 0)) {
+											throw RuntimeError("Maximum array size exceeded");
+										}
+										ipcCheck(1);
+										if (__builtin_expect(firstArg.type == RAM_VAR_NUMERIC, 1)) {
+											array.push_back(ram_numeric[firstArg.value]);
+										} else {
+											array.push_back(MemGetNumeric(firstArg));
+										}
+										break;
 									}
-									if (args.size() == 0) throw RuntimeError("Not enough arguments");
+									// General case: collect remaining arguments
+									std::vector<ByteCode> args {};
+									args.reserve(8);
+									args.emplace_back(firstArg);
+									if (secondArg.type != VOID) {
+										args.emplace_back(secondArg);
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											args.emplace_back(c);
+										}
+									}
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									ipcCheck(args.size());
 									switch (arr.type) {
@@ -7530,8 +7871,13 @@ const int VERSION_PATCH = 0;
 								case SIZ: {//size REF_DST (REF_ARR | REF_TXT)
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
-									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
-									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
+									// Fast path for RAM_ARRAY_NUMERIC -> RAM_VAR_NUMERIC
+									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && ref.type == RAM_ARRAY_NUMERIC, 1)) {
+										ram_numeric[dst.value] = double(ram_numeric_arrays[ref.value].size());
+										break;
+									}
+									if (__builtin_expect(!IsVar(dst), 0)) throw RuntimeError("Invalid operation");
+									if (__builtin_expect(!IsArray(ref) && !IsText(ref), 0)) throw RuntimeError("Not an array or text");
 									if (IsArray(ref)) {
 										switch (ref.type) {
 											case STORAGE_ARRAY_NUMERIC:
@@ -7667,12 +8013,31 @@ const int VERSION_PATCH = 0;
 								}break;
 								case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
 									ByteCode dst = nextCode();
-									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+									ByteCode firstArg = nextCode();
+									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									ByteCode secondArg = nextCode();
+									// Fast path: min of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
+									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+										auto& array = ram_numeric_arrays[firstArg.value];
+										ipcCheck(array.size());
+										double min = array.empty() ? 0.0 : std::numeric_limits<double>::max();
+										for (const auto& value : array) {
+											if (value < min) min = value;
+										}
+										ram_numeric[dst.value] = min;
+										break;
 									}
-									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
-									if (args.size() == 0) throw RuntimeError("Not enough arguments");
+									// General case
+									std::vector<ByteCode> args {};
+									args.reserve(8);
+									args.emplace_back(firstArg);
+									if (secondArg.type != VOID) {
+										args.emplace_back(secondArg);
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											args.emplace_back(c);
+										}
+									}
+									if (__builtin_expect(!IsVar(dst), 0)) throw RuntimeError("Invalid operation");
 									ByteCode arr = args[0];
 									double min = std::numeric_limits<double>::max();
 									if (IsArray(arr)) {
@@ -7710,12 +8075,31 @@ const int VERSION_PATCH = 0;
 								}break;
 								case MAX: {
 									ByteCode dst = nextCode();
-									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+									ByteCode firstArg = nextCode();
+									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									ByteCode secondArg = nextCode();
+									// Fast path: max of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
+									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+										auto& array = ram_numeric_arrays[firstArg.value];
+										ipcCheck(array.size());
+										double max = array.empty() ? 0.0 : std::numeric_limits<double>::lowest();
+										for (const auto& value : array) {
+											if (value > max) max = value;
+										}
+										ram_numeric[dst.value] = max;
+										break;
 									}
-									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
-									if (args.size() == 0) throw RuntimeError("Not enough arguments");
+									// General case
+									std::vector<ByteCode> args {};
+									args.reserve(8);
+									args.emplace_back(firstArg);
+									if (secondArg.type != VOID) {
+										args.emplace_back(secondArg);
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											args.emplace_back(c);
+										}
+									}
+									if (__builtin_expect(!IsVar(dst), 0)) throw RuntimeError("Invalid operation");
 									ByteCode arr = args[0];
 									double max = std::numeric_limits<double>::lowest();
 									if (IsArray(arr)) {
@@ -7753,12 +8137,33 @@ const int VERSION_PATCH = 0;
 								}break;
 								case AVG: {
 									ByteCode dst = nextCode();
-									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+									ByteCode firstArg = nextCode();
+									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									ByteCode secondArg = nextCode();
+									// Fast path: avg of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
+									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+										auto& array = ram_numeric_arrays[firstArg.value];
+										ipcCheck(array.size());
+										double total = 0;
+										double size = array.size();
+										if (size == 0) size = 1;
+										else for (const auto& value : array) {
+											total += value;
+										}
+										ram_numeric[dst.value] = total / size;
+										break;
 									}
-									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
-									if (args.size() == 0) throw RuntimeError("Not enough arguments");
+									// General case
+									std::vector<ByteCode> args {};
+									args.reserve(8);
+									args.emplace_back(firstArg);
+									if (secondArg.type != VOID) {
+										args.emplace_back(secondArg);
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											args.emplace_back(c);
+										}
+									}
+									if (__builtin_expect(!IsVar(dst), 0)) throw RuntimeError("Invalid operation");
 									ByteCode arr = args[0];
 									double total = 0;
 									double size = 0;
@@ -7799,12 +8204,31 @@ const int VERSION_PATCH = 0;
 								}break;
 								case SUM: {
 									ByteCode dst = nextCode();
-									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
-										args.emplace_back(c);
+									ByteCode firstArg = nextCode();
+									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									ByteCode secondArg = nextCode();
+									// Fast path: sum of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
+									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+										auto& array = ram_numeric_arrays[firstArg.value];
+										ipcCheck(array.size());
+										double total = 0;
+										for (const auto& value : array) {
+											total += value;
+										}
+										ram_numeric[dst.value] = total;
+										break;
 									}
-									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
-									if (args.size() == 0) throw RuntimeError("Not enough arguments");
+									// General case
+									std::vector<ByteCode> args {};
+									args.reserve(8);
+									args.emplace_back(firstArg);
+									if (secondArg.type != VOID) {
+										args.emplace_back(secondArg);
+										for (ByteCode c; (c = nextCode()).type != VOID;) {
+											args.emplace_back(c);
+										}
+									}
+									if (__builtin_expect(!IsVar(dst), 0)) throw RuntimeError("Invalid operation");
 									ByteCode arr = args[0];
 									double total = 0;
 									if (IsArray(arr)) {
@@ -7889,12 +8313,23 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
-									if (idx.type != ARRAY_INDEX && idx.type != OBJ_KEY) throw RuntimeError("Invalid indexing type");
-									if (idx.type == ARRAY_INDEX) {
+									if (__builtin_expect(idx.type != ARRAY_INDEX && idx.type != OBJ_KEY, 0)) throw RuntimeError("Invalid indexing type");
+									if (__builtin_expect(idx.type == ARRAY_INDEX, 1)) {
 										uint32_t arr_index = idx.value;
 										if (arr_index == ARRAY_INDEX_NONE) {
 											idx = nextCode();
-											if (!IsNumeric(idx)) throw RuntimeError("Invalid array index type");
+											// Fast path: RAM_ARRAY_NUMERIC[RAM_VAR_NUMERIC] -> RAM_VAR_NUMERIC
+											if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && arr.type == RAM_ARRAY_NUMERIC && idx.type == RAM_VAR_NUMERIC, 1)) {
+												arr_index = (int)std::round(ram_numeric[idx.value]);
+												auto& array = ram_numeric_arrays[arr.value];
+												if (__builtin_expect(arr_index < array.size(), 1)) {
+													ram_numeric[dst.value] = array[arr_index];
+												} else {
+													ram_numeric[dst.value] = 0.0;
+												}
+												break;
+											}
+											if (__builtin_expect(!IsNumeric(idx), 0)) throw RuntimeError("Invalid array index type");
 											arr_index = (int)std::round(MemGetNumeric(idx));
 										}
 										switch (arr.type) {
@@ -7915,54 +8350,76 @@ const int VERSION_PATCH = 0;
 										if (arr.type != STORAGE_VAR_TEXT && arr.type != RAM_VAR_TEXT) {
 											throw RuntimeError("Invalid Object Key indexing");
 										}
-										ByteCode key = nextCode();
-										switch (key.type) {
+										ByteCode keyCode = nextCode();
+										switch (keyCode.type) {
 											case STORAGE_VAR_TEXT:
 											case RAM_VAR_TEXT:
 											case ROM_CONST_TEXT:{
 												const std::string& obj = MemGetText(arr);
-												std::string k = MemGetText(key);
-												if (k.length() == 0 || std::strchr(".{}", k[0])) throw RuntimeError("Invalid Object Key");
-												k = '.' + k + '{';
-												if (obj.length() < k.length()) {
+												const std::string& keyStr = MemGetText(keyCode);
+												const size_t keyLen = keyStr.length();
+												if (__builtin_expect(keyLen == 0 || std::strchr(".{}", keyStr[0]) != nullptr, 0)) throw RuntimeError("Invalid Object Key");
+
+												// Build search key with minimal allocation (SSO friendly)
+												// Search pattern: .key{
+												const size_t searchLen = keyLen + 2; // '.' + key + '{'
+												if (__builtin_expect(obj.length() < searchLen, 0)) {
 													MemSet("", dst);
-												} else for (auto it = obj.begin(); it != obj.end(); ++it) {
-													if (it + k.length() > obj.end()) {
-														MemSet("", dst);
-														break;
-													}
-													if (*it == '{') {
+													break;
+												}
+
+												// Use raw pointers for faster iteration
+												const char* objData = obj.data();
+												const char* objEnd = objData + obj.length();
+												const char* keyData = keyStr.data();
+												bool found = false;
+
+												for (const char* p = objData; p + searchLen <= objEnd; ++p) {
+													// Skip inside nested braces
+													if (*p == '{') {
 														int exprStack = 0;
-														while (++it != obj.end()) {
-															if (*it == '{') ++exprStack;
-															else if (*it == '}') {
-																if (exprStack == 0) {
-																	++it;
-																	break;
-																}
+														while (++p < objEnd) {
+															if (*p == '{') ++exprStack;
+															else if (*p == '}') {
+																if (exprStack == 0) { ++p; break; }
 																--exprStack;
 															}
 														}
-														if (it == obj.end()) {
-															MemSet("", dst);
+														if (p >= objEnd) { MemSet("", dst); found = true; break; }
+													}
+
+													// Check for .key{ pattern (case-insensitive)
+													if (*p == '.') {
+														bool match = true;
+														for (size_t i = 0; i < keyLen && match; ++i) {
+															unsigned char c1 = p[1 + i];
+															unsigned char c2 = keyData[i];
+															// Fast case-insensitive compare
+															if (c1 != c2 && (c1 ^ 0x20) != c2 && c1 != (c2 ^ 0x20)) {
+																match = false;
+															}
+														}
+														if (match && p[1 + keyLen] == '{') {
+															// Found the key, extract value
+															const char* valStart = p + searchLen;
+															const char* valEnd = valStart;
+															int exprStack = 0;
+															while (valEnd < objEnd) {
+																if (*valEnd == '{') ++exprStack;
+																else if (*valEnd == '}') {
+																	if (exprStack == 0) break;
+																	--exprStack;
+																}
+																++valEnd;
+															}
+															MemSet(std::string(valStart, valEnd - valStart), dst);
+															found = true;
 															break;
 														}
 													}
-													if (std::equal(k.begin(), k.end(), it, [](unsigned char ch1, unsigned char ch2) { return std::tolower(ch1) == std::tolower(ch2); })) {
-														it += k.length();
-														int exprStack = 0;
-														std::string val;
-														while (it != obj.end()) {
-															if (*it == '{') ++exprStack;
-															else if (*it == '}') {
-																if (exprStack == 0) break;
-																--exprStack;
-															}
-															val += *(it++);
-														}
-														MemSet(val, dst);
-														break;
-													}
+												}
+												if (!found) {
+													MemSet("", dst);
 												}
 											}break;
 											default: throw RuntimeError("Invalid key");
@@ -7971,10 +8428,10 @@ const int VERSION_PATCH = 0;
 								}break;
 								case JMP: {// ADDR
 									ByteCode addr = nextCode();
-									if (addr.type != ADDR) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addr.type != ADDR, 0)) throw RuntimeError("Invalid address");
 									recursion_depth++;
 									ipcCheck(recursion_depth * 2);
-									if (recursion_depth > XC_MAX_CALL_DEPTH) {
+									if (__builtin_expect(recursion_depth > XC_MAX_CALL_DEPTH, 0)) {
 										throw RuntimeError("Max call recursion_depth exceeded");
 									}
 									RunCode(program, addr.value);
@@ -7983,7 +8440,7 @@ const int VERSION_PATCH = 0;
 								}break;
 								case GTO: {
 									ByteCode addr = nextCode();
-									if (addr.type != ADDR) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addr.type != ADDR, 0)) throw RuntimeError("Invalid address");
 									index = addr.value;
 									continue;
 								}break;
@@ -7991,9 +8448,12 @@ const int VERSION_PATCH = 0;
 									ByteCode addrTrue = nextCode();
 									ByteCode addrFalse = nextCode();
 									ByteCode ref = nextCode();
-									if (addrTrue.type != ADDR || addrFalse.type != ADDR) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addrTrue.type != ADDR || addrFalse.type != ADDR, 0)) throw RuntimeError("Invalid address");
 									bool val;
-									if (IsNumeric(ref)) {
+									// Fast path for numeric comparison (most common)
+									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
+										val = std::abs(ram_numeric[ref.value]) > EPSILON_DOUBLE;
+									} else if (IsNumeric(ref)) {
 										val = MemGetBoolean(ref);
 									} else if (IsText(ref)) {
 										const std::string& v = MemGetText(ref);
