@@ -355,13 +355,45 @@ const int VERSION_PATCH = 0;
 	}
 	
 	inline static size_t utf8length(const std::string& str) {
+		const size_t n = str.length();
+		const char* data = str.data();
+
+		// Check if ASCII-only using 8-byte scanning (faster even for short strings)
+		size_t i = 0;
+		uint64_t orAccum = 0;
+		for (; i + 8 <= n; i += 8) {
+			uint64_t chunk;
+			std::memcpy(&chunk, data + i, 8);
+			orAccum |= chunk;
+		}
+		for (; i < n; ++i) {
+			orAccum |= (unsigned char)data[i];
+		}
+		if ((orAccum & 0x8080808080808080ULL) == 0) {
+			return n;
+		}
+
+		// Count UTF-8 code points for non-ASCII strings
 		size_t len = 0;
-		for (size_t i = 0; i < str.length(); ++i) {
-			if ((str[i] & 0xC0) != 0x80) {
+		for (i = 0; i < n; ++i) {
+			if ((data[i] & 0xC0) != 0x80) {
 				++len;
 			}
 		}
 		return len;
+	}
+
+	// Fast ASCII case conversion (avoids locale overhead of std::toupper/tolower)
+	inline static void asciiToUpper(std::string& str) {
+		for (char& c : str) {
+			if (c >= 'a' && c <= 'z') c -= 32;
+		}
+	}
+
+	inline static void asciiToLower(std::string& str) {
+		for (char& c : str) {
+			if (c >= 'A' && c <= 'Z') c += 32;
+		}
 	}
 	
 	inline static std::string utf8substr(const std::string& str, size_t start, int length = -1) {
@@ -5649,8 +5681,41 @@ const int VERSION_PATCH = 0;
 		LocalVars recursive_localvars {};
 		std::unordered_map<uint32_t, uint32_t> currentLineByAddr {};
 		std::unordered_map<uint32_t, std::string> currentFileByAddr;
-		
+
 		std::vector<double> timersLastRun {};
+
+		// Key-value cache for fast repeated lookups on the same string
+		// Uses linear array with hash pre-check for small key counts
+		struct KVCache {
+			struct Entry {
+				uint32_t hash;  // First 4 bytes of key as "hash" - fast comparison
+				std::string key;
+				std::string value;
+			};
+			std::vector<Entry> entries;
+
+			static uint32_t quickHash(const std::string& s) {
+				uint32_t h = 0;
+				size_t n = std::min(s.size(), size_t(4));
+				for (size_t i = 0; i < n; ++i) h = (h << 8) | (unsigned char)s[i];
+				return h;
+			}
+
+			const std::string* find(const std::string& key) const {
+				uint32_t h = quickHash(key);
+				for (const auto& e : entries) {
+					if (e.hash == h && e.key == key) return &e.value;
+				}
+				return nullptr;
+			}
+
+			void add(std::string key, std::string value) {
+				entries.push_back({quickHash(key), std::move(key), std::move(value)});
+			}
+
+			void clear() { entries.clear(); }
+		};
+		std::unordered_map<uint32_t, KVCache> kvCache; // varIndex -> cache
 		
 	public:
 		struct Capability {
@@ -6179,11 +6244,15 @@ const int VERSION_PATCH = 0;
 					}
 					if (arrIndex == ARRAY_INDEX_NONE) {
 						ram_text[dst.value] = value;
+						// Invalidate key-value cache for this variable
+						kvCache.erase(dst.value);
 					} else if (utf8length(value) == 1) {
 						if (arrIndex >= utf8length(ram_text[dst.value])) {
 							throw RuntimeError("Invalid text indexing");
 						}
 						utf8assign(ram_text[dst.value], arrIndex, value);
+						// Invalidate key-value cache for this variable
+						kvCache.erase(dst.value);
 					} else {
 						throw RuntimeError("Invalid char assignment");
 					}
@@ -7190,44 +7259,87 @@ const int VERSION_PATCH = 0;
 												size_t p1 = txt.find('{', pos);
 												size_t p2 = txt.find('}', p1);
 												if (p1 == std::string::npos || p2 == std::string::npos || p1 > p2) break;
-												std::string format = txt.substr(p1+1, p2-p1-1);
-												std::string before = txt.substr(0, p1);
-												std::string after = txt.substr(p2+1, txt.length()-p2-1);
+												size_t formatLen = p2 - p1 - 1;
+												size_t afterStart = p2 + 1;
+												size_t afterLen = txt.length() - afterStart;
 												// {}
-												if (format == "") {
-													txt = before + (IsNumeric(c)? ToString(MemGetNumeric(c)) : MemGetText(c)) + after;
+												if (formatLen == 0) {
+													std::string result = IsNumeric(c) ? ToString(MemGetNumeric(c)) : MemGetText(c);
+													if (p1 == 0 && afterLen == 0) {
+														txt = std::move(result);
+													} else {
+														txt = txt.substr(0, p1) + result + txt.substr(afterStart, afterLen);
+													}
 												}
 												// {0} {00} {0e} {0e.00} {0.0} {0000.00}
-												else if (format[0] == '0') {
-													if (format.length() == 1) {
+												else if (txt[p1+1] == '0') {
+													if (formatLen == 1) {
 														// rounded to int
-														txt = before + ToString(int64_t(std::round(MemGetNumeric(c)))) + after;
+														std::string result = ToString(int64_t(std::round(MemGetNumeric(c))));
+														if (p1 == 0 && afterLen == 0) {
+															txt = std::move(result);
+														} else {
+															txt = txt.substr(0, p1) + result + txt.substr(afterStart, afterLen);
+														}
 													} else {
-														std::stringstream str;
+														std::string format = txt.substr(p1+1, formatLen);
 														size_t ePos = format.find('e');
 														bool e = ePos != std::string::npos;
 														size_t dotPos = format.find('.');
 														bool hasDecimal = dotPos != std::string::npos;
-														int beforeDecimal = hasDecimal? dotPos : (format.length() - e);
-														int afterDecimal = hasDecimal? (format.length() - dotPos - 1) : 0;
-														if (e && hasDecimal) {
-															if (ePos > dotPos) {
-																assert(afterDecimal > 0);
-																--afterDecimal;
+														int beforeDecimal = hasDecimal? (int)dotPos : (int)(format.length() - e);
+														int afterDecimal = hasDecimal? (int)(format.length() - dotPos - 1) : 0;
+
+														// Fast path: zero-padded integer (e.g., "000000")
+														if (!e && !hasDecimal && beforeDecimal > 0 && beforeDecimal <= 20) {
+															int64_t num = int64_t(std::round(MemGetNumeric(c)));
+															bool negative = num < 0;
+															if (negative) num = -num;
+															char buf[24];
+															char* end = buf + 23;
+															*end = '\0';
+															char* ptr = end;
+															int digits = 0;
+															do {
+																*--ptr = '0' + (num % 10);
+																num /= 10;
+																digits++;
+															} while (num > 0);
+															while (digits < beforeDecimal) {
+																*--ptr = '0';
+																digits++;
+															}
+															if (negative) *--ptr = '-';
+															if (p1 == 0 && afterLen == 0) {
+																txt.assign(ptr, end - ptr);
 															} else {
-																assert(beforeDecimal > 0);
-																--beforeDecimal;
+																txt = txt.substr(0, p1) + std::string(ptr, end - ptr) + txt.substr(afterStart, afterLen);
+															}
+														} else {
+															if (e && hasDecimal) {
+																if (ePos > dotPos) {
+																	assert(afterDecimal > 0);
+																	--afterDecimal;
+																} else {
+																	assert(beforeDecimal > 0);
+																	--beforeDecimal;
+																}
+															}
+															std::stringstream str;
+															str << std::setfill('0');
+															if (!e) str << std::setw(beforeDecimal + hasDecimal + afterDecimal);
+															str << std::setprecision(afterDecimal);
+															str << (e? std::scientific : std::fixed);
+															str << MemGetNumeric(c);
+															if (p1 == 0 && afterLen == 0) {
+																txt = str.str();
+															} else {
+																txt = txt.substr(0, p1) + str.str() + txt.substr(afterStart, afterLen);
 															}
 														}
-														str << std::setfill('0');
-														if (!e) str << std::setw(beforeDecimal + hasDecimal + afterDecimal);
-														str << std::setprecision(afterDecimal);
-														str << (e? std::scientific : std::fixed);
-														str << MemGetNumeric(c);
-														txt = before + str.str() + after;
 													}
 												} else break;
-												pos = txt.length() - after.length();
+												pos = txt.length() - afterLen;
 											}
 											MemSet(txt, dst);
 										}
@@ -7895,7 +8007,12 @@ const int VERSION_PATCH = 0;
 											}break;
 										}
 									} else {
-										MemSet(utf8length(MemGetText(ref)), dst);
+										// Fast path for RAM text - direct access without copy
+										if (__builtin_expect(ref.type == RAM_VAR_TEXT && dst.type == RAM_VAR_NUMERIC, 1)) {
+											ram_numeric[dst.value] = utf8length(ram_text[ref.value]);
+										} else {
+											MemSet(utf8length(MemGetText(ref)), dst);
+										}
 									}
 								}break;
 								case LAS: {
@@ -8360,67 +8477,139 @@ const int VERSION_PATCH = 0;
 												const size_t keyLen = keyStr.length();
 												if (__builtin_expect(keyLen == 0 || std::strchr(".{}", keyStr[0]) != nullptr, 0)) throw RuntimeError("Invalid Object Key");
 
-												// Build search key with minimal allocation (SSO friendly)
-												// Search pattern: .key{
-												const size_t searchLen = keyLen + 2; // '.' + key + '{'
-												if (__builtin_expect(obj.length() < searchLen, 0)) {
+												// Fast path: use cache for RAM_VAR_TEXT with direct RAM access
+												if (arr.type == RAM_VAR_TEXT && dst.type == RAM_VAR_TEXT) {
+													auto cacheIt = kvCache.find(arr.value);
+
+													// Check if cache exists (invalidated on write)
+													if (cacheIt != kvCache.end()) {
+														// Try exact match first (common case: lowercase keys)
+														const std::string* val = cacheIt->second.find(keyStr);
+														if (val) {
+															// Skip copy if destination already has same content
+															if (ram_text[dst.value] != *val) {
+																ram_text[dst.value] = *val;
+															}
+															break;
+														}
+														// Try case-insensitive match only if key has uppercase
+														bool needsLowercase = false;
+														for (char c : keyStr) {
+															if (c >= 'A' && c <= 'Z') { needsLowercase = true; break; }
+														}
+														if (needsLowercase) {
+															std::string lowerKeyStr = keyStr;
+															for (char& c : lowerKeyStr) c = std::tolower((unsigned char)c);
+															val = cacheIt->second.find(lowerKeyStr);
+															if (val) {
+																if (ram_text[dst.value] != *val) {
+																	ram_text[dst.value] = *val;
+																}
+																break;
+															}
+														}
+														// Key not in cache - key doesn't exist
+														ram_text[dst.value].clear();
+														break;
+													}
+
+													// Cache miss - parse all key-values and cache
+													auto& cache = kvCache[arr.value];
+													cache.clear();
+
+													const char* p = obj.data();
+													const char* end = p + obj.length();
+													while (p < end) {
+														// Find next .key{
+														p = (const char*)std::memchr(p, '.', end - p);
+														if (!p) break;
+
+														// Extract key name
+														const char* keyStart = p + 1;
+														const char* keyEnd = keyStart;
+														while (keyEnd < end && *keyEnd != '{' && *keyEnd != '.' && *keyEnd != '}') {
+															++keyEnd;
+														}
+														if (keyEnd >= end || *keyEnd != '{') {
+															++p;
+															continue;
+														}
+
+														std::string key(keyStart, keyEnd - keyStart);
+
+														// Extract value
+														const char* valStart = keyEnd + 1;
+														const char* valEnd = valStart;
+														int depth = 0;
+														while (valEnd < end) {
+															char c = *valEnd;
+															if (c == '{') ++depth;
+															else if (c == '}') {
+																if (depth == 0) break;
+																--depth;
+															}
+															++valEnd;
+														}
+
+														// Store lowercase key for case-insensitive lookup
+														for (char& c : key) c = std::tolower((unsigned char)c);
+														cache.add(std::move(key), std::string(valStart, valEnd - valStart));
+
+														p = valEnd + 1;
+													}
+
+													// Now look up the requested key
+													std::string lowerKeyStr = keyStr;
+													for (char& c : lowerKeyStr) c = std::tolower((unsigned char)c);
+													const std::string* val = cache.find(lowerKeyStr);
+													if (val) {
+														ram_text[dst.value] = *val;
+													} else {
+														ram_text[dst.value].clear();
+													}
+													break;
+												}
+
+												// Non-cached path for non-RAM text
+												const size_t searchLen = keyLen + 2;
+												const size_t objLen = obj.length();
+												if (__builtin_expect(objLen < searchLen, 0)) {
 													MemSet("", dst);
 													break;
 												}
 
-												// Use raw pointers for faster iteration
+												char patternBuf[64];
+												char* pattern = keyLen < 62 ? patternBuf : new char[keyLen + 3];
+												pattern[0] = '.';
+												std::memcpy(pattern + 1, keyStr.data(), keyLen);
+												pattern[keyLen + 1] = '{';
+												pattern[keyLen + 2] = '\0';
+
 												const char* objData = obj.data();
-												const char* objEnd = objData + obj.length();
-												const char* keyData = keyStr.data();
 												bool found = false;
 
-												for (const char* p = objData; p + searchLen <= objEnd; ++p) {
-													// Skip inside nested braces
-													if (*p == '{') {
-														int exprStack = 0;
-														while (++p < objEnd) {
-															if (*p == '{') ++exprStack;
-															else if (*p == '}') {
-																if (exprStack == 0) { ++p; break; }
-																--exprStack;
-															}
+												const char* match = std::strstr(objData, pattern);
+												if (match) {
+													const char* valStart = match + searchLen;
+													const char* valEnd = valStart;
+													const char* objEnd = objData + objLen;
+													int depth = 0;
+													while (valEnd < objEnd) {
+														char c = *valEnd;
+														if (c == '{') ++depth;
+														else if (c == '}') {
+															if (depth == 0) break;
+															--depth;
 														}
-														if (p >= objEnd) { MemSet("", dst); found = true; break; }
+														++valEnd;
 													}
-
-													// Check for .key{ pattern (case-insensitive)
-													if (*p == '.') {
-														bool match = true;
-														for (size_t i = 0; i < keyLen && match; ++i) {
-															unsigned char c1 = p[1 + i];
-															unsigned char c2 = keyData[i];
-															// Fast case-insensitive compare
-															if (c1 != c2 && (c1 ^ 0x20) != c2 && c1 != (c2 ^ 0x20)) {
-																match = false;
-															}
-														}
-														if (match && p[1 + keyLen] == '{') {
-															// Found the key, extract value
-															const char* valStart = p + searchLen;
-															const char* valEnd = valStart;
-															int exprStack = 0;
-															while (valEnd < objEnd) {
-																if (*valEnd == '{') ++exprStack;
-																else if (*valEnd == '}') {
-																	if (exprStack == 0) break;
-																	--exprStack;
-																}
-																++valEnd;
-															}
-															MemSet(std::string(valStart, valEnd - valStart), dst);
-															found = true;
-															break;
-														}
-													}
+													MemSet(std::string(valStart, valEnd - valStart), dst);
+													found = true;
 												}
 												if (!found) {
 													MemSet("", dst);
 												}
+												if (pattern != patternBuf) delete[] pattern;
 											}break;
 											default: throw RuntimeError("Invalid key");
 										}
@@ -8598,18 +8787,40 @@ const int VERSION_PATCH = 0;
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(dst) && IsText(val)) {
-										std::string str = MemGetText(val);
-										strtoupper(str);
-										MemSet(str, dst);
+										// Fast path: RAM to RAM - transform directly without intermediate copy
+										if (dst.type == RAM_VAR_TEXT && val.type == RAM_VAR_TEXT) {
+											if (dst.value == val.value) {
+												asciiToUpper(ram_text[dst.value]);
+											} else {
+												std::string& dest = ram_text[dst.value];
+												dest = ram_text[val.value];
+												asciiToUpper(dest);
+											}
+										} else {
+											std::string str = MemGetText(val);
+											asciiToUpper(str);
+											MemSet(str, dst);
+										}
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
 								case LCC: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(dst) && IsText(val)) {
-										std::string str = MemGetText(val);
-										strtolower(str);
-										MemSet(str, dst);
+										// Fast path: RAM to RAM - transform directly without intermediate copy
+										if (dst.type == RAM_VAR_TEXT && val.type == RAM_VAR_TEXT) {
+											if (dst.value == val.value) {
+												asciiToLower(ram_text[dst.value]);
+											} else {
+												std::string& dest = ram_text[dst.value];
+												dest = ram_text[val.value];
+												asciiToLower(dest);
+											}
+										} else {
+											std::string str = MemGetText(val);
+											asciiToLower(str);
+											MemSet(str, dst);
+										}
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
 								case ISN: {// REF_DST REF_SRC

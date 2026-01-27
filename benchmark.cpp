@@ -405,11 +405,14 @@ init
 ; Text operations stress test
 init
 	var $text = ""
+	var $upper = ""
+	var $lower = ""
+	var $len = 0
 	repeat 1000 ($i)
-		$text = text($i, "000000")
-		var $upper = upper($text)
-		var $lower = lower($upper)
-		var $len = $lower.size
+		$text = text("{000000}", $i)
+		$upper = upper($text)
+		$lower = lower($upper)
+		$len = $lower.size
 	output.0 ($text)
 )";
 		f.close();
