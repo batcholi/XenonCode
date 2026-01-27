@@ -8672,7 +8672,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 									size_t dotPos = obj.find('.', pos);
-									if (dotPos == std::string::npos || int(dotPos) >= int(obj.length())-4 || std::strchr(".{}", obj[dotPos+1])) {
+									if (dotPos == std::string::npos || int(dotPos) > int(obj.length())-4 || std::strchr(".{}", obj[dotPos+1])) {
 										MemSet("", dst);
 									} else {
 										size_t objPos = obj.find('{', dotPos+1);
