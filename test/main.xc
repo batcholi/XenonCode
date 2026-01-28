@@ -387,7 +387,16 @@ function @RunUnitTests()
 	
 	; Test 37
 	$results.append($constVar)
-	
+
+	; Test 38 - KV foreach with dots in keys
+	var $dotted = ".Item.Water{100}.Item.Iron{200}.recipe.OUTPUT{50}"
+	foreach $dotted ($key, $value)
+		$results.append($key & " : " & $value & " == " & $dotted.$key)
+	var $k = "item.water"
+	$dotted.$k = 150
+	$results.append($dotted)
+	$results.append($dotted.$k)
+
 init
 	output.0 ("Hello, World!")
 	

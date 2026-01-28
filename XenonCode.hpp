@@ -8483,30 +8483,15 @@ const int VERSION_PATCH = 0;
 
 													// Check if cache exists (invalidated on write)
 													if (cacheIt != kvCache.end()) {
-														// Try exact match first (common case: lowercase keys)
-														const std::string* val = cacheIt->second.find(keyStr);
+														// Cache stores lowercase keys, so always search lowercase
+														std::string lowerKey = keyStr;
+														asciiToLower(lowerKey);
+														const std::string* val = cacheIt->second.find(lowerKey);
 														if (val) {
-															// Skip copy if destination already has same content
 															if (ram_text[dst.value] != *val) {
 																ram_text[dst.value] = *val;
 															}
 															break;
-														}
-														// Try case-insensitive match only if key has uppercase
-														bool needsLowercase = false;
-														for (char c : keyStr) {
-															if (c >= 'A' && c <= 'Z') { needsLowercase = true; break; }
-														}
-														if (needsLowercase) {
-															std::string lowerKeyStr = keyStr;
-															for (char& c : lowerKeyStr) c = std::tolower((unsigned char)c);
-															val = cacheIt->second.find(lowerKeyStr);
-															if (val) {
-																if (ram_text[dst.value] != *val) {
-																	ram_text[dst.value] = *val;
-																}
-																break;
-															}
 														}
 														// Key not in cache - key doesn't exist
 														ram_text[dst.value].clear();
@@ -8520,25 +8505,20 @@ const int VERSION_PATCH = 0;
 													const char* p = obj.data();
 													const char* end = p + obj.length();
 													while (p < end) {
-														// Find next .key{
+														// Find next .key{ pattern
 														p = (const char*)std::memchr(p, '.', end - p);
 														if (!p) break;
 
-														// Extract key name
+														// Find the opening brace for this key
 														const char* keyStart = p + 1;
-														const char* keyEnd = keyStart;
-														while (keyEnd < end && *keyEnd != '{' && *keyEnd != '.' && *keyEnd != '}') {
-															++keyEnd;
-														}
-														if (keyEnd >= end || *keyEnd != '{') {
-															++p;
-															continue;
-														}
+														const char* brace = (const char*)std::memchr(keyStart, '{', end - keyStart);
+														if (!brace) break;
 
-														std::string key(keyStart, keyEnd - keyStart);
+														// Key is everything between . and {
+														std::string key(keyStart, brace - keyStart);
 
 														// Extract value
-														const char* valStart = keyEnd + 1;
+														const char* valStart = brace + 1;
 														const char* valEnd = valStart;
 														int depth = 0;
 														while (valEnd < end) {
@@ -8552,15 +8532,15 @@ const int VERSION_PATCH = 0;
 														}
 
 														// Store lowercase key for case-insensitive lookup
-														for (char& c : key) c = std::tolower((unsigned char)c);
+														asciiToLower(key);
 														cache.add(std::move(key), std::string(valStart, valEnd - valStart));
 
 														p = valEnd + 1;
 													}
 
-													// Now look up the requested key
+													// Now look up the requested key (cache stores lowercase)
 													std::string lowerKeyStr = keyStr;
-													for (char& c : lowerKeyStr) c = std::tolower((unsigned char)c);
+													asciiToLower(lowerKeyStr);
 													const std::string* val = cache.find(lowerKeyStr);
 													if (val) {
 														ram_text[dst.value] = *val;

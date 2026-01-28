@@ -229,3 +229,8 @@ test36
 This is test string 1
 This is test string 1 | This is test string 2
 1
+Item.Water : 100 == 100
+Item.Iron : 200 == 200
+recipe.OUTPUT : 50 == 50
+.Item.Water{150}.Item.Iron{200}.recipe.OUTPUT{50}
+150
