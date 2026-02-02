@@ -5222,6 +5222,7 @@ const int VERSION_PATCH = 0;
 								else if (firstWord == "elseif") {
 									addPointer("") = gotoAddr(0); // endIf
 									applyPointerAddr("gotoIfFalse");
+									write({LINENUMBER, currentLine});
 									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
 									write(CND);
 									addPointer("gotoIfTrue") = write(ADDR);
