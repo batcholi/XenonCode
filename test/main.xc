@@ -396,6 +396,9 @@ function @RunUnitTests()
 	$dotted.$k = 150
 	$results.append($dotted)
 	$results.append($dotted.$k)
+	$results.append($dotted.iron)
+	$dotted.iron = 64
+	$results.append($dotted.iron)
 
 init
 	output.0 ("Hello, World!")

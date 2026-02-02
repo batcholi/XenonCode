@@ -5684,39 +5684,6 @@ const int VERSION_PATCH = 0;
 
 		std::vector<double> timersLastRun {};
 
-		// Key-value cache for fast repeated lookups on the same string
-		// Uses linear array with hash pre-check for small key counts
-		struct KVCache {
-			struct Entry {
-				uint32_t hash;  // First 4 bytes of key as "hash" - fast comparison
-				std::string key;
-				std::string value;
-			};
-			std::vector<Entry> entries;
-
-			static uint32_t quickHash(const std::string& s) {
-				uint32_t h = 0;
-				size_t n = std::min(s.size(), size_t(4));
-				for (size_t i = 0; i < n; ++i) h = (h << 8) | (unsigned char)s[i];
-				return h;
-			}
-
-			const std::string* find(const std::string& key) const {
-				uint32_t h = quickHash(key);
-				for (const auto& e : entries) {
-					if (e.hash == h && e.key == key) return &e.value;
-				}
-				return nullptr;
-			}
-
-			void add(std::string key, std::string value) {
-				entries.push_back({quickHash(key), std::move(key), std::move(value)});
-			}
-
-			void clear() { entries.clear(); }
-		};
-		std::unordered_map<uint32_t, KVCache> kvCache; // varIndex -> cache
-		
 	public:
 		struct Capability {
 			uint32_t ipc = 0; // instructions per cycle
@@ -6244,15 +6211,11 @@ const int VERSION_PATCH = 0;
 					}
 					if (arrIndex == ARRAY_INDEX_NONE) {
 						ram_text[dst.value] = value;
-						// Invalidate key-value cache for this variable
-						kvCache.erase(dst.value);
 					} else if (utf8length(value) == 1) {
 						if (arrIndex >= utf8length(ram_text[dst.value])) {
 							throw RuntimeError("Invalid text indexing");
 						}
 						utf8assign(ram_text[dst.value], arrIndex, value);
-						// Invalidate key-value cache for this variable
-						kvCache.erase(dst.value);
 					} else {
 						throw RuntimeError("Invalid char assignment");
 					}
@@ -8477,81 +8440,8 @@ const int VERSION_PATCH = 0;
 												const size_t keyLen = keyStr.length();
 												if (__builtin_expect(keyLen == 0 || std::strchr(".{}", keyStr[0]) != nullptr, 0)) throw RuntimeError("Invalid Object Key");
 
-												// Fast path: use cache for RAM_VAR_TEXT with direct RAM access
-												if (arr.type == RAM_VAR_TEXT && dst.type == RAM_VAR_TEXT) {
-													auto cacheIt = kvCache.find(arr.value);
-
-													// Check if cache exists (invalidated on write)
-													if (cacheIt != kvCache.end()) {
-														// Cache stores lowercase keys, so always search lowercase
-														std::string lowerKey = keyStr;
-														asciiToLower(lowerKey);
-														const std::string* val = cacheIt->second.find(lowerKey);
-														if (val) {
-															if (ram_text[dst.value] != *val) {
-																ram_text[dst.value] = *val;
-															}
-															break;
-														}
-														// Key not in cache - key doesn't exist
-														ram_text[dst.value].clear();
-														break;
-													}
-
-													// Cache miss - parse all key-values and cache
-													auto& cache = kvCache[arr.value];
-													cache.clear();
-
-													const char* p = obj.data();
-													const char* end = p + obj.length();
-													while (p < end) {
-														// Find next .key{ pattern
-														p = (const char*)std::memchr(p, '.', end - p);
-														if (!p) break;
-
-														// Find the opening brace for this key
-														const char* keyStart = p + 1;
-														const char* brace = (const char*)std::memchr(keyStart, '{', end - keyStart);
-														if (!brace) break;
-
-														// Key is everything between . and {
-														std::string key(keyStart, brace - keyStart);
-
-														// Extract value
-														const char* valStart = brace + 1;
-														const char* valEnd = valStart;
-														int depth = 0;
-														while (valEnd < end) {
-															char c = *valEnd;
-															if (c == '{') ++depth;
-															else if (c == '}') {
-																if (depth == 0) break;
-																--depth;
-															}
-															++valEnd;
-														}
-
-														// Store lowercase key for case-insensitive lookup
-														asciiToLower(key);
-														cache.add(std::move(key), std::string(valStart, valEnd - valStart));
-
-														p = valEnd + 1;
-													}
-
-													// Now look up the requested key (cache stores lowercase)
-													std::string lowerKeyStr = keyStr;
-													asciiToLower(lowerKeyStr);
-													const std::string* val = cache.find(lowerKeyStr);
-													if (val) {
-														ram_text[dst.value] = *val;
-													} else {
-														ram_text[dst.value].clear();
-													}
-													break;
-												}
-
-												// Non-cached path for non-RAM text
-												const size_t searchLen = keyLen + 2;
+												// Case-insensitive search that skips brace-enclosed values (matches SET behavior)
+												const size_t searchLen = keyLen + 2; // .key{
 												const size_t objLen = obj.length();
 												if (__builtin_expect(objLen < searchLen, 0)) {
 													MemSet("", dst);
@@ -8565,27 +8455,50 @@ const int VERSION_PATCH = 0;
 												pattern[keyLen + 1] = '{';
 												pattern[keyLen + 2] = '\0';
 
-												const char* objData = obj.data();
+												const char* p = obj.data();
+												const char* objEnd = p + objLen;
 												bool found = false;
 
-												const char* match = std::strstr(objData, pattern);
-												if (match) {
-													const char* valStart = match + searchLen;
-													const char* valEnd = valStart;
-													const char* objEnd = objData + objLen;
-													int depth = 0;
-													while (valEnd < objEnd) {
-														char c = *valEnd;
-														if (c == '{') ++depth;
-														else if (c == '}') {
-															if (depth == 0) break;
-															--depth;
+												while (p < objEnd) {
+													if (size_t(objEnd - p) < searchLen) break;
+
+													// Skip brace-enclosed values
+													if (*p == '{') {
+														int depth = 0;
+														++p;
+														while (p < objEnd) {
+															if (*p == '{') ++depth;
+															else if (*p == '}') {
+																if (depth == 0) { ++p; break; }
+																--depth;
+															}
+															++p;
 														}
-														++valEnd;
+														continue;
 													}
-													MemSet(std::string(valStart, valEnd - valStart), dst);
-													found = true;
+
+													// Case-insensitive comparison of .key{
+													if (std::equal(pattern, pattern + searchLen, p,
+														[](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); })) {
+														const char* valStart = p + searchLen;
+														const char* valEnd = valStart;
+														int depth = 0;
+														while (valEnd < objEnd) {
+															char c = *valEnd;
+															if (c == '{') ++depth;
+															else if (c == '}') {
+																if (depth == 0) break;
+																--depth;
+															}
+															++valEnd;
+														}
+														MemSet(std::string(valStart, valEnd - valStart), dst);
+														found = true;
+														break;
+													}
+													++p;
 												}
+
 												if (!found) {
 													MemSet("", dst);
 												}

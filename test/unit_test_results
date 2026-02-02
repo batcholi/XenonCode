@@ -234,3 +234,5 @@ Item.Iron : 200 == 200
 recipe.OUTPUT : 50 == 50
 .Item.Water{150}.Item.Iron{200}.recipe.OUTPUT{50}
 150
+200
+64
