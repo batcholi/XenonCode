@@ -400,6 +400,46 @@ function @RunUnitTests()
 	$dotted.iron = 64
 	$results.append($dotted.iron)
 
+	; test 39 - Expression-based trailing index for arrays
+	array $exprArr : number
+	$exprArr.append(10, 20, 30, 40, 50)
+	; Read with literal expression
+	$results.append($exprArr.(1 + 1))
+	; Read with more complex expression
+	$results.append($exprArr.(2 * 2))
+	; Read with variable in expression
+	var $ei = 2
+	$results.append($exprArr.($ei + 1))
+	; Write with expression index
+	$exprArr.(1 + 2) = 99
+	$results.append($exprArr.3)
+	; Compound assignment with expression index
+	$exprArr.(4 - 2) = 100
+	$results.append($exprArr.2)
+	; Expression index in a larger expression
+	$results.append($exprArr.(0 + 1) + $exprArr.(3 - 1))
+
+	; test 40 - Expression-based trailing index for KV objects
+	var $exprObj = ".x{10}.y{20}.z{30}"
+	; Read with text expression
+	var $prefix = "x"
+	$results.append($exprObj.($prefix))
+	; Write with text expression
+	$exprObj.($prefix) = 99
+	$results.append($exprObj.x)
+	; Compound assignment with text expression
+	$exprObj.("x" & "") += 1
+	$results.append($exprObj.x)
+	; Expression-based text key using concat
+	var $keyPart = "z"
+	$results.append($exprObj.($keyPart))
+
+	; test 41 - Expression-based trailing index for text (character access)
+	var $exprTxt = "ABCDE"
+	$results.append($exprTxt.(1 + 1))
+	$exprTxt.(2 + 1) = "X"
+	$results.append($exprTxt)
+
 init
 	output.0 ("Hello, World!")
 	

@@ -1208,7 +1208,7 @@ const int VERSION_PATCH = 0;
 									if (prev != Word::Varname && prev != Word::ExpressionEnd) {
 										throw ParseError("A trail operator (.) is not allowed after", prev);
 									}
-									if (next != Word::Numeric && next != Word::Varname && next != Word::Name) {
+									if (next != Word::Numeric && next != Word::Varname && next != Word::Name && next != Word::ExpressionBegin) {
 										throw ParseError("A trail operator (.) cannot be followed by", next, "within an expression");
 									}
 								} else if (word == Word::CastOperator) {
@@ -1345,6 +1345,7 @@ const int VERSION_PATCH = 0;
 				Word::Varname,
 				Word::Funcname,
 				Word::Name,
+				Word::ExpressionBegin,
 			}},
 			{Word::CastOperator, {
 				Word::Name,
@@ -1974,6 +1975,19 @@ const int VERSION_PATCH = 0;
 									Word operand = words[i];
 									if (operand == Word::Numeric || operand == Word::Varname || operand == Word::Name) {
 										++i;
+										expectOperand = false;
+									} else if (operand == Word::ExpressionBegin) {
+										int closing = GetExpressionEnd(words, i);
+										if (closing == -1) break;
+										if (closing > i + 1) {
+											if (!ParseExpression(words, i + 1, closing - 1)) {
+												throw ParseError("Invalid expression within trailing index");
+											}
+											// Re-find closing paren since ParseExpression may have inserted words
+											closing = GetExpressionEnd(words, i);
+											if (closing == -1) break;
+										}
+										i = closing + 1;
 										expectOperand = false;
 									} else {
 										break;
@@ -3678,6 +3692,36 @@ const int VERSION_PATCH = 0;
 								write(VOID);
 								ref1 = tmp;
 								segmentHandled = true;
+							} else if (operand == Word::ExpressionBegin) {
+								int closing = GetExpressionEnd(words, idx+1, endIndex);
+								validate(closing != -1);
+								ByteCode ref2 = compileExpression(words, idx+2, closing-1);
+								if (IsNumeric(ref2)) {
+									validate(IsArray(ref1) || IsText(ref1));
+									ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+									write(IDX);
+									write(tmp);
+									write(ref1);
+									write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+									write(ref2);
+									write(VOID);
+									ref1 = tmp;
+								} else {
+									validate(IsText(ref2));
+									validate(IsText(ref1));
+									ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+									write(IDX);
+									write(tmp);
+									write(ref1);
+									write(OBJ_KEY);
+									write(ref2);
+									write(VOID);
+									ref1 = tmp;
+								}
+								segmentHandled = true;
+								consumed = true;
+								idx = closing + 1;
+								continue;
 							} else if (operand == Word::Name && IsText(ref1) && !(idx+2 <= endIndex && words[idx+2] == Word::ExpressionBegin)) {
 								ref1 = compileFunctionCall(operand, {ref1}, true, true);
 								segmentHandled = true;
@@ -3746,6 +3790,37 @@ const int VERSION_PATCH = 0;
 							write(VOID);
 							ref1 = tmp;
 							opIndex += 2;
+							if (opIndex > endIndex) {
+								return ref1;
+							}
+							continue;
+						} else if (operand == Word::ExpressionBegin) {
+							int closing = GetExpressionEnd(words, opIndex+1, endIndex);
+							validate(closing != -1);
+							ByteCode ref2 = compileExpression(words, opIndex+2, closing-1);
+							if (IsNumeric(ref2)) {
+								validate(IsArray(ref1) || IsText(ref1));
+								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+								write(IDX);
+								write(tmp);
+								write(ref1);
+								write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+								write(ref2);
+								write(VOID);
+								ref1 = tmp;
+							} else {
+								validate(IsText(ref2));
+								validate(IsText(ref1));
+								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
+								write(IDX);
+								write(tmp);
+								write(ref1);
+								write(OBJ_KEY);
+								write(ref2);
+								write(VOID);
+								ref1 = tmp;
+							}
+							opIndex = closing + 1;
 							if (opIndex > endIndex) {
 								return ref1;
 							}
@@ -4493,6 +4568,30 @@ const int VERSION_PATCH = 0;
 														chain.emplace_back(acc);
 														current = ByteCode(GetRamVarType(current.type));
 														++i;
+														expectOperand = false;
+														lastProcessed = i;
+													} else if (word == Word::ExpressionBegin) {
+														int closing = GetExpressionEnd(line.words, i);
+														if (closing == -1) break;
+														ByteCode ref = compileExpression(line.words, i+1, closing-1);
+														if (IsNumeric(ref)) {
+															if (!IsArray(current) && !IsText(current)) break;
+															Accessor acc;
+															acc.kind = Accessor::Kind::ArrayIndexVar;
+															acc.ref = ref;
+															chain.emplace_back(acc);
+															current = ByteCode(GetRamVarType(current.type));
+														} else if (IsText(ref)) {
+															if (!IsText(current)) break;
+															Accessor acc;
+															acc.kind = Accessor::Kind::KeyVar;
+															acc.ref = ref;
+															chain.emplace_back(acc);
+															current = ByteCode(RAM_VAR_TEXT);
+														} else {
+															break;
+														}
+														i = closing + 1;
 														expectOperand = false;
 														lastProcessed = i;
 													} else {
