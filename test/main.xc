@@ -30,6 +30,12 @@ function @increment($v:number):number
 function @makeTextObj():text
 	return ".user{dev}.nested{.val{123}}"
 
+function @scaleVec($vec:vec3, $s:number):vec3
+	return $vec * $s
+
+function @doubleMat($m:mat2x2):mat2x2
+	return $m * 2
+
 function @RunUnitTests()
 	
 	; Test 1
@@ -439,6 +445,390 @@ function @RunUnitTests()
 	$results.append($exprTxt.(1 + 1))
 	$exprTxt.(2 + 1) = "X"
 	$results.append($exprTxt)
+
+	; test 42 - Matrix declaration and component access (xyzw and 0123)
+	var $v : vec3
+	$v.x = 1
+	$v.y = 2
+	$v.z = 3
+	$results.append($v.x)
+	$results.append($v.1)
+	$results.append($v.z)
+
+	; test 43 - Matrix 4x4 row/component access
+	var $m44 : mat4x4
+	$m44.0.x = 1
+	$m44.1.y = 1
+	$m44.2.z = 1
+	$m44.3.w = 1
+	$results.append($m44.0.x)
+	$results.append($m44.1.y)
+	$results.append($m44.3.w)
+	$results.append($m44.0.y)
+
+	; test 44 - Swizzling
+	var $v2 : vec3
+	$v2.x = 10
+	$v2.y = 20
+	$v2.z = 30
+	var $swxy : vec2
+	$swxy = $v2.xy
+	$results.append($swxy.x)
+	$results.append($swxy.y)
+	var $swzx : vec2
+	$swzx = $v2.zx
+	$results.append($swzx.x)
+	$results.append($swzx.y)
+
+	; test 45 - Vector add/sub
+	var $v3 : vec3
+	$v3 = $v + $v2
+	$results.append($v3.x)
+	$results.append($v3.y)
+	$results.append($v3.z)
+	var $v3b : vec3
+	$v3b = $v3 - $v2
+	$results.append($v3b.x)
+	$results.append($v3b.y)
+	$results.append($v3b.z)
+
+	; test 46 - Scalar multiply and divide
+	var $v4 : vec3
+	$v4 = $v * 2
+	$results.append($v4.x)
+	$results.append($v4.y)
+	$results.append($v4.z)
+	var $v5 : vec3
+	$v5 = $v4 / 2
+	$results.append($v5.x)
+	$results.append($v5.y)
+	$results.append($v5.z)
+
+	; test 47 - Dot product and length (normal function calls)
+	var $dotResult = dot($v, $v2)
+	$results.append($dotResult)
+	var $lenResult = length($v)
+	$results.append(round($lenResult * 1000) / 1000)
+
+	; test 48 - Normalize (trailing, in-place)
+	var $nv : vec3
+	$nv.x = 3
+	$nv.y = 0
+	$nv.z = 4
+	$nv.normalize()
+	$results.append(round($nv.x * 1000) / 1000)
+	$results.append(round($nv.z * 1000) / 1000)
+
+	; test 49 - Cross product (normal function)
+	var $cx : vec3
+	$cx.x = 1
+	$cx.y = 0
+	$cx.z = 0
+	var $cy : vec3
+	$cy.x = 0
+	$cy.y = 1
+	$cy.z = 0
+	var $cz : vec3
+	$cz = cross($cx, $cy)
+	$results.append($cz.x)
+	$results.append($cz.y)
+	$results.append($cz.z)
+	; also test trailing form
+	$cx.x = 1
+	$cx.y = 0
+	$cx.z = 0
+	$cx.cross($cy)
+	$results.append($cx.x)
+	$results.append($cx.y)
+	$results.append($cx.z)
+
+	; test 50 - Transpose (trailing, in-place)
+	var $m2 : mat2x2
+	$m2.0.x = 1
+	$m2.0.y = 2
+	$m2.1.x = 3
+	$m2.1.y = 4
+	$m2.transpose()
+	$results.append($m2.0.x)
+	$results.append($m2.0.y)
+	$results.append($m2.1.x)
+	$results.append($m2.1.y)
+
+	; test 51 - Determinant (normal function call)
+	$m2.transpose()
+	var $det = determinant($m2)
+	$results.append($det)
+
+	; test 52 - Inverse (trailing, in-place)
+	$m2.inverse()
+	$results.append(round($m2.0.x * 100) / 100)
+	$results.append(round($m2.0.y * 100) / 100)
+	$results.append(round($m2.1.x * 100) / 100)
+	$results.append(round($m2.1.y * 100) / 100)
+
+	; test 53 - Matrix * vector (matmul)
+	var $mat33 : mat3x3
+	$mat33.0.x = 1
+	$mat33.0.y = 0
+	$mat33.0.z = 0
+	$mat33.1.x = 0
+	$mat33.1.y = 2
+	$mat33.1.z = 0
+	$mat33.2.x = 0
+	$mat33.2.y = 0
+	$mat33.2.z = 3
+	var $vin : vec3
+	$vin.x = 10
+	$vin.y = 20
+	$vin.z = 30
+	var $vout : vec3
+	$vout = $mat33 * $vin
+	$results.append($vout.x)
+	$results.append($vout.y)
+	$results.append($vout.z)
+
+	; test 54 - Extract position from 4x4 transform via swizzle
+	var $transform : mat4x4
+	$transform.3.x = 100
+	$transform.3.y = 200
+	$transform.3.z = 300
+	var $tpos : vec3
+	$tpos = $transform.3.xyz
+	$results.append($tpos.x)
+	$results.append($tpos.y)
+	$results.append($tpos.z)
+
+	; test 55 - Function with matrix argument and return
+	var $scaled : vec3
+	$scaled = @scaleVec($v, 5)
+	$results.append($scaled.x)
+	$results.append($scaled.y)
+	$results.append($scaled.z)
+
+	; test 56 - Matrix assignment and compound assignment
+	var $va : vec3
+	$va.x = 1
+	$va.y = 2
+	$va.z = 3
+	var $vb : vec3
+	$vb = $va
+	$results.append($vb.x)
+	$results.append($vb.y)
+	$va += $vb
+	$results.append($va.x)
+	$results.append($va.y)
+	$va -= $vb
+	$results.append($va.x)
+	$va *= 10
+	$results.append($va.x)
+
+	; test 57 - Function returning a mat2x2
+	var $fm : mat2x2
+	$fm.0.x = 1
+	$fm.0.y = 2
+	$fm.1.x = 3
+	$fm.1.y = 4
+	var $fm2 : mat2x2
+	$fm2 = @doubleMat($fm)
+	$results.append($fm2.0.x)
+	$results.append($fm2.1.y)
+
+	; test 58 - Non-square matrix declaration and access
+	var $nsm : mat2x3
+	$nsm.0.x = 1
+	$nsm.0.y = 2
+	$nsm.0.z = 3
+	$nsm.1.x = 4
+	$nsm.1.y = 5
+	$nsm.1.z = 6
+	$results.append($nsm.0.z)
+	$results.append($nsm.1.x)
+
+	; test 59 - Non-square matmul: mat2x3 * vec3 = vec2
+	var $nsv : vec3
+	$nsv.x = 10
+	$nsv.y = 20
+	$nsv.z = 30
+	var $nsout : vec2
+	$nsout = $nsm * $nsv
+	$results.append($nsout.x)
+	$results.append($nsout.y)
+
+	; test 60 - mat2x3 * mat3x2 = mat2x2
+	var $nsm2 : mat3x2
+	$nsm2.0.x = 1
+	$nsm2.0.y = 4
+	$nsm2.1.x = 2
+	$nsm2.1.y = 5
+	$nsm2.2.x = 3
+	$nsm2.2.y = 6
+	var $nsr : mat2x2
+	$nsr = $nsm * $nsm2
+	$results.append($nsr.0.x)
+	$results.append($nsr.0.y)
+	$results.append($nsr.1.x)
+	$results.append($nsr.1.y)
+
+	; test 61 - Identity trailing function
+	var $im : mat3x3
+	$im.0.x = 99
+	$im.1.z = 42
+	$im.identity()
+	$results.append($im.0.x)
+	$results.append($im.0.y)
+	$results.append($im.1.y)
+	$results.append($im.2.z)
+
+	; test 62 - matN shorthand for matNxN
+	var $sm : mat3
+	$sm.1.y = 7
+	$results.append($sm.1.y)
+
+	; test 63 - xyzw as row accessor on 2D matrix
+	var $rm : mat4x4
+	$rm.w.w = 42
+	$rm.x.y = 13
+	$results.append($rm.w.w)
+	$results.append($rm.x.y)
+
+	; test 64 - /= compound assignment
+	var $dv : vec3
+	$dv.x = 10
+	$dv.y = 20
+	$dv.z = 30
+	$dv /= 5
+	$results.append($dv.x)
+	$results.append($dv.y)
+	$results.append($dv.z)
+
+	; test 65 - normalize as standard function (returns new, doesn't modify original)
+	var $nv2 : vec3
+	$nv2.x = 3
+	$nv2.y = 0
+	$nv2.z = 4
+	var $nv2r : vec3
+	$nv2r = normalize($nv2)
+	$results.append(round($nv2r.x * 1000) / 1000)
+	$results.append(round($nv2r.z * 1000) / 1000)
+	$results.append($nv2.x)
+
+	; test 66 - transpose as standard function
+	var $tm : mat2x2
+	$tm.0.x = 1
+	$tm.0.y = 2
+	$tm.1.x = 3
+	$tm.1.y = 4
+	var $tmr : mat2x2
+	$tmr = transpose($tm)
+	$results.append($tmr.0.y)
+	$results.append($tmr.1.x)
+	$results.append($tm.0.y)
+
+	; test 67 - inverse as standard function
+	var $ivm : mat2x2
+	$ivm.0.x = 1
+	$ivm.0.y = 2
+	$ivm.1.x = 3
+	$ivm.1.y = 4
+	var $ivmr : mat2x2
+	$ivmr = inverse($ivm)
+	$results.append(round($ivmr.0.x * 100) / 100)
+	$results.append(round($ivmr.1.y * 100) / 100)
+	$results.append($ivm.0.x)
+
+	; test 68 - distance
+	var $da : vec3
+	$da.x = 1
+	$da.y = 0
+	$da.z = 0
+	var $db : vec3
+	$db.x = 0
+	$db.y = 1
+	$db.z = 0
+	$results.append(round(distance($da, $db) * 1000) / 1000)
+
+	; test 69 - angle
+	$results.append(round(angle($da, $db) * 1000) / 1000)
+	var $dc : vec3
+	$dc.x = 2
+	$dc.y = 0
+	$dc.z = 0
+	$results.append(angle($da, $dc))
+
+	; test 70 - lerp (normal function)
+	var $la : vec3
+	$la.x = 0
+	$la.y = 0
+	$la.z = 0
+	var $lb : vec3
+	$lb.x = 10
+	$lb.y = 20
+	$lb.z = 30
+	var $lr : vec3
+	$lr = lerp($la, $lb, 0.5)
+	$results.append($lr.x)
+	$results.append($lr.y)
+	$results.append($lr.z)
+
+	; test 71 - lerp (trailing, in-place)
+	var $lt : vec3
+	$lt.x = 0
+	$lt.y = 10
+	$lt.z = 20
+	var $ltb : vec3
+	$ltb.x = 10
+	$ltb.y = 20
+	$ltb.z = 30
+	$lt.lerp($ltb, 0.25)
+	$results.append($lt.x)
+	$results.append($lt.y)
+	$results.append($lt.z)
+
+	; test 72 - vec4 with .w component
+	var $v4d : vec4
+	$v4d.x = 1
+	$v4d.y = 2
+	$v4d.z = 3
+	$v4d.w = 4
+	$results.append($v4d.w)
+	$results.append($v4d.3)
+
+	; test 73 - 3 and 4-char swizzles
+	var $sw3 : vec3
+	$sw3 = $v2.xyz
+	$results.append($sw3.x)
+	$results.append($sw3.y)
+	$results.append($sw3.z)
+	$sw3 = $v2.zyx
+	$results.append($sw3.x)
+	$results.append($sw3.y)
+	$results.append($sw3.z)
+
+	; test 74 - scalar on left side of multiply
+	var $slm : vec3
+	$slm.x = 1
+	$slm.y = 2
+	$slm.z = 3
+	var $slr : vec3
+	$slr = 3 * $slm
+	$results.append($slr.x)
+	$results.append($slr.y)
+	$results.append($slr.z)
+
+	; test 75 - lerp at boundaries t=0 and t=1
+	var $l0a : vec2
+	$l0a.x = 0
+	$l0a.y = 0
+	var $l0b : vec2
+	$l0b.x = 10
+	$l0b.y = 20
+	var $l0r : vec2
+	$l0r = lerp($l0a, $l0b, 0)
+	$results.append($l0r.x)
+	$results.append($l0r.y)
+	$l0r = lerp($l0a, $l0b, 1)
+	$results.append($l0r.x)
+	$results.append($l0r.y)
 
 init
 	output.0 ("Hello, World!")

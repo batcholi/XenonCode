@@ -7,6 +7,7 @@
 - Typed Variables
 - Constants
 - Dynamic Arrays
+- Vectors and Matrices (up to 4x4) with swizzling
 - Standard arithmetic operations on numeric values
 - Easy string concatenation and formatting
 - User-defined functions
@@ -107,9 +108,11 @@ XenonCode is designed with a very basic syntax in mind and a very precise struct
 
 XenonCode is a typed language, but only includes two generic types, as well as arrays of either, and implementation-defined objects.  
 
-Generic data types the user can declare: 
-* `number`
-* `text`
+Generic data types the user can declare:
+- `number`
+- `text`
+- `vecN` (fixed-size numeric vector, e.g. `vec3`)
+- `matNxM` (fixed-size numeric matrix, e.g. `mat4x4`)
 
 A `number` variable is always a 64-bit floating point internally, but may also act as a boolean when its value is either 1 or 0 (true or false), although any value other than zero is evaluated to true.  
 
@@ -259,6 +262,137 @@ Arrays are initialized with zero size when the program starts, values may be add
 `array $stuff:text` declare an array of texts  
 
 Arrays cannot contain implementation-defined objects, just generic types.  
+
+## Vectors and Matrices
+
+Vectors and matrices are fixed-size containers of 64-bit floating point numbers, useful for positions, transforms, and linear algebra. All elements are initialized to zero.
+
+### Declaration
+
+Use `vecN` for vectors (1D) and `matNxM` for 2D matrices, with dimensions up to 4.
+
+```xc
+var $position : vec3       ; 3-element vector (vec2, vec3, vec4 available)
+var $transform : mat4x4    ; 4x4 matrix
+var $rotation : mat3       ; shorthand for mat3x3
+```
+
+| Type | Shorthand | Description |
+|------|-----------|-------------|
+| `vec2`, `vec3`, `vec4` | -- | Vectors with 2, 3, or 4 elements |
+| `matNxM` | -- | 2D matrix with N rows and M columns (e.g. `mat3x4`) |
+| `matN` | `matNxN` | Square matrix shorthand (e.g. `mat3` = `mat3x3`) |
+
+### Component Access
+
+Access elements using `.x`, `.y`, `.z`, `.w` or equivalently `.0`, `.1`, `.2`, `.3`.
+
+**Vectors** -- each accessor refers to a single element:
+```xc
+var $v : vec3
+$v.x = 1       ; element 0
+$v.y = 2       ; element 1
+$v.z = 3       ; element 2
+$v.0 = 1       ; same as .x
+```
+
+**2D Matrices** -- the first accessor selects a row, the second selects a column within that row:
+```xc
+var $m : mat4x4
+$m.0.x = 1     ; row 0, column 0
+$m.1.y = 1     ; row 1, column 1
+$m.w.w = 1     ; row 3, column 3 (same as $m.3.3)
+```
+
+### Swizzling
+
+Combine 2-4 component names from `xyzw` to extract multiple elements at once into a new vector:
+```xc
+var $v : vec3
+$v.x = 10
+$v.y = 20
+$v.z = 30
+var $a : vec2
+$a = $v.xy         ; vec2 containing (10, 20)
+var $b : vec2
+$b = $v.zx         ; vec2 containing (30, 10)
+```
+Swizzling always produces a **copy** -- modifying the result does not affect the original.
+
+### Arithmetic
+
+**Element-wise** operations between vectors/matrices of the same size:
+```xc
+var $a : vec3
+var $b : vec3
+var $c : vec3
+$c = $a + $b       ; element-wise addition
+$c = $a - $b       ; element-wise subtraction
+```
+
+**Scalar** multiplication and division scale every element:
+```xc
+$c = $a * 2        ; multiply all elements by 2
+$c = $a / 2        ; divide all elements by 2
+```
+
+**Matrix multiplication** with `*` when dimensions are compatible:
+```xc
+var $m : mat3x3
+var $v : vec3
+var $result : vec3
+$result = $m * $v  ; 3x3 matrix times 3x1 vector = 3x1 vector
+```
+
+**Compound assignment** operators also work: `+=`, `-=`, `*=`, `/=`
+
+### Trailing Functions (In-Place)
+
+These modify the vector or matrix directly and do not return a value.
+
+| Function | Applies to | Description |
+|----------|------------|-------------|
+| `.normalize()` | vectors | Scale to unit length |
+| `.cross($other)` | vec3 | Store cross product of self and `$other` into self |
+| `.transpose()` | square matrices | Transpose in place |
+| `.inverse()` | square matrices | Invert in place |
+| `.identity()` | square matrices | Set to the identity matrix |
+| `.lerp($other, $t)` | vectors / matrices | Interpolate toward `$other` by factor `$t` |
+
+```xc
+var $dir : vec3
+$dir.x = 3
+$dir.y = 4
+$dir.normalize()   ; $dir is now a unit vector
+```
+
+### Standard Functions (Return a New Value)
+
+These do not modify their arguments. Functions returning a single number are marked *scalar*.
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `length($v)` | scalar | Magnitude of a vector |
+| `distance($a, $b)` | scalar | Euclidean distance between two vectors |
+| `dot($a, $b)` | scalar | Dot product of two vectors |
+| `angle($a, $b)` | scalar | Angle between two vectors in radians |
+| `cross($a, $b)` | vec3 | Cross product of two vec3 vectors |
+| `determinant($m)` | scalar | Determinant of a square matrix |
+| `normalize($v)` | same as input | Normalized copy of a vector |
+| `transpose($m)` | same as input | Transposed copy of a square matrix |
+| `inverse($m)` | same as input | Inverted copy of a square matrix |
+| `lerp($a, $b, $t)` | same as input | Interpolated copy between `$a` and `$b` by factor `$t` |
+
+### Passing to Functions
+
+Vectors and matrices can be used as function argument types and return types:
+```xc
+function @scale($v : vec3, $factor : number) : vec3
+	return $v * $factor
+
+var $result : vec3
+$result = @scale($myVec, 2.5)
+```
 
 ## Declaring storage
 Storage is used to keep some data persistent across power cycles and even through a re-compile.  

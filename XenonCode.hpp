@@ -832,8 +832,16 @@ const int VERSION_PATCH = 0;
 					while (!s.eof()) {
 						if (s.peek() == '.') {
 							if (hasDecimal) break;
-							hasDecimal = true;
-							word += s.get();
+							// Only consume dot if followed by a digit (to avoid consuming trail operator in e.g. $m.0.x)
+							s.get(); // consume dot temporarily
+							if (!s.eof() && isdigit(s.peek())) {
+								hasDecimal = true;
+								word += '.';
+							} else {
+								// Put the dot back by seeking
+								s.putback('.');
+								break;
+							}
 						}
 						if (!isdigit(s.peek())) {
 							if (!hasDecimal && isalnum_(s.peek())) goto ContinueWithName;
@@ -1597,6 +1605,74 @@ const int VERSION_PATCH = 0;
 		"return",
 	};
 
+	// Matrix compile-time metadata - packed into 32 bits
+	struct MatrixInfo {
+		uint32_t rows : 4;       // 1-4
+		uint32_t cols : 4;       // 1-4
+		uint32_t baseIndex : 24; // index into ram_numeric (up to 16M slots)
+
+		uint32_t count() const { return rows * cols; }
+		bool isVector() const { return cols == 1; }
+		bool isSquare() const { return rows == cols; }
+		operator bool() const { return rows > 0; }
+	};
+
+	// Helper to map xyzw/0123 to offset 0-3, returns -1 if not a valid accessor
+	inline static int MatrixComponentOffset(const std::string& name) {
+		if (name.size() == 1) {
+			switch (name[0]) {
+				case 'x': case '0': return 0;
+				case 'y': case '1': return 1;
+				case 'z': case '2': return 2;
+				case 'w': case '3': return 3;
+			}
+		}
+		return -1;
+	}
+
+	// Helper to check if a string is a valid swizzle (2-4 chars, all xyzw)
+	inline static bool IsSwizzle(const std::string& name) {
+		if (name.size() < 2 || name.size() > 4) return false;
+		for (char c : name) {
+			if (c != 'x' && c != 'y' && c != 'z' && c != 'w') return false;
+		}
+		return true;
+	}
+
+	// Helper to check if a type string is a matrix type (vecN or matNxM)
+	inline static bool IsMatrixType(const std::string& typeStr) {
+		return (typeStr.size() == 4 && typeStr.starts_with("vec") && isdigit(typeStr[3]))
+			|| (typeStr.starts_with("mat") && typeStr.size() >= 4 && isdigit(typeStr[3]));
+	}
+
+	// Helper to parse vecN or matNxM type string
+	inline static MatrixInfo ParseMatrixType(const std::string& typeStr) {
+		MatrixInfo info{0, 0, 0};
+		if (typeStr.size() == 4 && typeStr.starts_with("vec") && isdigit(typeStr[3])) {
+			// vecN format
+			info.rows = typeStr[3] - '0';
+			info.cols = 1;
+		} else if (typeStr.starts_with("mat") && typeStr.size() >= 4 && isdigit(typeStr[3])) {
+			// matNxM or matN format
+			auto xPos = typeStr.find('x', 3);
+			if (xPos != std::string::npos && xPos + 1 < typeStr.size()) {
+				info.rows = std::stoi(typeStr.substr(3, xPos - 3));
+				info.cols = std::stoi(typeStr.substr(xPos + 1));
+			} else {
+				// matN shorthand for matNxN
+				int n = std::stoi(typeStr.substr(3));
+				info.rows = n;
+				info.cols = n;
+			}
+		} else {
+			return {0, 0, 0};
+		}
+		if (info.rows < 1 || info.rows > 4 || info.cols < 1 || info.cols > 4) {
+			throw CompileError("Matrix dimensions must be between 1 and 4");
+		}
+		return info;
+	}
+
 	// Upon construction, it will parse the entire line from the given string, including expressions, and may throw ParseError
 	struct ParsedLine {
 		int scope = 0;
@@ -1633,10 +1709,10 @@ const int VERSION_PATCH = 0;
 							if ((words.size() > 1 && words[1] != Word::Varname)
 							 || (words.size() < 4)
 							 || (words[2] != "=" && words[2] != Word::CastOperator)
-							 || (words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text")
+							 || (words[2] == Word::CastOperator && words[3] != "number" && words[3] != "text" && !IsMatrixType(std::string(words[3])))
 							 || (words[2] == Word::CastOperator && words.size() > 4)
 							) {
-								throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number or text) or an equal sign and an expression");
+								throw ParseError("Second word must be a variable name (starting with $), and it must be followed either by a colon and its type (number, text, or vecN/matNxM) or an equal sign and an expression");
 							}
 							if (words[2] == "=") {
 								if (!ParseExpression(words, 3)) {
@@ -1723,10 +1799,10 @@ const int VERSION_PATCH = 0;
 							if (int(words.size()) < 4 + offset) throw ParseError("Too few words");
 							int next = ParseDeclarationArgs(words, 2 + offset);
 							if (next != -1) {
-								if ((int)words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text")) {
+								if ((int)words.size() == next + 2 && words[next] == Word::CastOperator && (words[next + 1] == "number" || words[next + 1] == "text" || IsMatrixType(std::string(words[next + 1])))) {
 									// Valid
 								} else {
-									throw ParseError("The only thing that can follow a function's argument list is a colon and its return type, which must be either 'number' or 'text'");
+									throw ParseError("The only thing that can follow a function's argument list is a colon and its return type, which must be either 'number', 'text', or 'vecN/matNxM'");
 								}
 							}
 						} else
@@ -2314,6 +2390,26 @@ const int VERSION_PATCH = 0;
 	DEF_OP( ISN /* REF_DST REF_TXT */ ) // isnumeric(text)
 	DEF_OP( IFF /* REF_DST REF_TXT */ ) // if(cond, valTrue, valFalse)
 	DEF_OP( RPL /* REF_DST REF_TXT */ ) // replace(text, oldValue, newValue, [count])
+
+	// Matrix operations - operate directly on contiguous ram_numeric slots for performance
+	DEF_OP( MAS /* REF_DST_BASE REF_SRC_BASE INTEGER_COUNT */ ) // matrix assign (bulk copy)
+	DEF_OP( MAD /* REF_DST_BASE REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // matrix add (element-wise)
+	DEF_OP( MSB /* REF_DST_BASE REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // matrix sub (element-wise)
+	DEF_OP( MEW /* REF_DST_BASE REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // matrix element-wise mul
+	DEF_OP( MMS /* REF_DST_BASE REF_A_BASE REF_SCALAR INTEGER_COUNT */ ) // matrix * scalar
+	DEF_OP( MDS /* REF_DST_BASE REF_A_BASE REF_SCALAR INTEGER_COUNT */ ) // matrix / scalar
+	DEF_OP( MMM /* REF_DST_BASE REF_A_BASE INTEGER_A_ROWS INTEGER_A_COLS REF_B_BASE INTEGER_B_COLS */ ) // matrix multiply
+	DEF_OP( MNM /* REF_BASE INTEGER_COUNT */ ) // normalize (in-place)
+	DEF_OP( MLN /* REF_DST_SCALAR REF_BASE INTEGER_COUNT */ ) // length -> scalar
+	DEF_OP( MDT /* REF_DST_SCALAR REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // dot product -> scalar
+	DEF_OP( MCR /* REF_DST_BASE REF_A_BASE REF_B_BASE */ ) // cross product (always 3-element)
+	DEF_OP( MTR /* REF_BASE INTEGER_SIZE */ ) // transpose (in-place, square)
+	DEF_OP( MDE /* REF_DST_SCALAR REF_BASE INTEGER_SIZE */ ) // determinant -> scalar
+	DEF_OP( MIV /* REF_BASE INTEGER_SIZE */ ) // inverse (in-place, square)
+	DEF_OP( MID /* REF_BASE INTEGER_SIZE */ ) // identity (in-place, square)
+	DEF_OP( MDI /* REF_DST_SCALAR REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // distance -> scalar
+	DEF_OP( MAN /* REF_DST_SCALAR REF_A_BASE REF_B_BASE INTEGER_COUNT */ ) // angle -> scalar (radians)
+	DEF_OP( MLP /* REF_DST_BASE REF_A_BASE REF_B_BASE REF_T INTEGER_COUNT */ ) // lerp (element-wise)
 
 #pragma endregion
 
@@ -2911,7 +3007,15 @@ const int VERSION_PATCH = 0;
 			
 			// Temporary user-defined symbol maps
 			std::unordered_map<std::string/*functionName*/, std::map<int/*stackId*/, std::unordered_map<std::string/*name*/, ByteCode>>> userVars {};
-			
+
+			// Matrix compile-time tracking
+			// Maps "funcName.stackId.varName" -> MatrixInfo
+			std::unordered_map<std::string, MatrixInfo> matrixVars {};
+			// Maps ram_numeric base index -> MatrixInfo (for anonymous views/temps)
+			std::unordered_map<uint32_t, MatrixInfo> matrixSlotInfo {};
+			// Side channel: set by compileExpression when result is a matrix
+			MatrixInfo lastExprMatrixInfo {};
+
 			// Validation helper
 			auto validate = [](bool condition){
 				if (!condition) {
@@ -3041,6 +3145,48 @@ const int VERSION_PATCH = 0;
 			};
 			auto declareTmpNumeric = [&] {return declareVar("", RAM_VAR_NUMERIC);};
 			auto declareTmpText = [&] {return declareVar("", RAM_VAR_TEXT);};
+
+			// Matrix helpers
+			auto declareMatrix = [&](const std::string& name, uint8_t rows, uint8_t cols) -> ByteCode {
+				uint32_t baseIndex = ram_numericVariables;
+				ByteCode base = declareVar(name, RAM_VAR_NUMERIC); // slot 0
+				for (int i = 1; i < rows * cols; i++) {
+					declareVar("", RAM_VAR_NUMERIC); // consecutive slots
+				}
+				MatrixInfo info{rows, cols, baseIndex};
+				std::string key = currentFunctionName + "." + std::to_string(currentStackId) + "." + name;
+				matrixVars[key] = info;
+				matrixSlotInfo[baseIndex] = info;
+				return base;
+			};
+			auto declareTmpMatrix = [&](uint8_t rows, uint8_t cols) -> ByteCode {
+				uint32_t baseIndex = ram_numericVariables;
+				ByteCode base = declareVar("", RAM_VAR_NUMERIC);
+				for (int i = 1; i < rows * cols; i++) {
+					declareVar("", RAM_VAR_NUMERIC);
+				}
+				MatrixInfo info{rows, cols, baseIndex};
+				matrixSlotInfo[baseIndex] = info;
+				return base;
+			};
+			auto getMatrixInfo = [&](const std::string& varName) -> MatrixInfo {
+				for (int s = stack.size()-1; s >= -1; --s) {
+					std::string key = currentFunctionName + "." + std::to_string(s<0?0:stack[s].id) + "." + varName;
+					if (matrixVars.contains(key)) return matrixVars.at(key);
+				}
+				if (currentFunctionName != "") {
+					std::string key = ".0." + varName;
+					if (matrixVars.contains(key)) return matrixVars.at(key);
+				}
+				return {};
+			};
+			auto getMatrixInfoBySlot = [&](ByteCode ref) -> MatrixInfo {
+				if (ref.type == RAM_VAR_NUMERIC && matrixSlotInfo.contains(ref.value)) {
+					return matrixSlotInfo.at(ref.value);
+				}
+				return {};
+			};
+
 			auto getReturnVar = [&](const std::string& funcName) -> ByteCode {
 				std::string retVarName = "@"+funcName+":";
 				if (userVars.contains(funcName) && userVars.at(funcName).contains(0) && userVars.at(funcName).at(0).contains(retVarName)) {
@@ -3157,26 +3303,52 @@ const int VERSION_PATCH = 0;
 							if (IsArray(arg)) { // Don't allow arrays to be passed as arguments
 								throw CompileError("Cannot pass an array to function", func, "in arg " + std::to_string(i));
 							}
-							write(SET);
-							write(param);
-							write(arg);
-							write(VOID);
+							// Check if argument is a matrix - bulk copy
+							MatrixInfo argMatrix = getMatrixInfoBySlot(arg);
+							MatrixInfo paramMatrix = getMatrixInfoBySlot(param);
+							if (argMatrix && paramMatrix) {
+								validate(argMatrix.count() == paramMatrix.count());
+								write(MAS);
+								write(param);
+								write(arg);
+								write({INTEGER, argMatrix.count()});
+								write(VOID);
+							} else {
+								write(SET);
+								write(param);
+								write(arg);
+								write(VOID);
+							}
 						} else break;
 					}
-					
+
 					// Call the function
 					jump(functionRefs.at(funcName));
-					
+
 					// Get the Return value
 					if (getReturn) {
 						ByteCode ret = getReturnVar(funcName);
 						if (ret.type != VOID) {
-							ByteCode tmp = declareVar("", GetRamVarType(ret.type));
-							write(SET);
-							write(tmp);
-							write(ret);
-							write(VOID);
-							return tmp;
+							// Check if return is a matrix
+							MatrixInfo retMatrix = getMatrixInfoBySlot(ret);
+							if (retMatrix) {
+								ByteCode tmp = declareTmpMatrix(retMatrix.rows, retMatrix.cols);
+								write(MAS);
+								write(tmp);
+								write(ret);
+								write({INTEGER, retMatrix.count()});
+								write(VOID);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								return tmp;
+							} else {
+								ByteCode tmp = declareVar("", GetRamVarType(ret.type));
+								write(SET);
+								write(tmp);
+								write(ret);
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
 						} else {
 							throw CompileError("A function call here should return a value, but", funcName, "does not");
 						}
@@ -3186,10 +3358,21 @@ const int VERSION_PATCH = 0;
 							throw CompileError("Cannot pass an array to function", func, "in arg 1");
 						}
 						if (args[0].type < RAM_OBJECT) { // Objects don't get returned from trailing functions
-							write(SET);
-							write(args[0]);
-							write(getReturnVar(funcName));
-							write(VOID);
+							// Check if matrix trailing function
+							MatrixInfo retMatrix = getMatrixInfoBySlot(getReturnVar(funcName));
+							MatrixInfo arg0Matrix = getMatrixInfoBySlot(args[0]);
+							if (retMatrix && arg0Matrix) {
+								write(MAS);
+								write(args[0]);
+								write(getReturnVar(funcName));
+								write({INTEGER, retMatrix.count()});
+								write(VOID);
+							} else {
+								write(SET);
+								write(args[0]);
+								write(getReturnVar(funcName));
+								write(VOID);
+							}
 						}
 					}
 					return VOID;
@@ -3218,6 +3401,127 @@ const int VERSION_PATCH = 0;
 						write(VOID);
 						return ret;
 					}
+					// Matrix normal functions: length, dot, cross, determinant
+					auto compileMatrixCopyAndOp = [&](ByteCode src, MatrixInfo mi, uint32_t opCode, bool useRows = false) -> ByteCode {
+						ByteCode tmp = declareTmpMatrix(mi.rows, mi.cols);
+						write(MAS);
+						write(tmp); write(src); write({INTEGER, mi.count()}); write(VOID);
+						write(opCode);
+						write(tmp); write({INTEGER, useRows ? mi.rows : mi.count()}); write(VOID);
+						lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+						return tmp;
+					};
+					if (!isTrailingFunction && getReturn) {
+						if (funcName == "length" && args.size() == 1) {
+							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
+							if (mi) {
+								ByteCode tmp = declareTmpNumeric();
+								write(MLN);
+								write(tmp);
+								write(args[0]);
+								write({INTEGER, mi.count()});
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
+						} else if (funcName == "dot" && args.size() == 2) {
+							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
+							MatrixInfo mi2 = getMatrixInfoBySlot(args[1]);
+							if (mi1 && mi2) {
+								validate(mi1.count() == mi2.count());
+								ByteCode tmp = declareTmpNumeric();
+								write(MDT);
+								write(tmp);
+								write(args[0]);
+								write(args[1]);
+								write({INTEGER, mi1.count()});
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
+						} else if (funcName == "cross" && args.size() == 2) {
+							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
+							MatrixInfo mi2 = getMatrixInfoBySlot(args[1]);
+							if (mi1 && mi2) {
+								validate(mi1.count() == 3 && mi2.count() == 3);
+								ByteCode tmp = declareTmpMatrix(3, 1);
+								write(MCR);
+								write(tmp);
+								write(args[0]);
+								write(args[1]);
+								write(VOID);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								return tmp;
+							}
+						} else if (funcName == "determinant" && args.size() == 1) {
+							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
+							if (mi && mi.isSquare()) {
+								ByteCode tmp = declareTmpNumeric();
+								write(MDE);
+								write(tmp);
+								write(args[0]);
+								write({INTEGER, mi.rows});
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
+						} else if (funcName == "normalize" && args.size() == 1) {
+							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
+							if (mi) {
+								return compileMatrixCopyAndOp(args[0], mi, MNM);
+							}
+						} else if (funcName == "transpose" && args.size() == 1) {
+							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
+							if (mi && mi.isSquare()) {
+								return compileMatrixCopyAndOp(args[0], mi, MTR, true);
+							}
+						} else if (funcName == "inverse" && args.size() == 1) {
+							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
+							if (mi && mi.isSquare()) {
+								return compileMatrixCopyAndOp(args[0], mi, MIV, true);
+							}
+						} else if (funcName == "distance" && args.size() == 2) {
+							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
+							MatrixInfo mi2 = getMatrixInfoBySlot(args[1]);
+							if (mi1 && mi2) {
+								validate(mi1.count() == mi2.count());
+								ByteCode tmp = declareTmpNumeric();
+								write(MDI);
+								write(tmp); write(args[0]); write(args[1]);
+								write({INTEGER, mi1.count()});
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
+						} else if (funcName == "angle" && args.size() == 2) {
+							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
+							MatrixInfo mi2 = getMatrixInfoBySlot(args[1]);
+							if (mi1 && mi2) {
+								validate(mi1.count() == mi2.count());
+								ByteCode tmp = declareTmpNumeric();
+								write(MAN);
+								write(tmp); write(args[0]); write(args[1]);
+								write({INTEGER, mi1.count()});
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
+							}
+						} else if (funcName == "lerp" && args.size() == 3) {
+							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
+							MatrixInfo mi2 = getMatrixInfoBySlot(args[1]);
+							if (mi1 && mi2) {
+								validate(mi1.count() == mi2.count());
+								ByteCode tmp = declareTmpMatrix(mi1.rows, mi1.cols);
+								write(MLP);
+								write(tmp); write(args[0]); write(args[1]); write(args[2]);
+								write({INTEGER, mi1.count()});
+								write(VOID);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								return tmp;
+							}
+						}
+					}
+
 					CODE_TYPE retType = VOID;
 					ByteCode ret = VOID;
 					ByteCode f = VOID;
@@ -3570,6 +3874,7 @@ const int VERSION_PATCH = 0;
 			/*compileExpression*/ std::function<ByteCode(const std::vector<Word>&, int, int)> compileExpression = [&](const std::vector<Word>& words, int startIndex, int endIndex = -1) -> ByteCode {
 				if (endIndex < 0) endIndex += words.size();
 				validate(startIndex <= endIndex);
+				lastExprMatrixInfo = {}; // Reset at start of each expression compilation
 				
 				int opIndex = startIndex + 1;
 				
@@ -3581,21 +3886,24 @@ const int VERSION_PATCH = 0;
 						int closing = GetExpressionEnd(words, startIndex, endIndex);
 						validate(closing != -1);
 						ref1 = compileExpression(words, startIndex+1, closing-1);
-						if (closing == endIndex) return ref1;
+						if (closing == endIndex) return ref1; // lastExprMatrixInfo already set by recursive call
 						opIndex = closing + 1;
 						validate(opIndex < endIndex);
 					}break;
 					case Word::Varname:{
 						ref1 = getVar(word1);
-						if (startIndex == endIndex) return ref1;
+						if (startIndex == endIndex) {
+							lastExprMatrixInfo = getMatrixInfoBySlot(ref1);
+							return ref1;
+						}
 					}break;
 					case Word::Numeric:{
 						ref1 = declareVar("", ROM_CONST_NUMERIC, word1);
-						if (startIndex == endIndex) return ref1;
+						if (startIndex == endIndex) { lastExprMatrixInfo = {}; return ref1; }
 					}break;
 					case Word::Text:{
 						ref1 = declareVar("", ROM_CONST_TEXT, word1);
-						if (startIndex == endIndex) return ref1;
+						if (startIndex == endIndex) { lastExprMatrixInfo = {}; return ref1; }
 					}break;
 					case Word::Funcname:
 					case Word::Name:{
@@ -3664,6 +3972,59 @@ const int VERSION_PATCH = 0;
 							validate(idx + 1 <= endIndex);
 							Word operand = words[idx+1];
 							bool segmentHandled = false;
+
+							// Matrix access - check before array/text
+							// Use lastExprMatrixInfo if available (e.g., from row view), otherwise look up by slot
+							MatrixInfo minfo = lastExprMatrixInfo ? lastExprMatrixInfo : getMatrixInfoBySlot(ref1);
+							if (minfo) {
+								if (operand == Word::Numeric || (operand == Word::Name && MatrixComponentOffset(operand.word) >= 0)) {
+									// Component or row access via numeric literal or xyzw/0123
+									int offset = (operand == Word::Numeric) ? int(std::round(double(operand))) : MatrixComponentOffset(operand.word);
+									if (minfo.isVector() || minfo.cols == 1) {
+										// Vector: direct element access
+										validate(offset >= 0 && uint32_t(offset) < minfo.count());
+										ref1 = {RAM_VAR_NUMERIC, minfo.baseIndex + uint32_t(offset)};
+										lastExprMatrixInfo = {};
+									} else {
+										// 2D matrix: row access -> returns a row view
+										validate(offset >= 0 && uint32_t(offset) < minfo.rows);
+										uint32_t rowBase = minfo.baseIndex + uint32_t(offset) * minfo.cols;
+										MatrixInfo rowView{minfo.cols, 1, rowBase};
+										// Only store if not overwriting the parent matrix
+										if (!matrixSlotInfo.contains(rowBase)) {
+											matrixSlotInfo[rowBase] = rowView;
+										}
+										ref1 = {RAM_VAR_NUMERIC, rowBase};
+										lastExprMatrixInfo = rowView;
+									}
+									segmentHandled = true;
+								} else if (operand == Word::Name && IsSwizzle(operand.word)) {
+									// Swizzling
+									uint8_t swizLen = operand.word.size();
+									for (char c : operand.word) {
+										int off = MatrixComponentOffset(std::string(1, c));
+										validate(off >= 0 && uint32_t(off) < minfo.count());
+									}
+									ByteCode tmp = declareTmpMatrix(swizLen, 1);
+									MatrixInfo tmpInfo = getMatrixInfoBySlot(tmp);
+									for (uint8_t i = 0; i < swizLen; i++) {
+										int off = MatrixComponentOffset(std::string(1, operand.word[i]));
+										write(SET);
+										write({RAM_VAR_NUMERIC, tmpInfo.baseIndex + uint32_t(i)});
+										write({RAM_VAR_NUMERIC, minfo.baseIndex + uint32_t(off)});
+										write(VOID);
+									}
+									ref1 = tmp;
+									lastExprMatrixInfo = tmpInfo;
+									segmentHandled = true;
+								}
+								if (segmentHandled) {
+									consumed = true;
+									idx += 2;
+									continue;
+								}
+							}
+
 							if (operand == Word::Numeric) {
 								validate(IsArray(ref1) || IsText(ref1));
 								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
@@ -3673,6 +4034,7 @@ const int VERSION_PATCH = 0;
 								write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 								write(VOID);
 								ref1 = tmp;
+								lastExprMatrixInfo = {};
 								segmentHandled = true;
 							} else if (operand == Word::Varname) {
 								validate(IsArray(ref1) || IsText(ref1));
@@ -3691,6 +4053,7 @@ const int VERSION_PATCH = 0;
 								write(ref2);
 								write(VOID);
 								ref1 = tmp;
+								lastExprMatrixInfo = {};
 								segmentHandled = true;
 							} else if (operand == Word::ExpressionBegin) {
 								int closing = GetExpressionEnd(words, idx+1, endIndex);
@@ -3718,22 +4081,24 @@ const int VERSION_PATCH = 0;
 									write(VOID);
 									ref1 = tmp;
 								}
+								lastExprMatrixInfo = {};
 								segmentHandled = true;
 								consumed = true;
 								idx = closing + 1;
 								continue;
 							} else if (operand == Word::Name && IsText(ref1) && !(idx+2 <= endIndex && words[idx+2] == Word::ExpressionBegin)) {
 								ref1 = compileFunctionCall(operand, {ref1}, true, true);
+								lastExprMatrixInfo = {};
 								segmentHandled = true;
 							}
-							
+
 							if (!segmentHandled) {
 								break;
 							}
 							consumed = true;
 							idx += 2;
 						}
-						
+
 						if (consumed) {
 							opIndex = idx;
 							if (opIndex > endIndex) {
@@ -3741,11 +4106,12 @@ const int VERSION_PATCH = 0;
 							}
 							continue;
 						}
-						
+
 						Word operand = words[opIndex+1];
 						if (operand == Word::Name || operand == Word::Funcname) {
 							if (opIndex+1 == endIndex) { // trailing member with no parenthesis, in an expression
 								validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
+								lastExprMatrixInfo = {};
 								return compileFunctionCall(operand, {ref1}, true, true);
 							} else if (IsObject(ref1)) { // trailing function call, in an expression, on an object
 								validate(words[opIndex+2] == Word::ExpressionBegin);
@@ -3858,22 +4224,102 @@ const int VERSION_PATCH = 0;
 							write(VOID);
 							return tmp;
 						} else if (op == Word::MulOperatorGroup) {
-							if (op == "*") {
-								write(MUL);
-							} else if (op == "/") {
-								write(DIV);
-							} else if (op == "%") {
-								write(MOD);
+							MatrixInfo mat1 = getMatrixInfoBySlot(ref1);
+							MatrixInfo mat2 = getMatrixInfoBySlot(ref2);
+							if (op == "*" && mat1 && mat2) {
+								// Matrix * Matrix: matmul if compatible, element-wise if same dims
+								if (mat1.cols == mat2.rows || (mat1.isVector() && mat2.isVector() && mat1.count() == mat2.count())) {
+									if (mat1.isVector() && mat2.isVector()) {
+										// Same-dim vectors: element-wise
+										ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
+										lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+										write(MEW);
+										write(tmp); write(ref1); write(ref2);
+										write({INTEGER, mat1.count()});
+										write(VOID);
+										return tmp;
+									} else {
+										// Matmul
+										uint8_t outRows = mat1.isVector() ? mat1.count() : mat1.rows;
+										uint8_t outCols = mat2.isVector() ? 1 : mat2.cols;
+										uint8_t aCols = mat1.isVector() ? 1 : mat1.cols;
+										ByteCode tmp = declareTmpMatrix(outRows, outCols);
+										lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+										write(MMM);
+										write(tmp); write(ref1);
+										write({INTEGER, outRows});
+										write({INTEGER, aCols});
+										write(ref2);
+										write({INTEGER, outCols});
+										write(VOID);
+										return tmp;
+									}
+								} else {
+									throw CompileError("Incompatible matrix dimensions for multiplication");
+								}
+							} else if (op == "*" && mat1 && !mat2) {
+								// Matrix * scalar
+								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								write(MMS);
+								write(tmp); write(ref1); write(ref2);
+								write({INTEGER, mat1.count()});
+								write(VOID);
+								return tmp;
+							} else if (op == "*" && !mat1 && mat2) {
+								// Scalar * matrix
+								ByteCode tmp = declareTmpMatrix(mat2.rows, mat2.cols);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								write(MMS);
+								write(tmp); write(ref2); write(ref1);
+								write({INTEGER, mat2.count()});
+								write(VOID);
+								return tmp;
+							} else if (op == "/" && mat1 && !mat2) {
+								// Matrix / scalar
+								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								write(MDS);
+								write(tmp); write(ref1); write(ref2);
+								write({INTEGER, mat1.count()});
+								write(VOID);
+								return tmp;
 							} else {
-								validate(false);
+								if (op == "*") {
+									write(MUL);
+								} else if (op == "/") {
+									write(DIV);
+								} else if (op == "%") {
+									write(MOD);
+								} else {
+									validate(false);
+								}
+								ByteCode tmp = declareTmpNumeric();
+								write(tmp);
+								write(ref1);
+								write(ref2);
+								write(VOID);
+								lastExprMatrixInfo = {};
+								return tmp;
 							}
-							ByteCode tmp = declareTmpNumeric();
-							write(tmp);
-							write(ref1);
-							write(ref2);
-							write(VOID);
-							return tmp;
 						} else if (op == Word::AddOperatorGroup) {
+							MatrixInfo mat1 = getMatrixInfoBySlot(ref1);
+							MatrixInfo mat2 = getMatrixInfoBySlot(ref2);
+							if (mat1 && mat2 && mat1.count() == mat2.count()) {
+								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
+								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
+								if (op == "+") {
+									write(MAD);
+								} else {
+									write(MSB);
+								}
+								write(tmp); write(ref1); write(ref2);
+								write({INTEGER, mat1.count()});
+								write(VOID);
+								return tmp;
+							} else if (mat1 || mat2) {
+								throw CompileError("Cannot add/subtract matrices of different dimensions");
+							}
 							if (op == "+") {
 								write(ADD);
 							} else if (op == "-") {
@@ -3886,6 +4332,7 @@ const int VERSION_PATCH = 0;
 							write(ref1);
 							write(ref2);
 							write(VOID);
+							lastExprMatrixInfo = {};
 							return tmp;
 						} else if (op == Word::CompareOperatorGroup) {
 							if (op == "<") {
@@ -4226,8 +4673,11 @@ const int VERSION_PATCH = 0;
 											declareVar(name, RAM_VAR_NUMERIC);
 										} else if (type == "text") {
 											declareVar(name, RAM_VAR_TEXT);
+										} else if (IsMatrixType(type.word)) {
+											MatrixInfo minfo = ParseMatrixType(type.word);
+											declareMatrix(name, minfo.rows, minfo.cols);
 										} else {
-											throw CompileError("Var declaration in global scope can only be of type 'number' or 'text'");
+											throw CompileError("Var declaration in global scope can only be of type 'number', 'text', or 'vecN/matNxM'");
 										}
 										validate(!readWord());
 									}
@@ -4313,6 +4763,9 @@ const int VERSION_PATCH = 0;
 											arg = declareVar(word, RAM_VAR_NUMERIC);
 										} else if (type == "text") {
 											arg = declareVar(word, RAM_VAR_TEXT);
+										} else if (IsMatrixType(type)) {
+											MatrixInfo minfo = ParseMatrixType(type);
+											arg = declareMatrix(word, minfo.rows, minfo.cols);
 										} else {
 											if (Device::objectTypesByName.contains(type)) {
 												arg = declareVar(word, CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(type).id));
@@ -4329,6 +4782,9 @@ const int VERSION_PATCH = 0;
 											declareVar("@"+name+":", RAM_VAR_NUMERIC);
 										} else if (type == "text") {
 											declareVar("@"+name+":", RAM_VAR_TEXT);
+										} else if (IsMatrixType(std::string(type))) {
+											MatrixInfo minfo = ParseMatrixType(type);
+											declareMatrix("@"+name+":", minfo.rows, minfo.cols);
 										} else {
 											if (Device::objectTypesByName.contains(type)) {
 												declareVar("@"+name+":", CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(type).id));
@@ -4481,10 +4937,60 @@ const int VERSION_PATCH = 0;
 							case Word::Varname: {
 								// Variable assignment
 								ByteCode dst = getVar(firstWord);
+								MatrixInfo dstMatrix = getMatrixInfoBySlot(dst);
 								Word operation = readWord();
 								switch (operation.type) {
 									case Word::AssignmentOperatorGroup:{
-										if (IsArray(dst)) {
+										if (dstMatrix) {
+											// Matrix assignment
+											ByteCode op = GetOperator(operation);
+											ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+											MatrixInfo srcMatrix = lastExprMatrixInfo;
+											if (op == SET) {
+												if (srcMatrix) {
+													validate(srcMatrix.count() == dstMatrix.count());
+													write(MAS);
+													write(dst);
+													write(ref);
+													write({INTEGER, dstMatrix.count()});
+													write(VOID);
+												} else {
+													// Scalar to all elements? No - error
+													throw CompileError("Cannot assign a scalar to a matrix without accessor");
+												}
+											} else if (srcMatrix) {
+												validate(srcMatrix.count() == dstMatrix.count());
+												// Compound assignment: += -= *=
+												if (op == ADD) {
+													write(MAD);
+													write(dst); write(dst); write(ref);
+													write({INTEGER, dstMatrix.count()});
+													write(VOID);
+												} else if (op == SUB) {
+													write(MSB);
+													write(dst); write(dst); write(ref);
+													write({INTEGER, dstMatrix.count()});
+													write(VOID);
+												} else {
+													throw CompileError("Invalid compound assignment operator for matrices");
+												}
+											} else {
+												// Scalar compound: *= /=
+												if (op == MUL) {
+													write(MMS);
+													write(dst); write(dst); write(ref);
+													write({INTEGER, dstMatrix.count()});
+													write(VOID);
+												} else if (op == DIV) {
+													write(MDS);
+													write(dst); write(dst); write(ref);
+													write({INTEGER, dstMatrix.count()});
+													write(VOID);
+												} else {
+													throw CompileError("Invalid scalar compound assignment for matrix");
+												}
+											}
+										} else if (IsArray(dst)) {
 											// For now, the only possible assignment for an array is = another array. This will resize the array and copy all elements.
 											validate(operation == "=");
 											ByteCode ref = getVar(readWord(Word::Varname));
@@ -4505,6 +5011,160 @@ const int VERSION_PATCH = 0;
 										}
 									}break;
 									case Word::TrailOperator:{
+										// Matrix trail operator handling
+										if (dstMatrix) {
+											// Resolve matrix accessor chain at compile time
+											ByteCode resolved = dst;
+											MatrixInfo curMatrix = dstMatrix;
+											while (nextWordIndex < (int)line.words.size()) {
+												Word word = line.words[nextWordIndex];
+												if (word == Word::TrailOperator) {
+													// Skip the dot
+													++nextWordIndex;
+													continue;
+												}
+												int offset = -1;
+												if (word == Word::Numeric) {
+													offset = int(std::round(double(word)));
+												} else if (word == Word::Name && MatrixComponentOffset(word.word) >= 0) {
+													offset = MatrixComponentOffset(word.word);
+												} else if (word == Word::Name && IsSwizzle(word.word)) {
+													// Swizzle in statement: $m.3.xyz = ... (not valid as LHS, but the RHS in expression handles it)
+													// For now, break and let it be handled as trailing function
+													break;
+												} else {
+													// Could be trailing function name
+													break;
+												}
+												if (curMatrix.isVector() || curMatrix.cols == 1) {
+													// Vector: element access
+													validate(offset >= 0 && uint32_t(offset) < curMatrix.count());
+													resolved = {RAM_VAR_NUMERIC, curMatrix.baseIndex + uint32_t(offset)};
+													curMatrix = {};
+												} else {
+													// 2D matrix: row access
+													validate(offset >= 0 && uint32_t(offset) < curMatrix.rows);
+													uint32_t rowBase = curMatrix.baseIndex + uint32_t(offset) * curMatrix.cols;
+													MatrixInfo rowView{curMatrix.cols, 1, rowBase};
+													// Don't store in matrixSlotInfo - could overwrite parent matrix entry
+													resolved = {RAM_VAR_NUMERIC, rowBase};
+													curMatrix = rowView;
+												}
+												++nextWordIndex;
+											}
+											// Now check what operation follows
+											Word nextOp = readWord();
+											if (nextOp == Word::AssignmentOperatorGroup) {
+												ByteCode op = GetOperator(nextOp);
+												ByteCode rhs = compileExpression(line.words, nextWordIndex, -1);
+												if (curMatrix) {
+													// Assigning to a sub-matrix (e.g., whole row)
+													MatrixInfo rhsMatrix = lastExprMatrixInfo;
+													if (op == SET && rhsMatrix) {
+														validate(rhsMatrix.count() == curMatrix.count());
+														write(MAS);
+														write(resolved); write(rhs);
+														write({INTEGER, curMatrix.count()});
+														write(VOID);
+													} else if (op == SET) {
+														throw CompileError("Cannot assign scalar to matrix without component accessor");
+													} else {
+														throw CompileError("Invalid compound assignment on matrix row");
+													}
+												} else {
+													// Scalar assignment to resolved component
+													write(op);
+													write(resolved);
+													if (op != SET) write(resolved);
+													write(rhs);
+													write(VOID);
+												}
+											} else if (nextOp == Word::SuffixOperatorGroup) {
+												validate(!curMatrix); // Can only ++ -- on scalars
+												ByteCode op = GetOperator(nextOp);
+												write(op);
+												if (nextOp == "!!") write(resolved);
+												write(resolved);
+												write(VOID);
+											} else if (nextOp == Word::TrailOperator || (nextOp == Word::Name && curMatrix)) {
+												// Trailing function on matrix or component
+												Word funcName = (nextOp == Word::TrailOperator) ? readWord() : nextOp;
+												// Collect args
+												std::vector<ByteCode> args;
+												args.push_back(resolved);
+												if (nextWordIndex < (int)line.words.size() && line.words[nextWordIndex] == Word::ExpressionBegin) {
+													++nextWordIndex; // skip (
+													while (nextWordIndex < (int)line.words.size()) {
+														int argEnd = GetArgEnd(line.words, nextWordIndex);
+														if (argEnd == -1) break;
+														args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+														nextWordIndex = argEnd + 1;
+														if (nextWordIndex < (int)line.words.size() && line.words[nextWordIndex] == Word::CommaOperator) {
+															++nextWordIndex;
+														} else break;
+													}
+													if (nextWordIndex < (int)line.words.size() && line.words[nextWordIndex] == Word::ExpressionEnd) {
+														++nextWordIndex;
+													}
+												}
+												// Handle matrix trailing functions
+												MatrixInfo resolvedMatrix = curMatrix ? curMatrix : getMatrixInfoBySlot(resolved);
+												if (resolvedMatrix && funcName == "normalize") {
+													write(MNM);
+													write(resolved);
+													write({INTEGER, resolvedMatrix.count()});
+													write(VOID);
+												} else if (resolvedMatrix && funcName == "cross" && args.size() == 2) {
+													validate(resolvedMatrix.count() == 3);
+													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
+													validate(otherMatrix && otherMatrix.count() == 3);
+													// Cross modifies self: need temp to avoid aliasing
+													ByteCode tmp = declareTmpMatrix(3, 1);
+													write(MCR);
+													write(tmp);
+													write(resolved);
+													write(args[1]);
+													write(VOID);
+													write(MAS);
+													write(resolved);
+													write(tmp);
+													write({INTEGER, 3});
+													write(VOID);
+												} else if (resolvedMatrix && funcName == "transpose") {
+													validate(resolvedMatrix.isSquare());
+													write(MTR);
+													write(resolved);
+													write({INTEGER, resolvedMatrix.rows});
+													write(VOID);
+												} else if (resolvedMatrix && funcName == "inverse") {
+													validate(resolvedMatrix.isSquare());
+													write(MIV);
+													write(resolved);
+													write({INTEGER, resolvedMatrix.rows});
+													write(VOID);
+												} else if (resolvedMatrix && funcName == "identity") {
+													validate(resolvedMatrix.isSquare());
+													write(MID);
+													write(resolved);
+													write({INTEGER, resolvedMatrix.rows});
+													write(VOID);
+												} else if (resolvedMatrix && funcName == "lerp" && args.size() == 3) {
+													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
+													validate(otherMatrix && otherMatrix.count() == resolvedMatrix.count());
+													write(MLP);
+													write(resolved); write(resolved); write(args[1]); write(args[2]);
+													write({INTEGER, resolvedMatrix.count()});
+													write(VOID);
+												} else {
+													// Fall through to regular trailing function
+													compileFunctionCall(funcName, args, false, true);
+												}
+											} else {
+												validate(false);
+											}
+											break;
+										}
+
 										struct Accessor {
 											enum class Kind {
 												ArrayIndexLiteral,
@@ -4942,17 +5602,46 @@ const int VERSION_PATCH = 0;
 								// var
 								if (firstWord == "var") {
 									std::string name = readWord(Word::Varname);
-									Word op = readWord(Word::AssignmentOperatorGroup);
-									validate(op == "=");
-									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-									if (ref.type == VOID) {
-										throw CompileError("Cannot assign a var to VOID");
+									Word op = readWord();
+									if (op == Word::CastOperator) {
+										// var $name : type
+										Word type = readWord(Word::Name);
+										if (IsMatrixType(type.word)) {
+											MatrixInfo minfo = ParseMatrixType(type.word);
+											declareMatrix(name, minfo.rows, minfo.cols);
+										} else if (type == "number") {
+											declareVar(name, RAM_VAR_NUMERIC);
+										} else if (type == "text") {
+											declareVar(name, RAM_VAR_TEXT);
+										} else {
+											throw CompileError("Invalid var type", type);
+										}
+										validate(!readWord());
+									} else if (op == Word::AssignmentOperatorGroup) {
+										validate(op == "=");
+										ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
+										if (ref.type == VOID) {
+											throw CompileError("Cannot assign a var to VOID");
+										}
+										// Check if RHS is a matrix
+										MatrixInfo rhsMatrix = lastExprMatrixInfo;
+										if (rhsMatrix) {
+											ByteCode var = declareMatrix(name, rhsMatrix.rows, rhsMatrix.cols);
+											write(MAS);
+											write(var);
+											write(ref);
+											write({INTEGER, rhsMatrix.count()});
+											write(VOID);
+										} else {
+											ByteCode var = declareVar(name, GetRamVarType(ref.type));
+											write(SET);
+											write(var);
+											write(ref);
+											write(VOID);
+										}
+									} else {
+										throw CompileError("Expected '=' or ':' after var name");
 									}
-									ByteCode var = declareVar(name, GetRamVarType(ref.type));
-									write(SET);
-									write(var);
-									write(ref);
-									write(VOID);
 								}
 								// array
 								else if (firstWord == "array") {
@@ -5341,10 +6030,22 @@ const int VERSION_PATCH = 0;
 										validate(currentFunctionName != "");
 										ByteCode ret = getReturnVar(currentFunctionName);
 										ByteCode val = compileExpression(line.words, nextWordIndex, -1);
-										write(SET);
-										write(ret);
-										write(val);
-										write(VOID);
+										// Check if returning a matrix
+										MatrixInfo retMatrix = getMatrixInfoBySlot(ret);
+										MatrixInfo valMatrix = lastExprMatrixInfo;
+										if (retMatrix && valMatrix) {
+											validate(retMatrix.count() == valMatrix.count());
+											write(MAS);
+											write(ret);
+											write(val);
+											write({INTEGER, retMatrix.count()});
+											write(VOID);
+										} else {
+											write(SET);
+											write(ret);
+											write(val);
+											write(VOID);
+										}
 									}
 									write(RETURN);
 								}
@@ -8845,6 +9546,295 @@ const int VERSION_PATCH = 0;
 										throw RuntimeError("Invalid operation");
 									}
 								}break;
+								// Matrix operations
+								case MAS: { // Matrix assign (bulk copy)
+									ByteCode dst = nextCode();
+									ByteCode src = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* s = &ram_numeric[src.value];
+									std::memmove(d, s, count * sizeof(double));
+								} break;
+								case MAD: { // Matrix add (element-wise)
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] + bp[i];
+								} break;
+								case MSB: { // Matrix sub (element-wise)
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] - bp[i];
+								} break;
+								case MEW: { // Matrix element-wise multiply
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * bp[i];
+								} break;
+								case MMS: { // Matrix * scalar
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode scalarRef = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									double s = MemGetNumeric(scalarRef);
+									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * s;
+								} break;
+								case MDS: { // Matrix / scalar
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode scalarRef = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									double s = MemGetNumeric(scalarRef);
+									if (s == 0) throw RuntimeError("Division by zero");
+									double inv = 1.0 / s;
+									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * inv;
+								} break;
+								case MMM: { // Matrix multiply
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									uint32_t aRows = nextCode().value;
+									uint32_t aCols = nextCode().value;
+									ByteCode b = nextCode();
+									uint32_t bCols = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									for (uint32_t i = 0; i < aRows; i++)
+										for (uint32_t j = 0; j < bCols; j++) {
+											double sum = 0;
+											for (uint32_t k = 0; k < aCols; k++)
+												sum += ap[i * aCols + k] * bp[k * bCols + j];
+											d[i * bCols + j] = sum;
+										}
+								} break;
+								case MNM: { // Normalize in-place
+									ByteCode base = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* p = &ram_numeric[base.value];
+									double len = 0;
+									for (uint32_t i = 0; i < count; i++) len += p[i] * p[i];
+									len = std::sqrt(len);
+									if (len > 0) { double inv = 1.0 / len; for (uint32_t i = 0; i < count; i++) p[i] *= inv; }
+								} break;
+								case MLN: { // Length -> scalar
+									ByteCode dst = nextCode();
+									ByteCode base = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									const double* p = &ram_numeric[base.value];
+									double len = 0;
+									for (uint32_t i = 0; i < count; i++) len += p[i] * p[i];
+									MemSet(std::sqrt(len), dst);
+								} break;
+								case MDT: { // Dot product -> scalar
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									double dot = 0;
+									for (uint32_t i = 0; i < count; i++) dot += ap[i] * bp[i];
+									MemSet(dot, dst);
+								} break;
+								case MCR: { // Cross product (3-element)
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									nextCode(); // VOID
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									double r[3];
+									r[0] = ap[1]*bp[2] - ap[2]*bp[1];
+									r[1] = ap[2]*bp[0] - ap[0]*bp[2];
+									r[2] = ap[0]*bp[1] - ap[1]*bp[0];
+									double* d = &ram_numeric[dst.value];
+									d[0] = r[0]; d[1] = r[1]; d[2] = r[2];
+								} break;
+								case MTR: { // Transpose in-place (square)
+									ByteCode base = nextCode();
+									uint32_t size = nextCode().value;
+									nextCode(); // VOID
+									double* p = &ram_numeric[base.value];
+									for (uint32_t i = 0; i < size; i++)
+										for (uint32_t j = i+1; j < size; j++)
+											std::swap(p[i*size+j], p[j*size+i]);
+								} break;
+								case MDE: { // Determinant -> scalar
+									ByteCode dst = nextCode();
+									ByteCode base = nextCode();
+									uint32_t size = nextCode().value;
+									nextCode(); // VOID
+									const double* m = &ram_numeric[base.value];
+									double det = 0;
+									switch(size) {
+										case 1: det = m[0]; break;
+										case 2: det = m[0]*m[3] - m[1]*m[2]; break;
+										case 3:
+											det = m[0]*(m[4]*m[8] - m[5]*m[7])
+												- m[1]*(m[3]*m[8] - m[5]*m[6])
+												+ m[2]*(m[3]*m[7] - m[4]*m[6]);
+											break;
+										case 4: {
+											// Cofactor expansion along first row
+											auto sub3 = [&](int r0, int r1, int r2, int c0, int c1, int c2) {
+												return m[r0*4+c0]*(m[r1*4+c1]*m[r2*4+c2] - m[r1*4+c2]*m[r2*4+c1])
+													 - m[r0*4+c1]*(m[r1*4+c0]*m[r2*4+c2] - m[r1*4+c2]*m[r2*4+c0])
+													 + m[r0*4+c2]*(m[r1*4+c0]*m[r2*4+c1] - m[r1*4+c1]*m[r2*4+c0]);
+											};
+											det = m[0]*sub3(1,2,3,1,2,3)
+												- m[1]*sub3(1,2,3,0,2,3)
+												+ m[2]*sub3(1,2,3,0,1,3)
+												- m[3]*sub3(1,2,3,0,1,2);
+										} break;
+									}
+									MemSet(det, dst);
+								} break;
+								case MIV: { // Inverse in-place (square)
+									ByteCode base = nextCode();
+									uint32_t size = nextCode().value;
+									nextCode(); // VOID
+									double* m = &ram_numeric[base.value];
+									if (size == 2) {
+										double det = m[0]*m[3] - m[1]*m[2];
+										if (std::abs(det) < 1e-15) throw RuntimeError("Matrix is singular");
+										double inv = 1.0 / det;
+										double a = m[0], b = m[1], c = m[2], d = m[3];
+										m[0] = d*inv; m[1] = -b*inv;
+										m[2] = -c*inv; m[3] = a*inv;
+									} else if (size == 3) {
+										double det = m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6]);
+										if (std::abs(det) < 1e-15) throw RuntimeError("Matrix is singular");
+										double inv = 1.0 / det;
+										double tmp[9];
+										tmp[0] = (m[4]*m[8]-m[5]*m[7])*inv;
+										tmp[1] = (m[2]*m[7]-m[1]*m[8])*inv;
+										tmp[2] = (m[1]*m[5]-m[2]*m[4])*inv;
+										tmp[3] = (m[5]*m[6]-m[3]*m[8])*inv;
+										tmp[4] = (m[0]*m[8]-m[2]*m[6])*inv;
+										tmp[5] = (m[2]*m[3]-m[0]*m[5])*inv;
+										tmp[6] = (m[3]*m[7]-m[4]*m[6])*inv;
+										tmp[7] = (m[1]*m[6]-m[0]*m[7])*inv;
+										tmp[8] = (m[0]*m[4]-m[1]*m[3])*inv;
+										std::memcpy(m, tmp, 9*sizeof(double));
+									} else if (size == 4) {
+										// Gauss-Jordan elimination
+										double aug[4][8];
+										for (uint32_t i = 0; i < 4; i++) {
+											for (uint32_t j = 0; j < 4; j++) {
+												aug[i][j] = m[i*4+j];
+												aug[i][j+4] = (i == j) ? 1.0 : 0.0;
+											}
+										}
+										for (uint32_t col = 0; col < 4; col++) {
+											// Find pivot
+											uint32_t pivot = col;
+											for (uint32_t row = col+1; row < 4; row++) {
+												if (std::abs(aug[row][col]) > std::abs(aug[pivot][col])) pivot = row;
+											}
+											if (std::abs(aug[pivot][col]) < 1e-15) throw RuntimeError("Matrix is singular");
+											if (pivot != col) std::swap(aug[col], aug[pivot]);
+											double div = aug[col][col];
+											for (uint32_t j = 0; j < 8; j++) aug[col][j] /= div;
+											for (uint32_t row = 0; row < 4; row++) {
+												if (row != col) {
+													double factor = aug[row][col];
+													for (uint32_t j = 0; j < 8; j++) aug[row][j] -= factor * aug[col][j];
+												}
+											}
+										}
+										for (uint32_t i = 0; i < 4; i++)
+											for (uint32_t j = 0; j < 4; j++)
+												m[i*4+j] = aug[i][j+4];
+									}
+								} break;
+
+								case MID: { // Identity in-place (square)
+									ByteCode base = nextCode();
+									uint32_t size = nextCode().value;
+									nextCode(); // VOID
+									double* m = &ram_numeric[base.value];
+									std::memset(m, 0, size * size * sizeof(double));
+									for (uint32_t i = 0; i < size; i++)
+										m[i * size + i] = 1.0;
+								} break;
+								case MDI: { // Distance -> scalar
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									double sum = 0;
+									for (uint32_t i = 0; i < count; i++) {
+										double d = ap[i] - bp[i];
+										sum += d * d;
+									}
+									MemSet(std::sqrt(sum), dst);
+								} break;
+								case MAN: { // Angle -> scalar (radians)
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									double dotProd = 0, lenA = 0, lenB = 0;
+									for (uint32_t i = 0; i < count; i++) {
+										dotProd += ap[i] * bp[i];
+										lenA += ap[i] * ap[i];
+										lenB += bp[i] * bp[i];
+									}
+									lenA = std::sqrt(lenA);
+									lenB = std::sqrt(lenB);
+									double cosAngle = (lenA > 0 && lenB > 0) ? dotProd / (lenA * lenB) : 0;
+									cosAngle = std::max(-1.0, std::min(1.0, cosAngle)); // clamp for numerical stability
+									MemSet(std::acos(cosAngle), dst);
+								} break;
+								case MLP: { // Lerp (element-wise)
+									ByteCode dst = nextCode();
+									ByteCode a = nextCode();
+									ByteCode b = nextCode();
+									ByteCode tRef = nextCode();
+									uint32_t count = nextCode().value;
+									nextCode(); // VOID
+									double* d = &ram_numeric[dst.value];
+									const double* ap = &ram_numeric[a.value];
+									const double* bp = &ram_numeric[b.value];
+									double t = MemGetNumeric(tRef);
+									for (uint32_t i = 0; i < count; i++)
+										d[i] = ap[i] + (bp[i] - ap[i]) * t;
+								} break;
+
 								case RPL: { // REF_DST REF_SRC REF_OLD REF_NEW [REF_COUNT]
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
