@@ -22,249 +22,6 @@
 	#define XC_NAMESPACE XenonCode
 #endif
 
-#pragma region UNDEFS // Microsoft's C++ not respecting the standard again...
-#ifdef VOID
-	#undef VOID
-#endif
-#ifdef DISCARD
-	#undef DISCARD
-#endif
-#ifdef RETURN
-	#undef RETURN
-#endif
-#ifdef OP
-	#undef OP
-#endif
-#ifdef INTEGER
-	#undef INTEGER
-#endif
-#ifdef ADDR
-	#undef ADDR
-#endif
-#ifdef SET
-	#undef SET
-#endif
-#ifdef ADD
-	#undef ADD
-#endif
-#ifdef SUB
-	#undef SUB
-#endif
-#ifdef MUL
-	#undef MUL
-#endif
-#ifdef DIV
-	#undef DIV
-#endif
-#ifdef MOD
-	#undef MOD
-#endif
-#ifdef POW
-	#undef POW
-#endif
-#ifdef CCT
-	#undef CCT
-#endif
-#ifdef AND
-	#undef AND
-#endif
-#ifdef ORR
-	#undef ORR
-#endif
-#ifdef XOR
-	#undef XOR
-#endif
-#ifdef EQQ
-	#undef EQQ
-#endif
-#ifdef NEQ
-	#undef NEQ
-#endif
-#ifdef LST
-	#undef LST
-#endif
-#ifdef GRT
-	#undef GRT
-#endif
-#ifdef LTE
-	#undef LTE
-#endif
-#ifdef GTE
-	#undef GTE
-#endif
-#ifdef INC
-	#undef INC
-#endif
-#ifdef DEC
-	#undef DEC
-#endif
-#ifdef NOT
-	#undef NOT
-#endif
-#ifdef FLR
-	#undef FLR
-#endif
-#ifdef CIL
-	#undef CIL
-#endif
-#ifdef RND
-	#undef RND
-#endif
-#ifdef SIN
-	#undef SIN
-#endif
-#ifdef COS
-	#undef COS
-#endif
-#ifdef TAN
-	#undef TAN
-#endif
-#ifdef ASI
-	#undef ASI
-#endif
-#ifdef ACO
-	#undef ACO
-#endif
-#ifdef ATA
-	#undef ATA
-#endif
-#ifdef ABS
-	#undef ABS
-#endif
-#ifdef FRA
-	#undef FRA
-#endif
-#ifdef SQR
-	#undef SQR
-#endif
-#ifdef SIG
-	#undef SIG
-#endif
-#ifdef LOG
-	#undef LOG
-#endif
-#ifdef CLP
-	#undef CLP
-#endif
-#ifdef STP
-	#undef STP
-#endif
-#ifdef SMT
-	#undef SMT
-#endif
-#ifdef LRP
-	#undef LRP
-#endif
-#ifdef NUM
-	#undef NUM
-#endif
-#ifdef TXT
-	#undef TXT
-#endif
-#ifdef DEV
-	#undef DEV
-#endif
-#ifdef OUT
-	#undef OUT
-#endif
-#ifdef APP
-	#undef APP
-#endif
-#ifdef CLR
-	#undef CLR
-#endif
-#ifdef POP
-	#undef POP
-#endif
-#ifdef ASC
-	#undef ASC
-#endif
-#ifdef DSC
-	#undef DSC
-#endif
-#ifdef INS
-	#undef INS
-#endif
-#ifdef DEL
-	#undef DEL
-#endif
-#ifdef FLL
-	#undef FLL
-#endif
-#ifdef FRM
-	#undef FRM
-#endif
-#ifdef SIZ
-	#undef SIZ
-#endif
-#ifdef LAS
-	#undef LAS
-#endif
-#ifdef MIN
-	#undef MIN
-#endif
-#ifdef MAX
-	#undef MAX
-#endif
-#ifdef AVG
-	#undef AVG
-#endif
-#ifdef SUM
-	#undef SUM
-#endif
-#ifdef MED
-	#undef MED
-#endif
-#ifdef SBS
-	#undef SBS
-#endif
-#ifdef IDX
-	#undef IDX
-#endif
-#ifdef JMP
-	#undef JMP
-#endif
-#ifdef GTO
-	#undef GTO
-#endif
-#ifdef CND
-	#undef CND
-#endif
-#ifdef FND
-	#undef FND
-#endif
-#ifdef CON
-	#undef CON
-#endif
-#ifdef KEY
-	#undef KEY
-#endif
-#ifdef STR
-	#undef STR
-#endif
-#ifdef RST
-	#undef RST
-#endif
-#ifdef HSH
-	#undef HSH
-#endif
-#ifdef UPP
-	#undef UPP
-#endif
-#ifdef LCC
-	#undef LCC
-#endif
-#ifdef ISN
-	#undef ISN
-#endif
-#ifdef IFF
-	#undef IFF
-#endif
-#ifdef RPL
-	#undef RPL
-#endif
-#pragma endregion
-
 namespace XC_NAMESPACE {
 
 // Version
@@ -2276,10 +2033,10 @@ const int VERSION_PATCH = 0;
 
 	enum CODE_TYPE : uint8_t {
 		// Statements
-		RETURN = 0, // Must add this at the end of each function block
-		VOID = 10, // Must add this after each OP statement, helps validate validity and also makes the bytecode kind of human readable
-		DISCARD = 11, // Discard the return value of this statement
-		OP = 32, // OP [...] VOID
+		CODE_RETURN = 0, // Must add this at the end of each function block
+		CODE_VOID = 10, // Must add this after each CODE_OP statement, helps validate validity and also makes the bytecode kind of human readable
+		CODE_DISCARD = 11, // Discard the return value of this statement
+		CODE_OP = 32, // CODE_OP [...] CODE_VOID
 		
 		// Comments/Info
 		SOURCEFILE = 33,
@@ -2301,8 +2058,8 @@ const int VERSION_PATCH = 0;
 		ARRAY_INDEX = 101,
 		OBJ_KEY = 102,
 		DEVICE_FUNCTION_INDEX = 110,
-		INTEGER = 115,
-		ADDR = 120,
+		CODE_INTEGER = 115,
+		CODE_ADDR = 120,
 		
 		// Objects
 		RAM_OBJECT = 128, // implementation-defined objects
@@ -2312,9 +2069,9 @@ const int VERSION_PATCH = 0;
 	#define ARRAY_INDEX_NONE uint32_t(0xFFFFFF)
 
 	inline static constexpr uint32_t Interpret3CharsAsInt(const char* str) {
-		return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (OP << 24);
+		return uint32_t(str[0]) | (uint32_t(str[1]) << 8) | (uint32_t(str[2]) << 16) | (CODE_OP << 24);
 	}
-	#define DEF_OP(op) inline static constexpr uint32_t op = Interpret3CharsAsInt(#op);
+	#define DEF_OP(name) inline static constexpr uint32_t OP_##name = Interpret3CharsAsInt(#name);
 
 	DEF_OP( SET /* [(ARRAY_INDEX ifindexnone[REF_NUM]) | (OBJ_KEY REF_KEY)] REF_DST [REF_VALUE]orZero */ ) // Assign a value
 	DEF_OP( ADD /* REF_DST REF_A REF_B */ ) // +
@@ -2378,12 +2135,12 @@ const int VERSION_PATCH = 0;
 	DEF_OP( MED /* REF_DST REF_ARR */ ) // array.med
 	DEF_OP( SBS /* REF_DST REF_SRC REF_START REF_LENGTH */ ) // substring(text, start, length)
 	DEF_OP( IDX /* REF_DST ((REF_ARR ARRAY_INDEX ifindexnone[REF_NUM]) | (REF_TXT ((OBJ_KEY REF_KEY) | (ARRAY_INDEX ifindexnone[REF_NUM])))) */ ) // get an indexed value from an array or text, or a StringObject given a key
-	DEF_OP( JMP /* ADDR */ ) // jump to addr while pushing the stack so that we return here after
-	DEF_OP( GTO /* ADDR */ ) // goto addr without pushing the stack
+	DEF_OP( JMP /* CODE_ADDR */ ) // jump to addr while pushing the stack so that we return here after
+	DEF_OP( GTO /* CODE_ADDR */ ) // goto addr without pushing the stack
 	DEF_OP( CND /* ADDR_TRUE ADDR_FALSE REF_BOOL */ ) // conditional goto (gotoAddrIfTrue, gotoAddrIfFalse, boolExpression)
 	DEF_OP( KEY /* REF_DST REF_TXT REF_OFFSET */) // returns the next key in a text object, and moves the offset as well
-	DEF_OP( STR /* ADDR LEN TYPE */) // stores away local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
-	DEF_OP( RST /* ADDR LEN TYPE */) // restores local variables at from ADDR offset to (exclusive) ADDR + LEN of type TYPE
+	DEF_OP( STR /* CODE_ADDR LEN TYPE */) // stores away local variables at from CODE_ADDR offset to (exclusive) CODE_ADDR + LEN of type TYPE
+	DEF_OP( RST /* CODE_ADDR LEN TYPE */) // restores local variables at from CODE_ADDR offset to (exclusive) CODE_ADDR + LEN of type TYPE
 	DEF_OP( HSH /* REF_DST REF_VAL */ ) // hash(text)
 	DEF_OP( UPP /* REF_DST REF_TXT */ ) // upper(text)
 	DEF_OP( LCC /* REF_DST REF_TXT */ ) // lower(text)
@@ -2744,9 +2501,9 @@ const int VERSION_PATCH = 0;
 			return type != other;
 		}
 		operator bool() const {
-			if (type == RETURN) {
+			if (type == CODE_RETURN) {
 				return value != 0;
-			} else if (type == VOID) {
+			} else if (type == CODE_VOID) {
 				return value != 0;
 			}
 			return true;
@@ -2769,86 +2526,86 @@ const int VERSION_PATCH = 0;
 
 	inline static ByteCode GetOperator(std::string op) {
 		if (op == "=") {
-			return SET;
+			return OP_SET;
 		} else if (op == "+" || op == "+=") {
-			return ADD;
+			return OP_ADD;
 		} else if (op == "-" || op == "-=") {
-			return SUB;
+			return OP_SUB;
 		} else if (op == "*" || op == "*=") {
-			return MUL;
+			return OP_MUL;
 		} else if (op == "/" || op == "/=") {
-			return DIV;
+			return OP_DIV;
 		} else if (op == "^" || op == "^=") {
-			return POW;
+			return OP_POW;
 		} else if (op == "%" || op == "%=") {
-			return MOD;
+			return OP_MOD;
 		} else if (op == "&" || op == "&=") {
-			return CCT;
+			return OP_CCT;
 		} else if (op == "++") {
-			return INC;
+			return OP_INC;
 		} else if (op == "--") {
-			return DEC;
+			return OP_DEC;
 		} else if (op == "!!") {
-			return NOT;
+			return OP_NOT;
 		} else {
 			throw CompileError("Invalid Operator", op);
 		}
 	}
 
 	inline static ByteCode GetBuiltInFunctionOp(const std::string& func, CODE_TYPE& returnType) {
-		if (func == "floor") {returnType = RAM_VAR_NUMERIC; return FLR;}
-		if (func == "ceil") {returnType = RAM_VAR_NUMERIC; return CIL;}
-		if (func == "round") {returnType = RAM_VAR_NUMERIC; return RND;}
-		if (func == "sin") {returnType = RAM_VAR_NUMERIC; return SIN;}
-		if (func == "cos") {returnType = RAM_VAR_NUMERIC; return COS;}
-		if (func == "tan") {returnType = RAM_VAR_NUMERIC; return TAN;}
-		if (func == "asin") {returnType = RAM_VAR_NUMERIC; return ASI;}
-		if (func == "acos") {returnType = RAM_VAR_NUMERIC; return ACO;}
-		if (func == "atan") {returnType = RAM_VAR_NUMERIC; return ATA;}
-		if (func == "abs") {returnType = RAM_VAR_NUMERIC; return ABS;}
-		if (func == "fract") {returnType = RAM_VAR_NUMERIC; return FRA;}
-		if (func == "sqrt") {returnType = RAM_VAR_NUMERIC; return SQR;}
-		if (func == "sign") {returnType = RAM_VAR_NUMERIC; return SIG;}
-		if (func == "pow") {returnType = RAM_VAR_NUMERIC; return POW;}
-		if (func == "log") {returnType = RAM_VAR_NUMERIC; return LOG;}
-		if (func == "clamp") {returnType = RAM_VAR_NUMERIC; return CLP;}
-		if (func == "step") {returnType = RAM_VAR_NUMERIC; return STP;}
-		if (func == "smoothstep") {returnType = RAM_VAR_NUMERIC; return SMT;}
-		if (func == "lerp") {returnType = RAM_VAR_NUMERIC; return LRP;}
-		if (func == "size") {returnType = RAM_VAR_NUMERIC; return SIZ;}
-		if (func == "last") {returnType = VOID/*NUMERIC|TEXT*/; return LAS;}
-		if (func == "find") {returnType = RAM_VAR_NUMERIC; return FND;}
-		if (func == "contains") {returnType = RAM_VAR_NUMERIC; return CON;}
-		if (func == "mod") {returnType = RAM_VAR_NUMERIC; return MOD;}
-		if (func == "min") {returnType = RAM_VAR_NUMERIC; return MIN;}
-		if (func == "max") {returnType = RAM_VAR_NUMERIC; return MAX;}
-		if (func == "avg") {returnType = RAM_VAR_NUMERIC; return AVG;}
-		if (func == "med") {returnType = RAM_VAR_NUMERIC; return MED;}
-		if (func == "sum") {returnType = RAM_VAR_NUMERIC; return SUM;}
-		if (func == "add") {returnType = RAM_VAR_NUMERIC; return ADD;}
-		if (func == "sub") {returnType = RAM_VAR_NUMERIC; return SUB;}
-		if (func == "mul") {returnType = RAM_VAR_NUMERIC; return MUL;}
-		if (func == "div") {returnType = RAM_VAR_NUMERIC; return DIV;}
-		if (func == "clear") {returnType = VOID; return CLR;}
-		if (func == "append") {returnType = VOID; return APP;}
-		if (func == "pop") {returnType = VOID; return POP;}
-		if (func == "insert") {returnType = VOID; return INS;}
-		if (func == "erase") {returnType = VOID; return DEL;}
-		if (func == "fill") {returnType = VOID; return FLL;}
-		if (func == "from") {returnType = VOID; return FRM;}
-		if (func == "substring") {returnType = RAM_VAR_TEXT; return SBS;}
-		if (func == "text") {returnType = RAM_VAR_TEXT; return TXT;}
-		if (func == "sort") {returnType = VOID; return ASC;}
-		if (func == "sortd") {returnType = VOID; return DSC;}
-		if (func == "system.output") {returnType = VOID; return OUT;}
-		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return HSH;}
-		if (func == "upper") {returnType = RAM_VAR_TEXT; return UPP;}
-		if (func == "lower") {returnType = RAM_VAR_TEXT; return LCC;}
-		if (func == "isnumeric") {returnType = RAM_VAR_NUMERIC; return ISN;}
-		if (func == "if") {returnType = VOID /*NUMERIC|TEXT*/; return IFF;}
-		if (func == "replace") {returnType = RAM_VAR_TEXT; return RPL;}
-		returnType = VOID;
-		return DEV;
+		if (func == "floor") {returnType = RAM_VAR_NUMERIC; return OP_FLR;}
+		if (func == "ceil") {returnType = RAM_VAR_NUMERIC; return OP_CIL;}
+		if (func == "round") {returnType = RAM_VAR_NUMERIC; return OP_RND;}
+		if (func == "sin") {returnType = RAM_VAR_NUMERIC; return OP_SIN;}
+		if (func == "cos") {returnType = RAM_VAR_NUMERIC; return OP_COS;}
+		if (func == "tan") {returnType = RAM_VAR_NUMERIC; return OP_TAN;}
+		if (func == "asin") {returnType = RAM_VAR_NUMERIC; return OP_ASI;}
+		if (func == "acos") {returnType = RAM_VAR_NUMERIC; return OP_ACO;}
+		if (func == "atan") {returnType = RAM_VAR_NUMERIC; return OP_ATA;}
+		if (func == "abs") {returnType = RAM_VAR_NUMERIC; return OP_ABS;}
+		if (func == "fract") {returnType = RAM_VAR_NUMERIC; return OP_FRA;}
+		if (func == "sqrt") {returnType = RAM_VAR_NUMERIC; return OP_SQR;}
+		if (func == "sign") {returnType = RAM_VAR_NUMERIC; return OP_SIG;}
+		if (func == "pow") {returnType = RAM_VAR_NUMERIC; return OP_POW;}
+		if (func == "log") {returnType = RAM_VAR_NUMERIC; return OP_LOG;}
+		if (func == "clamp") {returnType = RAM_VAR_NUMERIC; return OP_CLP;}
+		if (func == "step") {returnType = RAM_VAR_NUMERIC; return OP_STP;}
+		if (func == "smoothstep") {returnType = RAM_VAR_NUMERIC; return OP_SMT;}
+		if (func == "lerp") {returnType = RAM_VAR_NUMERIC; return OP_LRP;}
+		if (func == "size") {returnType = RAM_VAR_NUMERIC; return OP_SIZ;}
+		if (func == "last") {returnType = CODE_VOID/*NUMERIC|TEXT*/; return OP_LAS;}
+		if (func == "find") {returnType = RAM_VAR_NUMERIC; return OP_FND;}
+		if (func == "contains") {returnType = RAM_VAR_NUMERIC; return OP_CON;}
+		if (func == "mod") {returnType = RAM_VAR_NUMERIC; return OP_MOD;}
+		if (func == "min") {returnType = RAM_VAR_NUMERIC; return OP_MIN;}
+		if (func == "max") {returnType = RAM_VAR_NUMERIC; return OP_MAX;}
+		if (func == "avg") {returnType = RAM_VAR_NUMERIC; return OP_AVG;}
+		if (func == "med") {returnType = RAM_VAR_NUMERIC; return OP_MED;}
+		if (func == "sum") {returnType = RAM_VAR_NUMERIC; return OP_SUM;}
+		if (func == "add") {returnType = RAM_VAR_NUMERIC; return OP_ADD;}
+		if (func == "sub") {returnType = RAM_VAR_NUMERIC; return OP_SUB;}
+		if (func == "mul") {returnType = RAM_VAR_NUMERIC; return OP_MUL;}
+		if (func == "div") {returnType = RAM_VAR_NUMERIC; return OP_DIV;}
+		if (func == "clear") {returnType = CODE_VOID; return OP_CLR;}
+		if (func == "append") {returnType = CODE_VOID; return OP_APP;}
+		if (func == "pop") {returnType = CODE_VOID; return OP_POP;}
+		if (func == "insert") {returnType = CODE_VOID; return OP_INS;}
+		if (func == "erase") {returnType = CODE_VOID; return OP_DEL;}
+		if (func == "fill") {returnType = CODE_VOID; return OP_FLL;}
+		if (func == "from") {returnType = CODE_VOID; return OP_FRM;}
+		if (func == "substring") {returnType = RAM_VAR_TEXT; return OP_SBS;}
+		if (func == "text") {returnType = RAM_VAR_TEXT; return OP_TXT;}
+		if (func == "sort") {returnType = CODE_VOID; return OP_ASC;}
+		if (func == "sortd") {returnType = CODE_VOID; return OP_DSC;}
+		if (func == "system.output") {returnType = CODE_VOID; return OP_OUT;}
+		if (func == "hash") {returnType = RAM_VAR_NUMERIC; return OP_HSH;}
+		if (func == "upper") {returnType = RAM_VAR_TEXT; return OP_UPP;}
+		if (func == "lower") {returnType = RAM_VAR_TEXT; return OP_LCC;}
+		if (func == "isnumeric") {returnType = RAM_VAR_NUMERIC; return OP_ISN;}
+		if (func == "if") {returnType = CODE_VOID /*NUMERIC|TEXT*/; return OP_IFF;}
+		if (func == "replace") {returnType = RAM_VAR_TEXT; return OP_RPL;}
+		returnType = CODE_VOID;
+		return OP_DEV;
 	}
 
 	// Is non-const non-array assignable var
@@ -2915,7 +2672,7 @@ const int VERSION_PATCH = 0;
 	struct EntryPoint {
 		std::string name;
 		uint32_t addr = 0;
-		ByteCode ref = VOID;
+		ByteCode ref = CODE_VOID;
 		std::vector<uint32_t> args {};
 	};
 
@@ -3124,7 +2881,7 @@ const int VERSION_PATCH = 0;
 						index = ram_textArrays++;
 						break;
 					
-					case VOID:
+					case CODE_VOID:
 						assert(!"Invalid var type VOID");
 						return ByteCode{};
 						
@@ -3208,7 +2965,7 @@ const int VERSION_PATCH = 0;
 				return std::to_string(code.value);
 			};
 			auto getFunctionName = [&](ByteCode code) -> std::string {
-				if (code.type == ADDR) {
+				if (code.type == CODE_ADDR) {
 					for (const auto& [func,address] : functionRefs) {
 						if (code.value == address) {
 							return func;
@@ -3226,17 +2983,17 @@ const int VERSION_PATCH = 0;
 				return address;
 			};
 			auto jump = [&](uint32_t jumpToAddress) -> uint32_t /*AddrOfAddrToJumpTo*/ {
-				rom_program.emplace_back(JMP);
+				rom_program.emplace_back(OP_JMP);
 				uint32_t address = addr();
-				rom_program.emplace_back(ADDR, jumpToAddress);
-				rom_program.emplace_back(VOID);
+				rom_program.emplace_back(CODE_ADDR, jumpToAddress);
+				rom_program.emplace_back(CODE_VOID);
 				return address;
 			};
 			auto gotoAddr = [&](uint32_t gotoToAddress) -> uint32_t /*AddrOfAddrToGoTo*/ {
-				rom_program.emplace_back(GTO);
+				rom_program.emplace_back(OP_GTO);
 				uint32_t address = addr();
-				rom_program.emplace_back(ADDR, gotoToAddress);
-				rom_program.emplace_back(VOID);
+				rom_program.emplace_back(CODE_ADDR, gotoToAddress);
+				rom_program.emplace_back(CODE_VOID);
 				return address;
 			};
 			
@@ -3274,14 +3031,14 @@ const int VERSION_PATCH = 0;
 			};
 			auto closeCurrentFunction = [&](){
 				if (currentFunctionName != "") {
-					write(RETURN);
+					write(CODE_RETURN);
 					currentFunctionName = "";
 				}
 				currentFunctionAddr = 0;
 				currentFunctionRecursive = false;
 				currentStackId = 0;
 			};
-			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns VOID
+			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns CODE_VOID
 			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false, bool recursive = false) -> ByteCode {
 				std::string funcName = func;
 				if (func == Word::Funcname) {
@@ -3308,16 +3065,16 @@ const int VERSION_PATCH = 0;
 							MatrixInfo paramMatrix = getMatrixInfoBySlot(param);
 							if (argMatrix && paramMatrix) {
 								validate(argMatrix.count() == paramMatrix.count());
-								write(MAS);
+								write(OP_MAS);
 								write(param);
 								write(arg);
-								write({INTEGER, argMatrix.count()});
-								write(VOID);
+								write({CODE_INTEGER, argMatrix.count()});
+								write(CODE_VOID);
 							} else {
-								write(SET);
+								write(OP_SET);
 								write(param);
 								write(arg);
-								write(VOID);
+								write(CODE_VOID);
 							}
 						} else break;
 					}
@@ -3328,24 +3085,24 @@ const int VERSION_PATCH = 0;
 					// Get the Return value
 					if (getReturn) {
 						ByteCode ret = getReturnVar(funcName);
-						if (ret.type != VOID) {
+						if (ret.type != CODE_VOID) {
 							// Check if return is a matrix
 							MatrixInfo retMatrix = getMatrixInfoBySlot(ret);
 							if (retMatrix) {
 								ByteCode tmp = declareTmpMatrix(retMatrix.rows, retMatrix.cols);
-								write(MAS);
+								write(OP_MAS);
 								write(tmp);
 								write(ret);
-								write({INTEGER, retMatrix.count()});
-								write(VOID);
+								write({CODE_INTEGER, retMatrix.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
 								return tmp;
 							} else {
 								ByteCode tmp = declareVar("", GetRamVarType(ret.type));
-								write(SET);
+								write(OP_SET);
 								write(tmp);
 								write(ret);
-								write(VOID);
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -3362,20 +3119,20 @@ const int VERSION_PATCH = 0;
 							MatrixInfo retMatrix = getMatrixInfoBySlot(getReturnVar(funcName));
 							MatrixInfo arg0Matrix = getMatrixInfoBySlot(args[0]);
 							if (retMatrix && arg0Matrix) {
-								write(MAS);
+								write(OP_MAS);
 								write(args[0]);
 								write(getReturnVar(funcName));
-								write({INTEGER, retMatrix.count()});
-								write(VOID);
+								write({CODE_INTEGER, retMatrix.count()});
+								write(CODE_VOID);
 							} else {
-								write(SET);
+								write(OP_SET);
 								write(args[0]);
 								write(getReturnVar(funcName));
-								write(VOID);
+								write(CODE_VOID);
 							}
 						}
 					}
-					return VOID;
+					return CODE_VOID;
 				} else if (func == Word::Name) {
 
 					// If non-prefixed identifier without arguments, check if actually a global constant and convert to a ROM Constant ByteCode.
@@ -3393,21 +3150,21 @@ const int VERSION_PATCH = 0;
 
 					if (getReturn && isTrailingFunction && args.size() == 1 && (args[0].type == ROM_CONST_TEXT || args[0].type == RAM_VAR_TEXT || args[0].type == STORAGE_VAR_TEXT)) {
 						ByteCode ret = declareTmpText();
-						write(IDX);
+						write(OP_IDX);
 						write(ret);
 						write(args[0]);
 						write(OBJ_KEY);
 						write(declareVar("", ROM_CONST_TEXT, func));
-						write(VOID);
+						write(CODE_VOID);
 						return ret;
 					}
 					// Matrix normal functions: length, dot, cross, determinant
 					auto compileMatrixCopyAndOp = [&](ByteCode src, MatrixInfo mi, uint32_t opCode, bool useRows = false) -> ByteCode {
 						ByteCode tmp = declareTmpMatrix(mi.rows, mi.cols);
-						write(MAS);
-						write(tmp); write(src); write({INTEGER, mi.count()}); write(VOID);
+						write(OP_MAS);
+						write(tmp); write(src); write({CODE_INTEGER, mi.count()}); write(CODE_VOID);
 						write(opCode);
-						write(tmp); write({INTEGER, useRows ? mi.rows : mi.count()}); write(VOID);
+						write(tmp); write({CODE_INTEGER, useRows ? mi.rows : mi.count()}); write(CODE_VOID);
 						lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
 						return tmp;
 					};
@@ -3416,11 +3173,11 @@ const int VERSION_PATCH = 0;
 							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
 							if (mi) {
 								ByteCode tmp = declareTmpNumeric();
-								write(MLN);
+								write(OP_MLN);
 								write(tmp);
 								write(args[0]);
-								write({INTEGER, mi.count()});
-								write(VOID);
+								write({CODE_INTEGER, mi.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -3430,12 +3187,12 @@ const int VERSION_PATCH = 0;
 							if (mi1 && mi2) {
 								validate(mi1.count() == mi2.count());
 								ByteCode tmp = declareTmpNumeric();
-								write(MDT);
+								write(OP_MDT);
 								write(tmp);
 								write(args[0]);
 								write(args[1]);
-								write({INTEGER, mi1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mi1.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -3445,11 +3202,11 @@ const int VERSION_PATCH = 0;
 							if (mi1 && mi2) {
 								validate(mi1.count() == 3 && mi2.count() == 3);
 								ByteCode tmp = declareTmpMatrix(3, 1);
-								write(MCR);
+								write(OP_MCR);
 								write(tmp);
 								write(args[0]);
 								write(args[1]);
-								write(VOID);
+								write(CODE_VOID);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
 								return tmp;
 							}
@@ -3457,28 +3214,28 @@ const int VERSION_PATCH = 0;
 							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
 							if (mi && mi.isSquare()) {
 								ByteCode tmp = declareTmpNumeric();
-								write(MDE);
+								write(OP_MDE);
 								write(tmp);
 								write(args[0]);
-								write({INTEGER, mi.rows});
-								write(VOID);
+								write({CODE_INTEGER, mi.rows});
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
 						} else if (funcName == "normalize" && args.size() == 1) {
 							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
 							if (mi) {
-								return compileMatrixCopyAndOp(args[0], mi, MNM);
+								return compileMatrixCopyAndOp(args[0], mi, OP_MNM);
 							}
 						} else if (funcName == "transpose" && args.size() == 1) {
 							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
 							if (mi && mi.isSquare()) {
-								return compileMatrixCopyAndOp(args[0], mi, MTR, true);
+								return compileMatrixCopyAndOp(args[0], mi, OP_MTR, true);
 							}
 						} else if (funcName == "inverse" && args.size() == 1) {
 							MatrixInfo mi = getMatrixInfoBySlot(args[0]);
 							if (mi && mi.isSquare()) {
-								return compileMatrixCopyAndOp(args[0], mi, MIV, true);
+								return compileMatrixCopyAndOp(args[0], mi, OP_MIV, true);
 							}
 						} else if (funcName == "distance" && args.size() == 2) {
 							MatrixInfo mi1 = getMatrixInfoBySlot(args[0]);
@@ -3486,10 +3243,10 @@ const int VERSION_PATCH = 0;
 							if (mi1 && mi2) {
 								validate(mi1.count() == mi2.count());
 								ByteCode tmp = declareTmpNumeric();
-								write(MDI);
+								write(OP_MDI);
 								write(tmp); write(args[0]); write(args[1]);
-								write({INTEGER, mi1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mi1.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -3499,10 +3256,10 @@ const int VERSION_PATCH = 0;
 							if (mi1 && mi2) {
 								validate(mi1.count() == mi2.count());
 								ByteCode tmp = declareTmpNumeric();
-								write(MAN);
+								write(OP_MAN);
 								write(tmp); write(args[0]); write(args[1]);
-								write({INTEGER, mi1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mi1.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -3512,31 +3269,31 @@ const int VERSION_PATCH = 0;
 							if (mi1 && mi2) {
 								validate(mi1.count() == mi2.count());
 								ByteCode tmp = declareTmpMatrix(mi1.rows, mi1.cols);
-								write(MLP);
+								write(OP_MLP);
 								write(tmp); write(args[0]); write(args[1]); write(args[2]);
-								write({INTEGER, mi1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mi1.count()});
+								write(CODE_VOID);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
 								return tmp;
 							}
 						}
 					}
 
-					CODE_TYPE retType = VOID;
-					ByteCode ret = VOID;
-					ByteCode f = VOID;
+					CODE_TYPE retType = CODE_VOID;
+					ByteCode ret = CODE_VOID;
+					ByteCode f = CODE_VOID;
 					if (isTrailingFunction && args.size() > 0 && args[0].type >= RAM_OBJECT) {
 						std::string objType = Device::objectNamesById[args[0].type & (RAM_OBJECT-1)];
 						if (Device::deviceFunctionsByName.contains(objType+"::"+funcName)) {
 							funcName = objType+"::"+funcName;
-							f = DEV;
+							f = OP_DEV;
 						}
 					}
-					if (f.type == VOID) {
+					if (f.type == CODE_VOID) {
 						f = GetBuiltInFunctionOp(funcName, retType);
 					}
 					write(f);
-					if (f == DEV) {
+					if (f == OP_DEV) {
 						if (!Device::deviceFunctionsByName.contains(funcName)) {
 							throw CompileError("Function", func, "does not exist");
 						}
@@ -3554,9 +3311,9 @@ const int VERSION_PATCH = 0;
 								retType = CODE_TYPE(RAM_OBJECT | Device::objectTypesByName.at(function.returnType).id);
 							}
 						} else if (function.returnType != "") {
-							write(DISCARD); // We may discard the return value of a device function
+							write(CODE_DISCARD); // We may discard the return value of a device function
 						}
-					} else if (f == LAS) {
+					} else if (f == OP_LAS) {
 						if (getReturn) {
 							if (args.size() == 0) {
 								throw CompileError("Invalid arguments");
@@ -3578,7 +3335,7 @@ const int VERSION_PATCH = 0;
 						} else {
 							throw CompileError("Cannot call", funcName, "here");
 						}
-					} else if (f == IFF) {
+					} else if (f == OP_IFF) {
 						if (getReturn) {
 							if (args.size() != 3) {
 								throw CompileError("Invalid arguments");
@@ -3602,18 +3359,18 @@ const int VERSION_PATCH = 0;
 					}
 					
 					if (getReturn) {
-						if (retType != VOID) {
+						if (retType != CODE_VOID) {
 							ret = declareVar("", retType);
 							write(ret);
 						} else {
 							throw CompileError("A function call here should return a value, but", funcName, "does not");
 						}
 					} else if (isTrailingFunction) {
-						if (retType != VOID) {
+						if (retType != CODE_VOID) {
 							validate(args.size() > 0);
 							write(args[0]);
 						}
-					} else if (retType != VOID) {
+					} else if (retType != CODE_VOID) {
 						throw CompileError("A function call here should NOT return a value, but", funcName, "does");
 					}
 					
@@ -3621,7 +3378,7 @@ const int VERSION_PATCH = 0;
 						write(arg);
 					}
 					
-					write(VOID);
+					write(CODE_VOID);
 					return ret;
 				} else {
 					throw CompileError("Invalid function name");
@@ -3670,9 +3427,9 @@ const int VERSION_PATCH = 0;
 					}
 				};
 
-				writeRecurse(STR);
+				writeRecurse(OP_STR);
 				auto ref = compileFunctionCall(Word(Word::Type::Funcname, currentFunctionName), args, getReturn, false, true);
-				writeRecurse(RST);
+				writeRecurse(OP_RST);
 				return ref;
 			};
 			// Stack helpers
@@ -3690,7 +3447,7 @@ const int VERSION_PATCH = 0;
 				assert(stack.size() > 0);
 				for (auto& [name, r] : stack.back().pointers) {
 					assert(r < rom_program.size());
-					if (rom_program[r].type == ADDR && rom_program[r].value == 0) {
+					if (rom_program[r].type == CODE_ADDR && rom_program[r].value == 0) {
 						rom_program[r].value = addr();
 					}
 				}
@@ -3936,7 +3693,7 @@ const int VERSION_PATCH = 0;
 						validate(opIndex != endIndex);
 					}break;
 					case Word::Void:
-						ref1 = VOID;
+						ref1 = CODE_VOID;
 						break;
 					default: validate(false);
 				}
@@ -3950,17 +3707,17 @@ const int VERSION_PATCH = 0;
 						Word t = words[opIndex+1];
 						if (t == "number") {
 							ByteCode tmp = declareTmpNumeric();
-							write(NUM);
+							write(OP_NUM);
 							write(tmp);
 							write(ref1);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (t == "text") {
 							ByteCode tmp = declareTmpText();
-							write(TXT);
+							write(OP_TXT);
 							write(tmp);
 							write(ref1);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else {
 							throw CompileError("Invalid cast", t);
@@ -4009,10 +3766,10 @@ const int VERSION_PATCH = 0;
 									MatrixInfo tmpInfo = getMatrixInfoBySlot(tmp);
 									for (uint8_t i = 0; i < swizLen; i++) {
 										int off = MatrixComponentOffset(std::string(1, operand.word[i]));
-										write(SET);
+										write(OP_SET);
 										write({RAM_VAR_NUMERIC, tmpInfo.baseIndex + uint32_t(i)});
 										write({RAM_VAR_NUMERIC, minfo.baseIndex + uint32_t(off)});
-										write(VOID);
+										write(CODE_VOID);
 									}
 									ref1 = tmp;
 									lastExprMatrixInfo = tmpInfo;
@@ -4028,11 +3785,11 @@ const int VERSION_PATCH = 0;
 							if (operand == Word::Numeric) {
 								validate(IsArray(ref1) || IsText(ref1));
 								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-								write(IDX);
+								write(OP_IDX);
 								write(tmp);
 								write(ref1);
 								write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
-								write(VOID);
+								write(CODE_VOID);
 								ref1 = tmp;
 								lastExprMatrixInfo = {};
 								segmentHandled = true;
@@ -4040,7 +3797,7 @@ const int VERSION_PATCH = 0;
 								validate(IsArray(ref1) || IsText(ref1));
 								ByteCode ref2 = getVar(operand);
 								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-								write(IDX);
+								write(OP_IDX);
 								write(tmp);
 								write(ref1);
 								if (IsNumeric(ref2)) {
@@ -4051,7 +3808,7 @@ const int VERSION_PATCH = 0;
 									write(OBJ_KEY);
 								}
 								write(ref2);
-								write(VOID);
+								write(CODE_VOID);
 								ref1 = tmp;
 								lastExprMatrixInfo = {};
 								segmentHandled = true;
@@ -4062,23 +3819,23 @@ const int VERSION_PATCH = 0;
 								if (IsNumeric(ref2)) {
 									validate(IsArray(ref1) || IsText(ref1));
 									ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-									write(IDX);
+									write(OP_IDX);
 									write(tmp);
 									write(ref1);
 									write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 									write(ref2);
-									write(VOID);
+									write(CODE_VOID);
 									ref1 = tmp;
 								} else {
 									validate(IsText(ref2));
 									validate(IsText(ref1));
 									ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-									write(IDX);
+									write(OP_IDX);
 									write(tmp);
 									write(ref1);
 									write(OBJ_KEY);
 									write(ref2);
-									write(VOID);
+									write(CODE_VOID);
 									ref1 = tmp;
 								}
 								lastExprMatrixInfo = {};
@@ -4137,7 +3894,7 @@ const int VERSION_PATCH = 0;
 						} else if (operand == Word::Numeric || operand == Word::Varname) {
 							validate(IsArray(ref1) || IsText(ref1));
 							ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-							write(IDX);
+							write(OP_IDX);
 							write(tmp);
 							write(ref1);
 							if (operand == Word::Varname) {
@@ -4153,7 +3910,7 @@ const int VERSION_PATCH = 0;
 							} else {
 								write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 							}
-							write(VOID);
+							write(CODE_VOID);
 							ref1 = tmp;
 							opIndex += 2;
 							if (opIndex > endIndex) {
@@ -4167,23 +3924,23 @@ const int VERSION_PATCH = 0;
 							if (IsNumeric(ref2)) {
 								validate(IsArray(ref1) || IsText(ref1));
 								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-								write(IDX);
+								write(OP_IDX);
 								write(tmp);
 								write(ref1);
 								write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 								write(ref2);
-								write(VOID);
+								write(CODE_VOID);
 								ref1 = tmp;
 							} else {
 								validate(IsText(ref2));
 								validate(IsText(ref1));
 								ByteCode tmp = declareVar("", GetRamVarType(ref1.type));
-								write(IDX);
+								write(OP_IDX);
 								write(tmp);
 								write(ref1);
 								write(OBJ_KEY);
 								write(ref2);
-								write(VOID);
+								write(CODE_VOID);
 								ref1 = tmp;
 							}
 							opIndex = closing + 1;
@@ -4199,29 +3956,29 @@ const int VERSION_PATCH = 0;
 						
 						// Compile operation
 						if (op == Word::NotOperator) {
-							validate(ref1 == VOID);
-							write(NOT);
+							validate(ref1 == CODE_VOID);
+							write(OP_NOT);
 							ByteCode tmp = declareTmpNumeric();
 							write(tmp);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::ConcatOperator) {
 							ByteCode tmp = declareTmpText();
-							write(CCT);
+							write(OP_CCT);
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::PowerOperator) {
 							validate(op == "^");
-							write(POW);
+							write(OP_POW);
 							ByteCode tmp = declareTmpNumeric();
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::MulOperatorGroup) {
 							MatrixInfo mat1 = getMatrixInfoBySlot(ref1);
@@ -4233,10 +3990,10 @@ const int VERSION_PATCH = 0;
 										// Same-dim vectors: element-wise
 										ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
 										lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
-										write(MEW);
+										write(OP_MEW);
 										write(tmp); write(ref1); write(ref2);
-										write({INTEGER, mat1.count()});
-										write(VOID);
+										write({CODE_INTEGER, mat1.count()});
+										write(CODE_VOID);
 										return tmp;
 									} else {
 										// Matmul
@@ -4245,13 +4002,13 @@ const int VERSION_PATCH = 0;
 										uint8_t aCols = mat1.isVector() ? 1 : mat1.cols;
 										ByteCode tmp = declareTmpMatrix(outRows, outCols);
 										lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
-										write(MMM);
+										write(OP_MMM);
 										write(tmp); write(ref1);
-										write({INTEGER, outRows});
-										write({INTEGER, aCols});
+										write({CODE_INTEGER, outRows});
+										write({CODE_INTEGER, aCols});
 										write(ref2);
-										write({INTEGER, outCols});
-										write(VOID);
+										write({CODE_INTEGER, outCols});
+										write(CODE_VOID);
 										return tmp;
 									}
 								} else {
@@ -4261,36 +4018,36 @@ const int VERSION_PATCH = 0;
 								// Matrix * scalar
 								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
-								write(MMS);
+								write(OP_MMS);
 								write(tmp); write(ref1); write(ref2);
-								write({INTEGER, mat1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mat1.count()});
+								write(CODE_VOID);
 								return tmp;
 							} else if (op == "*" && !mat1 && mat2) {
 								// Scalar * matrix
 								ByteCode tmp = declareTmpMatrix(mat2.rows, mat2.cols);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
-								write(MMS);
+								write(OP_MMS);
 								write(tmp); write(ref2); write(ref1);
-								write({INTEGER, mat2.count()});
-								write(VOID);
+								write({CODE_INTEGER, mat2.count()});
+								write(CODE_VOID);
 								return tmp;
 							} else if (op == "/" && mat1 && !mat2) {
 								// Matrix / scalar
 								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
-								write(MDS);
+								write(OP_MDS);
 								write(tmp); write(ref1); write(ref2);
-								write({INTEGER, mat1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mat1.count()});
+								write(CODE_VOID);
 								return tmp;
 							} else {
 								if (op == "*") {
-									write(MUL);
+									write(OP_MUL);
 								} else if (op == "/") {
-									write(DIV);
+									write(OP_DIV);
 								} else if (op == "%") {
-									write(MOD);
+									write(OP_MOD);
 								} else {
 									validate(false);
 								}
@@ -4298,7 +4055,7 @@ const int VERSION_PATCH = 0;
 								write(tmp);
 								write(ref1);
 								write(ref2);
-								write(VOID);
+								write(CODE_VOID);
 								lastExprMatrixInfo = {};
 								return tmp;
 							}
@@ -4309,21 +4066,21 @@ const int VERSION_PATCH = 0;
 								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);
 								if (op == "+") {
-									write(MAD);
+									write(OP_MAD);
 								} else {
-									write(MSB);
+									write(OP_MSB);
 								}
 								write(tmp); write(ref1); write(ref2);
-								write({INTEGER, mat1.count()});
-								write(VOID);
+								write({CODE_INTEGER, mat1.count()});
+								write(CODE_VOID);
 								return tmp;
 							} else if (mat1 || mat2) {
 								throw CompileError("Cannot add/subtract matrices of different dimensions");
 							}
 							if (op == "+") {
-								write(ADD);
+								write(OP_ADD);
 							} else if (op == "-") {
-								write(SUB);
+								write(OP_SUB);
 							} else {
 								validate(false);
 							}
@@ -4331,18 +4088,18 @@ const int VERSION_PATCH = 0;
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							lastExprMatrixInfo = {};
 							return tmp;
 						} else if (op == Word::CompareOperatorGroup) {
 							if (op == "<") {
-								write(LST);
+								write(OP_LST);
 							} else if (op == ">") {
-								write(GRT);
+								write(OP_GRT);
 							} else if (op == "<=") {
-								write(LTE);
+								write(OP_LTE);
 							} else if (op == ">=") {
-								write(GTE);
+								write(OP_GTE);
 							} else {
 								validate(false);
 							}
@@ -4350,13 +4107,13 @@ const int VERSION_PATCH = 0;
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::EqualityOperatorGroup) {
 							if (op == "==") {
-								write(EQQ);
+								write(OP_EQQ);
 							} else if (op == "!=" || op == "<>") {
-								write(NEQ);
+								write(OP_NEQ);
 							} else {
 								validate(false);
 							}
@@ -4364,31 +4121,31 @@ const int VERSION_PATCH = 0;
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::AndOperator) {
 							ByteCode tmp = declareTmpNumeric();
-							write(AND);
+							write(OP_AND);
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::OrOperator) {
 							ByteCode tmp = declareTmpNumeric();
-							write(ORR);
+							write(OP_ORR);
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::XorOperator) {
 							ByteCode tmp = declareTmpNumeric();
-							write(XOR);
+							write(OP_XOR);
 							write(tmp);
 							write(ref1);
 							write(ref2);
-							write(VOID);
+							write(CODE_VOID);
 							return tmp;
 						} else {
 							validate(false);
@@ -4399,9 +4156,9 @@ const int VERSION_PATCH = 0;
 				return ref1;
 			};
 			
-			// Add a Return+VOID at addr 0
-			write(RETURN);
-			write(VOID);
+			// Add a Return+CODE_VOID at addr 0
+			write(CODE_RETURN);
+			write(CODE_VOID);
 			
 			// Start parsing
 			try {
@@ -4502,19 +4259,19 @@ const int VERSION_PATCH = 0;
 											ByteCode var = declareVar(name, RAM_VAR_NUMERIC);
 											if (double(value) != 0.0) {
 												ByteCode con = declareVar(name+".init", ROM_CONST_NUMERIC, value);
-												rom_vars_init.emplace_back(SET);
+												rom_vars_init.emplace_back(OP_SET);
 												rom_vars_init.emplace_back(var);
 												rom_vars_init.emplace_back(con);
-												rom_vars_init.emplace_back(VOID);
+												rom_vars_init.emplace_back(CODE_VOID);
 											}
 										} else if (value == Word::Text) {
 											ByteCode var = declareVar(name, RAM_VAR_TEXT);
 											if (std::string(value) != "") {
 												ByteCode con = declareVar(name+".init", ROM_CONST_TEXT, value);
-												rom_vars_init.emplace_back(SET);
+												rom_vars_init.emplace_back(OP_SET);
 												rom_vars_init.emplace_back(var);
 												rom_vars_init.emplace_back(con);
-												rom_vars_init.emplace_back(VOID);
+												rom_vars_init.emplace_back(CODE_VOID);
 											}
 										} else if (value == Word::Varname) {
 											
@@ -4535,10 +4292,10 @@ const int VERSION_PATCH = 0;
 												default: throw CompileError("Invalid assignment");
 											}
 											
-											rom_vars_init.emplace_back(SET);
+											rom_vars_init.emplace_back(OP_SET);
 											rom_vars_init.emplace_back(var);
 											rom_vars_init.emplace_back(ref);
-											rom_vars_init.emplace_back(VOID);
+											rom_vars_init.emplace_back(CODE_VOID);
 											
 										} else if (value == Word::ExpressionBegin) {
 											
@@ -4559,10 +4316,10 @@ const int VERSION_PATCH = 0;
 												validate(false);
 											}
 											
-											rom_vars_init.emplace_back(SET);
+											rom_vars_init.emplace_back(OP_SET);
 											rom_vars_init.emplace_back(var);
 											rom_vars_init.emplace_back(con);
-											rom_vars_init.emplace_back(VOID);
+											rom_vars_init.emplace_back(CODE_VOID);
 											
 										} else if (value == Word::Name) {
 											
@@ -4576,10 +4333,10 @@ const int VERSION_PATCH = 0;
 														ByteCode var = declareVar(name, RAM_VAR_NUMERIC);
 														name = "";
 														if (constantValue != 0.0) {
-															rom_vars_init.emplace_back(SET);
+															rom_vars_init.emplace_back(OP_SET);
 															rom_vars_init.emplace_back(var);
 															rom_vars_init.emplace_back(constantRef);
-															rom_vars_init.emplace_back(VOID);
+															rom_vars_init.emplace_back(CODE_VOID);
 														}
 														return var;
 													}
@@ -4592,10 +4349,10 @@ const int VERSION_PATCH = 0;
 														ByteCode var = declareVar(name, RAM_VAR_TEXT);
 														name = "";
 														if (!constantValue.empty()) {
-															rom_vars_init.emplace_back(SET);
+															rom_vars_init.emplace_back(OP_SET);
 															rom_vars_init.emplace_back(var);
 															rom_vars_init.emplace_back(constantRef);
-															rom_vars_init.emplace_back(VOID);
+															rom_vars_init.emplace_back(CODE_VOID);
 														}
 														return var;
 													}
@@ -4652,13 +4409,13 @@ const int VERSION_PATCH = 0;
 													}
 												}
 												
-												rom_vars_init.emplace_back(DEV);
+												rom_vars_init.emplace_back(OP_DEV);
 												rom_vars_init.emplace_back(DEVICE_FUNCTION_INDEX, function.id);
 												rom_vars_init.emplace_back(var);
 												for (auto arg : args) {
 													rom_vars_init.emplace_back(arg);
 												}
-												rom_vars_init.emplace_back(VOID);
+												rom_vars_init.emplace_back(CODE_VOID);
 											
 												return var;
 											};
@@ -4946,14 +4703,14 @@ const int VERSION_PATCH = 0;
 											ByteCode op = GetOperator(operation);
 											ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
 											MatrixInfo srcMatrix = lastExprMatrixInfo;
-											if (op == SET) {
+											if (op == OP_SET) {
 												if (srcMatrix) {
 													validate(srcMatrix.count() == dstMatrix.count());
-													write(MAS);
+													write(OP_MAS);
 													write(dst);
 													write(ref);
-													write({INTEGER, dstMatrix.count()});
-													write(VOID);
+													write({CODE_INTEGER, dstMatrix.count()});
+													write(CODE_VOID);
 												} else {
 													// Scalar to all elements? No - error
 													throw CompileError("Cannot assign a scalar to a matrix without accessor");
@@ -4961,31 +4718,31 @@ const int VERSION_PATCH = 0;
 											} else if (srcMatrix) {
 												validate(srcMatrix.count() == dstMatrix.count());
 												// Compound assignment: += -= *=
-												if (op == ADD) {
-													write(MAD);
+												if (op == OP_ADD) {
+													write(OP_MAD);
 													write(dst); write(dst); write(ref);
-													write({INTEGER, dstMatrix.count()});
-													write(VOID);
-												} else if (op == SUB) {
-													write(MSB);
+													write({CODE_INTEGER, dstMatrix.count()});
+													write(CODE_VOID);
+												} else if (op == OP_SUB) {
+													write(OP_MSB);
 													write(dst); write(dst); write(ref);
-													write({INTEGER, dstMatrix.count()});
-													write(VOID);
+													write({CODE_INTEGER, dstMatrix.count()});
+													write(CODE_VOID);
 												} else {
 													throw CompileError("Invalid compound assignment operator for matrices");
 												}
 											} else {
 												// Scalar compound: *= /=
-												if (op == MUL) {
-													write(MMS);
+												if (op == OP_MUL) {
+													write(OP_MMS);
 													write(dst); write(dst); write(ref);
-													write({INTEGER, dstMatrix.count()});
-													write(VOID);
-												} else if (op == DIV) {
-													write(MDS);
+													write({CODE_INTEGER, dstMatrix.count()});
+													write(CODE_VOID);
+												} else if (op == OP_DIV) {
+													write(OP_MDS);
 													write(dst); write(dst); write(ref);
-													write({INTEGER, dstMatrix.count()});
-													write(VOID);
+													write({CODE_INTEGER, dstMatrix.count()});
+													write(CODE_VOID);
 												} else {
 													throw CompileError("Invalid scalar compound assignment for matrix");
 												}
@@ -4995,19 +4752,19 @@ const int VERSION_PATCH = 0;
 											validate(operation == "=");
 											ByteCode ref = getVar(readWord(Word::Varname));
 											validate(IsArray(ref));
-											write(SET);
+											write(OP_SET);
 											write(dst);
 											write(ref);
-											write(VOID);
+											write(CODE_VOID);
 										} else {
 											validate(IsVar(dst));
 											ByteCode op = GetOperator(operation);
 											ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
 											write(op);
 											write(dst);
-											if (op != SET) write(dst);
+											if (op != OP_SET) write(dst);
 											write(ref);
-											write(VOID);
+											write(CODE_VOID);
 										}
 									}break;
 									case Word::TrailOperator:{
@@ -5060,13 +4817,13 @@ const int VERSION_PATCH = 0;
 												if (curMatrix) {
 													// Assigning to a sub-matrix (e.g., whole row)
 													MatrixInfo rhsMatrix = lastExprMatrixInfo;
-													if (op == SET && rhsMatrix) {
+													if (op == OP_SET && rhsMatrix) {
 														validate(rhsMatrix.count() == curMatrix.count());
-														write(MAS);
+														write(OP_MAS);
 														write(resolved); write(rhs);
-														write({INTEGER, curMatrix.count()});
-														write(VOID);
-													} else if (op == SET) {
+														write({CODE_INTEGER, curMatrix.count()});
+														write(CODE_VOID);
+													} else if (op == OP_SET) {
 														throw CompileError("Cannot assign scalar to matrix without component accessor");
 													} else {
 														throw CompileError("Invalid compound assignment on matrix row");
@@ -5075,9 +4832,9 @@ const int VERSION_PATCH = 0;
 													// Scalar assignment to resolved component
 													write(op);
 													write(resolved);
-													if (op != SET) write(resolved);
+													if (op != OP_SET) write(resolved);
 													write(rhs);
-													write(VOID);
+													write(CODE_VOID);
 												}
 											} else if (nextOp == Word::SuffixOperatorGroup) {
 												validate(!curMatrix); // Can only ++ -- on scalars
@@ -5085,7 +4842,7 @@ const int VERSION_PATCH = 0;
 												write(op);
 												if (nextOp == "!!") write(resolved);
 												write(resolved);
-												write(VOID);
+												write(CODE_VOID);
 											} else if (nextOp == Word::TrailOperator || (nextOp == Word::Name && curMatrix)) {
 												// Trailing function on matrix or component
 												Word funcName = (nextOp == Word::TrailOperator) ? readWord() : nextOp;
@@ -5110,51 +4867,51 @@ const int VERSION_PATCH = 0;
 												// Handle matrix trailing functions
 												MatrixInfo resolvedMatrix = curMatrix ? curMatrix : getMatrixInfoBySlot(resolved);
 												if (resolvedMatrix && funcName == "normalize") {
-													write(MNM);
+													write(OP_MNM);
 													write(resolved);
-													write({INTEGER, resolvedMatrix.count()});
-													write(VOID);
+													write({CODE_INTEGER, resolvedMatrix.count()});
+													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "cross" && args.size() == 2) {
 													validate(resolvedMatrix.count() == 3);
 													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
 													validate(otherMatrix && otherMatrix.count() == 3);
 													// Cross modifies self: need temp to avoid aliasing
 													ByteCode tmp = declareTmpMatrix(3, 1);
-													write(MCR);
+													write(OP_MCR);
 													write(tmp);
 													write(resolved);
 													write(args[1]);
-													write(VOID);
-													write(MAS);
+													write(CODE_VOID);
+													write(OP_MAS);
 													write(resolved);
 													write(tmp);
-													write({INTEGER, 3});
-													write(VOID);
+													write({CODE_INTEGER, 3});
+													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "transpose") {
 													validate(resolvedMatrix.isSquare());
-													write(MTR);
+													write(OP_MTR);
 													write(resolved);
-													write({INTEGER, resolvedMatrix.rows});
-													write(VOID);
+													write({CODE_INTEGER, resolvedMatrix.rows});
+													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "inverse") {
 													validate(resolvedMatrix.isSquare());
-													write(MIV);
+													write(OP_MIV);
 													write(resolved);
-													write({INTEGER, resolvedMatrix.rows});
-													write(VOID);
+													write({CODE_INTEGER, resolvedMatrix.rows});
+													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "identity") {
 													validate(resolvedMatrix.isSquare());
-													write(MID);
+													write(OP_MID);
 													write(resolved);
-													write({INTEGER, resolvedMatrix.rows});
-													write(VOID);
+													write({CODE_INTEGER, resolvedMatrix.rows});
+													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "lerp" && args.size() == 3) {
 													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
 													validate(otherMatrix && otherMatrix.count() == resolvedMatrix.count());
-													write(MLP);
+													write(OP_MLP);
 													write(resolved); write(resolved); write(args[1]); write(args[2]);
-													write({INTEGER, resolvedMatrix.count()});
-													write(VOID);
+													write({CODE_INTEGER, resolvedMatrix.count()});
+													write(CODE_VOID);
 												} else {
 													// Fall through to regular trailing function
 													compileFunctionCall(funcName, args, false, true);
@@ -5278,7 +5035,7 @@ const int VERSION_PATCH = 0;
 											for (const auto& seg : chain) {
 												validate(IsArray(container) || IsText(container));
 												ByteCode tmp = declareVar("", GetRamVarType(container.type));
-												write(IDX);
+												write(OP_IDX);
 												write(tmp);
 												write(container);
 												switch (seg.kind) {
@@ -5295,7 +5052,7 @@ const int VERSION_PATCH = 0;
 														write(seg.ref);
 													break;
 												}
-												write(VOID);
+												write(CODE_VOID);
 												values.emplace_back(tmp);
 												container = tmp;
 											}
@@ -5303,7 +5060,7 @@ const int VERSION_PATCH = 0;
 										};
 										
 										auto assignSegment = [&](ByteCode parent, const Accessor& seg, ByteCode value){
-											write(SET);
+											write(OP_SET);
 											switch (seg.kind) {
 												case Accessor::Kind::ArrayIndexLiteral:
 													write({ARRAY_INDEX, seg.indexLiteral});
@@ -5320,7 +5077,7 @@ const int VERSION_PATCH = 0;
 											}
 											write(parent);
 											write(value);
-											write(VOID);
+											write(CODE_VOID);
 										};
 										
 										std::vector<Accessor> chain {};
@@ -5336,12 +5093,12 @@ const int VERSION_PATCH = 0;
 												auto values = loadAccessorChain(dst, chain);
 												ByteCode finalValue = values.back();
 												ByteCode newValue = rhs;
-												if (op != SET) {
+												if (op != OP_SET) {
 													write(op);
 													write(finalValue);
 													write(finalValue);
 													write(rhs);
-													write(VOID);
+													write(CODE_VOID);
 													newValue = finalValue;
 												}
 												ByteCode parent = chain.size() > 1? values[values.size()-2] : dst;
@@ -5357,7 +5114,7 @@ const int VERSION_PATCH = 0;
 												write(op);
 												if (nextToken == "!!") write(finalValue);
 												write(finalValue);
-												write(VOID);
+												write(CODE_VOID);
 												ByteCode parent = chain.size() > 1? values[values.size()-2] : dst;
 												assignSegment(parent, chain.back(), finalValue);
 												for (int i = (int)chain.size() - 2; i >= 0; --i) {
@@ -5375,7 +5132,7 @@ const int VERSION_PATCH = 0;
 												if (operation == Word::AssignmentOperatorGroup) {
 													ByteCode op = GetOperator(operation);
 													ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-													if (op != SET) {
+													if (op != OP_SET) {
 														ByteCode tmp;
 														switch (dst.type) {
 															case STORAGE_ARRAY_NUMERIC:
@@ -5391,7 +5148,7 @@ const int VERSION_PATCH = 0;
 															default: validate(false);
 														}
 														// Assign the current indexed value to tmp
-														write(IDX);
+														write(OP_IDX);
 														write(tmp);
 														write(dst);
 														if (operand == Word::Varname) {
@@ -5406,16 +5163,16 @@ const int VERSION_PATCH = 0;
 														} else /*numeric*/ {
 															write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 														}
-														write(VOID);
+														write(CODE_VOID);
 														// Set tmp to the new value
 														write(op);
 														write(tmp);
 														write(tmp);
 														write(ref);
-														write(VOID);
+														write(CODE_VOID);
 														ref = tmp;
 													}
-													write(SET);
+													write(OP_SET);
 													if (operand == Word::Varname) {
 														ByteCode idx = getVar(operand);
 														if (IsNumeric(idx)) {
@@ -5430,7 +5187,7 @@ const int VERSION_PATCH = 0;
 													}
 													write(dst);
 													write(ref);
-													write(VOID);
+													write(CODE_VOID);
 												} else if (operation == Word::SuffixOperatorGroup) {
 													ByteCode op = GetOperator(operation);
 													ByteCode tmp;
@@ -5448,7 +5205,7 @@ const int VERSION_PATCH = 0;
 														default: validate(false);
 													}
 													// Assign the current indexed value to tmp
-													write(IDX);
+													write(OP_IDX);
 													write(tmp);
 													write(dst);
 													if (operand == Word::Varname) {
@@ -5463,14 +5220,14 @@ const int VERSION_PATCH = 0;
 													} else /*numeric*/ {
 														write({ARRAY_INDEX, uint32_t(std::round(double(operand)))});
 													}
-													write(VOID);
+													write(CODE_VOID);
 													// Set tmp to the new value
 													write(op);
 													if (operation == "!!") write(tmp);
 													write(tmp);
-													write(VOID);
+													write(CODE_VOID);
 													// Assign dst to tmp
-													write(SET);
+													write(OP_SET);
 													if (operand == Word::Varname) {
 														ByteCode idx = getVar(operand);
 														if (IsNumeric(idx)) {
@@ -5485,7 +5242,7 @@ const int VERSION_PATCH = 0;
 													}
 													write(dst);
 													write(tmp);
-													write(VOID);
+													write(CODE_VOID);
 												} else {
 													validate(false);
 												}
@@ -5515,29 +5272,29 @@ const int VERSION_PATCH = 0;
 													ByteCode op = GetOperator(next);
 													ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
 													ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
-													if (op != SET) {
+													if (op != OP_SET) {
 														ByteCode tmp = declareTmpText();
 														// Assign the current indexed value to tmp
-														write(IDX);
+														write(OP_IDX);
 														write(tmp);
 														write(dst);
 														write(OBJ_KEY);
 														write(key);
-														write(VOID);
+														write(CODE_VOID);
 														// Set tmp to the new value
 														write(op);
 														write(tmp);
 														write(tmp);
 														write(ref);
-														write(VOID);
+														write(CODE_VOID);
 														ref = tmp;
 													}
-													write(SET);
+													write(OP_SET);
 													write(OBJ_KEY);
 													write(key);
 													write(dst);
 													write(ref);
-													write(VOID);
+													write(CODE_VOID);
 												} else if (operand == Word::Name && next == Word::SuffixOperatorGroup) {
 													// StringObject member with suffix operation
 													validate(IsVar(dst) && IsText(dst));
@@ -5545,24 +5302,24 @@ const int VERSION_PATCH = 0;
 													ByteCode key = declareVar("", ROM_CONST_TEXT, operand);
 													ByteCode tmp = declareTmpText();
 													// Assign the current indexed value to tmp
-													write(IDX);
+													write(OP_IDX);
 													write(tmp);
 													write(dst);
 													write(OBJ_KEY);
 													write(key);
-													write(VOID);
+													write(CODE_VOID);
 													// Set tmp to the new value
 													write(op);
 													if (next == "!!") write(tmp);
 													write(tmp);
-													write(VOID);
+													write(CODE_VOID);
 													// Assign dst to tmp
-													write(SET);
+													write(OP_SET);
 													write(OBJ_KEY);
 													write(key);
 													write(dst);
 													write(tmp);
-													write(VOID);
+													write(CODE_VOID);
 												} else {
 													validate(false);
 												}
@@ -5576,7 +5333,7 @@ const int VERSION_PATCH = 0;
 										write(GetOperator(operation));
 										if (operation == "!!") write(dst);
 										write(dst);
-										write(VOID);
+										write(CODE_VOID);
 									}break;
 									default: throw CompileError("Invalid operator", operation);
 								}
@@ -5620,24 +5377,24 @@ const int VERSION_PATCH = 0;
 									} else if (op == Word::AssignmentOperatorGroup) {
 										validate(op == "=");
 										ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-										if (ref.type == VOID) {
+										if (ref.type == CODE_VOID) {
 											throw CompileError("Cannot assign a var to VOID");
 										}
 										// Check if RHS is a matrix
 										MatrixInfo rhsMatrix = lastExprMatrixInfo;
 										if (rhsMatrix) {
 											ByteCode var = declareMatrix(name, rhsMatrix.rows, rhsMatrix.cols);
-											write(MAS);
+											write(OP_MAS);
 											write(var);
 											write(ref);
-											write({INTEGER, rhsMatrix.count()});
-											write(VOID);
+											write({CODE_INTEGER, rhsMatrix.count()});
+											write(CODE_VOID);
 										} else {
 											ByteCode var = declareVar(name, GetRamVarType(ref.type));
-											write(SET);
+											write(OP_SET);
 											write(var);
 											write(ref);
-											write(VOID);
+											write(CODE_VOID);
 										}
 									} else {
 										throw CompileError("Expected '=' or ':' after var name");
@@ -5653,10 +5410,10 @@ const int VERSION_PATCH = 0;
 										validate(nextWordIndex == (int)line.words.size());
 										ByteCode var = declareVar(name, GetRamVarType(ref.type));
 										validate(IsArray(ref));
-										write(SET);
+										write(OP_SET);
 										write(var);
 										write(ref);
-										write(VOID);
+										write(CODE_VOID);
 									} else {
 										validate(op == Word::CastOperator);
 										std::string type = readWord(Word::Name);
@@ -5732,85 +5489,85 @@ const int VERSION_PATCH = 0;
 										
 										// Set offset to 0
 										ByteCode offset = declareTmpNumeric();
-										write(SET);
+										write(OP_SET);
 										write(offset);
-										write(VOID);
+										write(CODE_VOID);
 										
 										addPointer("LoopBegin") = addr();
 										
 										// Get key and move offset to next key
-										write(KEY);
+										write(OP_KEY);
 										write(indexRef);
 										write(arr);
 										write(offset);
-										write(VOID);
+										write(CODE_VOID);
 										
 										// Check condition (key != "")
 										ByteCode condition = declareTmpNumeric();
-										write(CND);
-										addPointer("LoopContinue") = write(ADDR);
-										addPointer("LoopBreak") = write(ADDR);
+										write(OP_CND);
+										addPointer("LoopContinue") = write(CODE_ADDR);
+										addPointer("LoopBreak") = write(CODE_ADDR);
 										write(indexRef);
-										write(VOID);
+										write(CODE_VOID);
 										
 										applyPointerAddr("LoopContinue");
 										
 										// Set current item
-										write(IDX);
+										write(OP_IDX);
 										write(itemRef);
 										write(arr);
 										write(OBJ_KEY);
 										write(indexRef);
-										write(VOID);
+										write(CODE_VOID);
 										
 									} else {
 									
 										// Set index to -1
-										write(SET);
+										write(OP_SET);
 										write(indexRef);
-										write(VOID);
-										write(DEC);
+										write(CODE_VOID);
+										write(OP_DEC);
 										write(indexRef);
-										write(VOID);
+										write(CODE_VOID);
 										
 										// Get Array Size
 										ByteCode arrSize = declareTmpNumeric();
-										write(SIZ);
+										write(OP_SIZ);
 										write(arrSize);
 										write(arr);
-										write(VOID);
+										write(CODE_VOID);
 										
 										addPointer("LoopBegin") = addr();
 										
 										// Increment index
-										write(INC);
+										write(OP_INC);
 										write(indexRef);
-										write(VOID);
+										write(CODE_VOID);
 										
 										// Assign condition
 										ByteCode condition = declareTmpNumeric();
-										write(LST);
+										write(OP_LST);
 										write(condition);
 										write(indexRef);
 										write(arrSize);
-										write(VOID);
+										write(CODE_VOID);
 										
 										// Check condition to continue or break
-										write(CND);
-										addPointer("LoopContinue") = write(ADDR);
-										addPointer("LoopBreak") = write(ADDR);
+										write(OP_CND);
+										addPointer("LoopContinue") = write(CODE_ADDR);
+										addPointer("LoopBreak") = write(CODE_ADDR);
 										write(condition);
-										write(VOID);
+										write(CODE_VOID);
 										
 										applyPointerAddr("LoopContinue");
 										
 										// Set current item
-										write(IDX);
+										write(OP_IDX);
 										write(itemRef);
 										write(arr);
 										write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 										write(indexRef);
-										write(VOID);
+										write(CODE_VOID);
 										
 									}
 								}
@@ -5832,34 +5589,34 @@ const int VERSION_PATCH = 0;
 									ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
 									
 									// Set index to -1
-									write(SET);
+									write(OP_SET);
 									write(indexRef);
-									write(VOID);
-									write(DEC);
+									write(CODE_VOID);
+									write(OP_DEC);
 									write(indexRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									addPointer("LoopBegin") = addr();
 									
 									// Increment index
-									write(INC);
+									write(OP_INC);
 									write(indexRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Assign condition
 									ByteCode condition = declareTmpNumeric();
-									write(LST);
+									write(OP_LST);
 									write(condition);
 									write(indexRef);
 									write(nRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Check condition to continue or break
-									write(CND);
-									addPointer("LoopContinue") = write(ADDR);
-									addPointer("LoopBreak") = write(ADDR);
+									write(OP_CND);
+									addPointer("LoopContinue") = write(CODE_ADDR);
+									addPointer("LoopBreak") = write(CODE_ADDR);
 									write(condition);
-									write(VOID);
+									write(CODE_VOID);
 									
 									applyPointerAddr("LoopContinue");
 								}
@@ -5891,69 +5648,69 @@ const int VERSION_PATCH = 0;
 									ByteCode indexRef = declareVar(index, RAM_VAR_NUMERIC);
 									
 									ByteCode diffres = declareTmpNumeric();
-									write(SUB);
+									write(OP_SUB);
 									write(diffres);
 									write(endRef);
 									write(startRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									ByteCode step = declareTmpNumeric();
-									write(SIG);
+									write(OP_SIG);
 									write(step);
 									write(diffres);
 									write(declareVar("", ROM_CONST_NUMERIC, Word{1}));
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Set index to round(start - step)
-									write(SET);
+									write(OP_SET);
 									write(indexRef);
 									write(startRef);
-									write(VOID);
-									write(SUB);
+									write(CODE_VOID);
+									write(OP_SUB);
 									write(indexRef);
 									write(indexRef);
 									write(step);
-									write(VOID);
-									write(RND);
+									write(CODE_VOID);
+									write(OP_RND);
 									write(indexRef);
 									write(indexRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Set lastRef to round(end + step)
 									ByteCode lastRef = declareTmpNumeric();
-									write(ADD);
+									write(OP_ADD);
 									write(lastRef);
 									write(endRef);
 									write(step);
-									write(VOID);
-									write(RND);
+									write(CODE_VOID);
+									write(OP_RND);
 									write(lastRef);
 									write(lastRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									addPointer("LoopBegin") = addr();
 									
 									// Increment index
-									write(ADD);
+									write(OP_ADD);
 									write(indexRef);
 									write(indexRef);
 									write(step);
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Assign condition
 									ByteCode condition = declareTmpNumeric();
-									write(NEQ);
+									write(OP_NEQ);
 									write(condition);
 									write(indexRef);
 									write(lastRef);
-									write(VOID);
+									write(CODE_VOID);
 									
 									// Check condition to continue or break
-									write(CND);
-									addPointer("LoopContinue") = write(ADDR);
-									addPointer("LoopBreak") = write(ADDR);
+									write(OP_CND);
+									addPointer("LoopContinue") = write(CODE_ADDR);
+									addPointer("LoopBreak") = write(CODE_ADDR);
 									write(condition);
-									write(VOID);
+									write(CODE_VOID);
 									
 									applyPointerAddr("LoopContinue");
 								}
@@ -5967,11 +5724,11 @@ const int VERSION_PATCH = 0;
 									ByteCode condition = compileExpression(line.words, nextWordIndex, -1);
 									
 									// Check condition to continue or break
-									write(CND);
-									addPointer("LoopContinue") = write(ADDR);
-									addPointer("LoopBreak") = write(ADDR);
+									write(OP_CND);
+									addPointer("LoopContinue") = write(CODE_ADDR);
+									addPointer("LoopBreak") = write(CODE_ADDR);
 									write(condition);
-									write(VOID);
+									write(CODE_VOID);
 									
 									applyPointerAddr("LoopContinue");
 								}
@@ -5999,11 +5756,11 @@ const int VERSION_PATCH = 0;
 								else if (firstWord == "if") {
 									pushStack("if");
 									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-									write(CND);
-									addPointer("gotoIfTrue") = write(ADDR);
-									addPointer("gotoIfFalse") = write(ADDR);
+									write(OP_CND);
+									addPointer("gotoIfTrue") = write(CODE_ADDR);
+									addPointer("gotoIfFalse") = write(CODE_ADDR);
 									write(ref);
-									write(VOID);
+									write(CODE_VOID);
 									applyPointerAddr("gotoIfTrue");
 								}
 								// elseif
@@ -6012,11 +5769,11 @@ const int VERSION_PATCH = 0;
 									applyPointerAddr("gotoIfFalse");
 									write({LINENUMBER, currentLine});
 									ByteCode ref = compileExpression(line.words, nextWordIndex, -1);
-									write(CND);
-									addPointer("gotoIfTrue") = write(ADDR);
-									addPointer("gotoIfFalse") = write(ADDR);
+									write(OP_CND);
+									addPointer("gotoIfTrue") = write(CODE_ADDR);
+									addPointer("gotoIfFalse") = write(CODE_ADDR);
 									write(ref);
-									write(VOID);
+									write(CODE_VOID);
 									applyPointerAddr("gotoIfTrue");
 								}
 								// else
@@ -6035,19 +5792,19 @@ const int VERSION_PATCH = 0;
 										MatrixInfo valMatrix = lastExprMatrixInfo;
 										if (retMatrix && valMatrix) {
 											validate(retMatrix.count() == valMatrix.count());
-											write(MAS);
+											write(OP_MAS);
 											write(ret);
 											write(val);
-											write({INTEGER, retMatrix.count()});
-											write(VOID);
+											write({CODE_INTEGER, retMatrix.count()});
+											write(CODE_VOID);
 										} else {
-											write(SET);
+											write(OP_SET);
 											write(ret);
 											write(val);
-											write(VOID);
+											write(CODE_VOID);
 										}
 									}
-									write(RETURN);
+									write(CODE_RETURN);
 								}
 								else if (Device::deviceFunctionsByName.contains(firstWord.word) || firstWord == "recurse") {
 									// Device Function call
@@ -6097,20 +5854,20 @@ const int VERSION_PATCH = 0;
 				uint32_t address = 0;
 				for (const ByteCode& code : rom_program) {
 					if (nextLine) {
-						std::cout << "\n" << getFunctionName({ADDR,address}) << std::endl;
+						std::cout << "\n" << getFunctionName({CODE_ADDR,address}) << std::endl;
 						nextLine = false;
 					}
 					++address;
 					switch (code.type) {
-						case RETURN:
+						case CODE_RETURN:
 							std::cout << "RETURN"; if (code.value != 0) std::cout << "{" << code.value << "}";
 							nextLine = true;
 							break;
-						case VOID:
+						case CODE_VOID:
 							std::cout << "VOID"; if (code.value != 0) std::cout << "{" << code.value << "}";
 							nextLine = true;
 							break;
-						case OP:{
+						case CODE_OP:{
 							std::cout << "> ";
 							char op[4];
 							op[0] = (code.value & 0x0000ff);
@@ -6187,10 +5944,10 @@ const int VERSION_PATCH = 0;
 						case DEVICE_FUNCTION_INDEX:
 							std::cout << "DEVICE_FUNCTION_INDEX{" << code.value << "} ";
 							break;
-						case INTEGER:
+						case CODE_INTEGER:
 							std::cout << "INTEGER{" << code.value << "} ";
 							break;
-						case ADDR:
+						case CODE_ADDR:
 							std::cout << "ADDR{" << getFunctionName(code) << "} ";
 							break;
 						default:
@@ -7071,7 +6828,7 @@ const int VERSION_PATCH = 0;
 					}
 					return arr[arrIndex];
 				}break;
-				case VOID: return 0.0;
+				case CODE_VOID: return 0.0;
 				case STORAGE_ARRAY_TEXT:
 				case RAM_ARRAY_TEXT:
 				case ROM_CONST_TEXT:
@@ -7108,7 +6865,7 @@ const int VERSION_PATCH = 0;
 					}
 					return ram_text[ref.value];
 				}break;
-				case VOID: {
+				case CODE_VOID: {
 					static const std::string empty = "";
 					return empty;
 				}
@@ -7165,7 +6922,7 @@ const int VERSION_PATCH = 0;
 					}
 					return arr[arrIndex];
 				}break;
-				case VOID: {
+				case CODE_VOID: {
 					return "";
 				}
 				case STORAGE_ARRAY_NUMERIC:
@@ -7216,7 +6973,7 @@ const int VERSION_PATCH = 0;
 		}
 		
 		bool EntryPointMatches(const EntryPoint& entryPoint, const Var& ref) {
-			if (entryPoint.ref.type == VOID) {
+			if (entryPoint.ref.type == CODE_VOID) {
 				if (ref.type != Var::Void) return false;
 			} else {
 				if (ref.type == Var::Void) return false;
@@ -7465,7 +7222,7 @@ const int VERSION_PATCH = 0;
 				if (__builtin_expect(index + 1 < programSize, 1)) {
 					return program[++index];
 				}
-				return CODE_TYPE::VOID;
+				return CODE_TYPE::CODE_VOID;
 			};
 
 			// Fast numeric getter for RAM_VAR_NUMERIC and ROM_CONST_NUMERIC
@@ -7483,8 +7240,8 @@ const int VERSION_PATCH = 0;
 				while (index < programSize) {
 					const ByteCode& code = program[index];
 					switch (code.type) {
-						case RETURN: return;
-						case VOID: break;
+						case CODE_RETURN: return;
+						case CODE_VOID: break;
 						case SOURCEFILE:{
 							if (code.value < assembly->sourceFiles.size()) {
 								currentFile = assembly->sourceFiles[code.value];
@@ -7493,10 +7250,10 @@ const int VERSION_PATCH = 0;
 						case LINENUMBER:{
 							currentLine = code.value;
 						}break;
-						case OP: {
+						case CODE_OP: {
 							ipcCheck();
 							switch (code.rawValue) {
-								case SET: {// [ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY] REF_DST [REF_VALUE]orZero
+								case OP_SET: {// [ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY] REF_DST [REF_VALUE]orZero
 									ByteCode dst = nextCode();
 									// Fast path for simple numeric assignment: var = value
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
@@ -7595,7 +7352,7 @@ const int VERSION_PATCH = 0;
 										throw RuntimeError("Invalid operation");
 									}
 								}break;
-								case ADD: {// REF_DST REF_A REF_B
+								case OP_ADD: {// REF_DST REF_A REF_B
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7605,7 +7362,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) + MemGetNumeric(b), dst);
 									}
 								}break;
-								case SUB: {
+								case OP_SUB: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7615,7 +7372,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) - MemGetNumeric(b), dst);
 									}
 								}break;
-								case MUL: {
+								case OP_MUL: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7626,7 +7383,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) * MemGetNumeric(b), dst);
 									}
 								}break;
-								case DIV: {
+								case OP_DIV: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7640,7 +7397,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) / operand, dst);
 									}
 								}break;
-								case MOD: {
+								case OP_MOD: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7664,7 +7421,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
-								case POW: {
+								case OP_POW: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7674,7 +7431,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::pow(MemGetNumeric(a), MemGetNumeric(b)), dst);
 									}
 								}break;
-								case CCT: {
+								case OP_CCT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7685,7 +7442,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetText(a) + MemGetText(b), dst);
 									}
 								}break;
-								case AND: {
+								case OP_AND: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7698,7 +7455,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(MemGetBoolean(a) && MemGetBoolean(b)), dst);
 									}
 								}break;
-								case ORR: {
+								case OP_ORR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7711,7 +7468,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(MemGetBoolean(a) || MemGetBoolean(b)), dst);
 									}
 								}break;
-								case XOR: {
+								case OP_XOR: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7724,7 +7481,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(MemGetBoolean(a) != MemGetBoolean(b)), dst);
 									}
 								}break;
-								case EQQ: {
+								case OP_EQQ: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7737,7 +7494,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) < EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
-								case NEQ: {
+								case OP_NEQ: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7750,7 +7507,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(std::abs(MemGetNumeric(a) - MemGetNumeric(b)) >= EPSILON_DOUBLE), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
-								case LST: {
+								case OP_LST: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7760,7 +7517,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) < MemGetNumeric(b), dst);
 									}
 								}break;
-								case GRT: {
+								case OP_GRT: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7770,7 +7527,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) > MemGetNumeric(b), dst);
 									}
 								}break;
-								case LTE: {
+								case OP_LTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7780,7 +7537,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) <= MemGetNumeric(b), dst);
 									}
 								}break;
-								case GTE: {
+								case OP_GTE: {
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
@@ -7790,7 +7547,7 @@ const int VERSION_PATCH = 0;
 										MemSet(MemGetNumeric(a) >= MemGetNumeric(b), dst);
 									}
 								}break;
-								case INC: {// REF_NUM
+								case OP_INC: {// REF_NUM
 									ByteCode ref = nextCode();
 									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
 										// Fast path: for loop counters, values are already integers
@@ -7800,7 +7557,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::round(MemGetNumeric(ref)) + 1.0, ref);
 									}
 								}break;
-								case DEC: {
+								case OP_DEC: {
 									ByteCode ref = nextCode();
 									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
 										double& v = ram_numeric[ref.value];
@@ -7809,7 +7566,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::round(MemGetNumeric(ref)) - 1.0, ref);
 									}
 								}break;
-								case NOT: {// REF_DST REF_VAL
+								case OP_NOT: {// REF_DST REF_VAL
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									// Fast path for numeric operands
@@ -7822,7 +7579,7 @@ const int VERSION_PATCH = 0;
 										MemSet(double(v == "" || v == "0"), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
-								case FLR: {// REF_DST REF_NUM
+								case OP_FLR: {// REF_DST REF_NUM
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7831,7 +7588,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::floor(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case CIL: {
+								case OP_CIL: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7840,7 +7597,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::ceil(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case RND: {
+								case OP_RND: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7849,7 +7606,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::round(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case SIN: {
+								case OP_SIN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
@@ -7858,7 +7615,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::sin(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case COS: {
+								case OP_COS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
@@ -7867,7 +7624,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::cos(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case TAN: {
+								case OP_TAN: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7876,17 +7633,17 @@ const int VERSION_PATCH = 0;
 										MemSet(std::tan(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case ASI: {
+								case OP_ASI: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									MemSet(std::asin(MemGetNumeric(val)), dst);
 								}break;
-								case ACO: {
+								case OP_ACO: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									MemSet(std::acos(MemGetNumeric(val)), dst);
 								}break;
-								case ATA: {
+								case OP_ATA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode val2 = nextCode();
@@ -7896,7 +7653,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::atan(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case ABS: {
+								case OP_ABS: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7905,13 +7662,13 @@ const int VERSION_PATCH = 0;
 										MemSet(std::abs(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case FRA: {
+								case OP_FRA: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									double intpart;
 									MemSet(std::modf(MemGetNumeric(val), &intpart), dst);
 								}break;
-								case SQR: {
+								case OP_SQR: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (__builtin_expect(dst.type == RAM_VAR_NUMERIC && val.type == RAM_VAR_NUMERIC, 1)) {
@@ -7920,7 +7677,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::sqrt(MemGetNumeric(val)), dst);
 									}
 								}break;
-								case SIG: {
+								case OP_SIG: {
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode defaultVal = nextCode();
@@ -7930,7 +7687,7 @@ const int VERSION_PATCH = 0;
 									else if (defaultVal) num = MemGetNumeric(defaultVal);
 									MemSet(num, dst);
 								}break;
-								case LOG: {// REF_DST REF_NUM REF_BASE
+								case OP_LOG: {// REF_DST REF_NUM REF_BASE
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode base = nextCode();
@@ -7938,7 +7695,7 @@ const int VERSION_PATCH = 0;
 									if (b == 0) b = 10.0;
 									MemSet(std::log(MemGetNumeric(val)) / std::log(b), dst);
 								}break;
-								case CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
+								case OP_CLP: {// REF_DST REF_NUM REF_MIN REF_MAX
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									ByteCode min = nextCode();
@@ -7957,19 +7714,19 @@ const int VERSION_PATCH = 0;
 										MemSet(std::clamp(MemGetNumeric(val), minVal, maxVal), dst);
 									}
 								}break;
-								case STP: {// REF_DST REF_T1 REF_T2 REF_NUM
+								case OP_STP: {// REF_DST REF_T1 REF_T2 REF_NUM
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
 									ByteCode val = nextCode();
-									if (val.type == VOID) {
+									if (val.type == CODE_VOID) {
 										val = t2;
 										MemSet(step(MemGetNumeric(t1), MemGetNumeric(val)), dst);
 									} else {
 										MemSet(step(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 									}
 								}break;
-								case SMT: {
+								case OP_SMT: {
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
@@ -7982,7 +7739,7 @@ const int VERSION_PATCH = 0;
 										MemSet(smoothstep(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 									}
 								}break;
-								case LRP: {
+								case OP_LRP: {
 									ByteCode dst = nextCode();
 									ByteCode t1 = nextCode();
 									ByteCode t2 = nextCode();
@@ -7995,7 +7752,7 @@ const int VERSION_PATCH = 0;
 										MemSet(std::lerp(MemGetNumeric(t1), MemGetNumeric(t2), MemGetNumeric(val)), dst);
 									}
 								}break;
-								case NUM: {// REF_DST REF_SRC
+								case OP_NUM: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
@@ -8003,13 +7760,13 @@ const int VERSION_PATCH = 0;
 										MemSet(ToDouble(str), dst);
 									} else throw RuntimeError("Invalid operation");
 								}break;
-								case TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
+								case OP_TXT: {// REF_DST REF_SRC [REPLACEMENT_VARS ...]
 									//TODO: support C++20 format specifiers in the future: https://en.cppreference.com/w/cpp/utility/format/formatter#Standard_format_specification
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
 									static thread_local std::vector<ByteCode> txtArgs;
 									txtArgs.clear();
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
+									for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 										txtArgs.emplace_back(c);
 									}
 									ipcCheck(txtArgs.size());
@@ -8109,7 +7866,7 @@ const int VERSION_PATCH = 0;
 										}
 									} else throw RuntimeError("Invalid operation");
 								}break;
-								case DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
+								case OP_DEV: {// DEVICE_FUNCTION_INDEX RET_DST [REF_ARG ...]
 									ByteCode dev = nextCode();
 									// Fast vector-based lookup: extract base and funcIndex from ID
 									uint8_t funcBase = (dev.value >> 16) & 0xFF;
@@ -8129,7 +7886,7 @@ const int VERSION_PATCH = 0;
 									}
 									ByteCode firstArg = nextCode();
 									// Fast path: no arguments, numeric return to RAM_VAR_NUMERIC
-									if (__builtin_expect(firstArg.type == VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
+									if (__builtin_expect(firstArg.type == CODE_VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
 										static thread_local std::vector<Var> emptyArgs;
 										Var ret = (*funcPtr)(this, emptyArgs);
 										if (__builtin_expect(ret.type == Var::Numeric, 1)) {
@@ -8142,7 +7899,7 @@ const int VERSION_PATCH = 0;
 									// Fast path: numeric arguments with numeric return to RAM_VAR_NUMERIC
 									if (__builtin_expect(hasReturn && dst.type == RAM_VAR_NUMERIC && IsNumeric(firstArg), 1)) {
 										ByteCode secondArg = nextCode();
-										if (secondArg.type == VOID) {
+										if (secondArg.type == CODE_VOID) {
 											// Single numeric argument
 											static thread_local std::vector<Var> oneArg(1);
 											oneArg[0] = MemGetNumeric(firstArg);
@@ -8154,7 +7911,7 @@ const int VERSION_PATCH = 0;
 										}
 										if (__builtin_expect(IsNumeric(secondArg), 1)) {
 											ByteCode thirdArg = nextCode();
-											if (thirdArg.type == VOID) {
+											if (thirdArg.type == CODE_VOID) {
 												// Two numeric arguments
 												static thread_local std::vector<Var> twoArgs(2);
 												twoArgs[0] = MemGetNumeric(firstArg);
@@ -8174,7 +7931,7 @@ const int VERSION_PATCH = 0;
 											else if (IsText(thirdArg)) manyArgs.emplace_back(MemGetText(thirdArg));
 											else if (IsObject(thirdArg)) manyArgs.emplace_back(MemGetObject(thirdArg));
 											else throw RuntimeError("Invalid operation");
-											for (ByteCode c; (c = nextCode()).type != VOID;) {
+											for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 												if (__builtin_expect(IsNumeric(c), 1)) manyArgs.emplace_back(MemGetNumeric(c));
 												else if (IsText(c)) manyArgs.emplace_back(MemGetText(c));
 												else if (IsObject(c)) manyArgs.emplace_back(MemGetObject(c));
@@ -8191,7 +7948,7 @@ const int VERSION_PATCH = 0;
 									// This is common for $obj.property access patterns
 									if (__builtin_expect(IsObject(firstArg), 0)) {
 										ByteCode secondArg = nextCode();
-										if (__builtin_expect(secondArg.type == VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
+										if (__builtin_expect(secondArg.type == CODE_VOID && hasReturn && dst.type == RAM_VAR_NUMERIC, 1)) {
 											static thread_local std::vector<Var> oneObjArg(1);
 											oneObjArg[0] = MemGetObject(firstArg);
 											Var ret = (*funcPtr)(this, oneObjArg);
@@ -8204,12 +7961,12 @@ const int VERSION_PATCH = 0;
 										static thread_local std::vector<Var> objArgs;
 										objArgs.clear();
 										objArgs.emplace_back(MemGetObject(firstArg));
-										if (secondArg.type != VOID) {
+										if (secondArg.type != CODE_VOID) {
 											if (__builtin_expect(IsNumeric(secondArg), 1)) objArgs.emplace_back(MemGetNumeric(secondArg));
 											else if (IsText(secondArg)) objArgs.emplace_back(MemGetText(secondArg));
 											else if (IsObject(secondArg)) objArgs.emplace_back(MemGetObject(secondArg));
 											else throw RuntimeError("Invalid operation");
-											for (ByteCode c; (c = nextCode()).type != VOID;) {
+											for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 												if (__builtin_expect(IsNumeric(c), 1)) objArgs.emplace_back(MemGetNumeric(c));
 												else if (IsText(c)) objArgs.emplace_back(MemGetText(c));
 												else if (IsObject(c)) objArgs.emplace_back(MemGetObject(c));
@@ -8217,7 +7974,7 @@ const int VERSION_PATCH = 0;
 											}
 										}
 										Var ret = (*funcPtr)(this, objArgs);
-										if (dst && dst != DISCARD && ret.type != Var::Void) {
+										if (dst && dst != CODE_DISCARD && ret.type != Var::Void) {
 											if (__builtin_expect(ret.type == Var::Numeric, 1)) {
 												if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
 													ram_numeric[dst.value] = ret.numericValue;
@@ -8239,12 +7996,12 @@ const int VERSION_PATCH = 0;
 									// General case: collect arguments (use thread_local to avoid allocation)
 									static thread_local std::vector<Var> args;
 									args.clear();
-									if (firstArg.type != VOID) {
+									if (firstArg.type != CODE_VOID) {
 										if (__builtin_expect(IsNumeric(firstArg), 1)) args.emplace_back(MemGetNumeric(firstArg));
 										else if (IsText(firstArg)) args.emplace_back(MemGetText(firstArg));
 										else if (IsObject(firstArg)) args.emplace_back(MemGetObject(firstArg));
 										else throw RuntimeError("Invalid operation");
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											if (__builtin_expect(IsNumeric(c), 1)) args.emplace_back(MemGetNumeric(c));
 											else if (IsText(c)) args.emplace_back(MemGetText(c));
 											else if (IsObject(c)) args.emplace_back(MemGetObject(c));
@@ -8252,7 +8009,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 									Var ret = (*funcPtr)(this, args);
-									if (dst && dst != DISCARD && ret.type != Var::Void) {
+									if (dst && dst != CODE_DISCARD && ret.type != Var::Void) {
 										if (__builtin_expect(ret.type == Var::Numeric, 1)) {
 											if (__builtin_expect(dst.type == RAM_VAR_NUMERIC, 1)) {
 												ram_numeric[dst.value] = ret.numericValue;
@@ -8270,26 +8027,26 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
-								case OUT: {// REF_NUM [REF_ARG ...]
+								case OP_OUT: {// REF_NUM [REF_ARG ...]
 									ByteCode io = nextCode();
 									if (__builtin_expect(!IsNumeric(io), 0)) {
 										throw RuntimeError("Invalid output index");
 									}
 									static thread_local std::vector<Var> outArgs;
 									outArgs.clear();
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
+									for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 										if (IsNumeric(c)) outArgs.emplace_back(MemGetNumeric(c));
 										else outArgs.emplace_back(MemGetText(c));
 									}
 									Device::outputFunction(this, (uint32_t)MemGetNumeric(io), outArgs);
 								}break;
-								case APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
+								case OP_APP: {// REF_ARR REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
 									ByteCode firstArg = nextCode();
-									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									if (__builtin_expect(firstArg.type == CODE_VOID, 0)) throw RuntimeError("Not enough arguments");
 									ByteCode secondArg = nextCode();
 									// Fast path: single argument to RAM_ARRAY_NUMERIC
-									if (__builtin_expect(secondArg.type == VOID && arr.type == RAM_ARRAY_NUMERIC, 1)) {
+									if (__builtin_expect(secondArg.type == CODE_VOID && arr.type == RAM_ARRAY_NUMERIC, 1)) {
 										auto& array = ram_numeric_arrays[arr.value];
 										if (__builtin_expect(array.size() >= XC_MAX_ARRAY_SIZE, 0)) {
 											throw RuntimeError("Maximum array size exceeded");
@@ -8306,9 +8063,9 @@ const int VERSION_PATCH = 0;
 									std::vector<ByteCode> args {};
 									args.reserve(8);
 									args.emplace_back(firstArg);
-									if (secondArg.type != VOID) {
+									if (secondArg.type != CODE_VOID) {
 										args.emplace_back(secondArg);
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											args.emplace_back(c);
 										}
 									}
@@ -8352,7 +8109,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case CLR: {
+								case OP_CLR: {
 									ByteCode arr = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									switch (arr.type) {
@@ -8372,7 +8129,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case POP: {
+								case OP_POP: {
 									ByteCode arr = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									switch (arr.type) {
@@ -8395,7 +8152,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case ASC: {
+								case OP_ASC: {
 									ByteCode arr = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									switch (arr.type) {
@@ -8428,7 +8185,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case DSC: {
+								case OP_DSC: {
 									ByteCode arr = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									switch (arr.type) {
@@ -8461,11 +8218,11 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case INS: {//insert REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
+								case OP_INS: {//insert REF_ARR REF_INDEX REF_VALUE [REF_VALUE ...]
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
 									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
+									for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 										args.emplace_back(c);
 									}
 									if (args.size() == 0) throw RuntimeError("Not enough arguments");
@@ -8518,14 +8275,14 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case DEL: {//erase REF_ARR REF_INDEX [REF_INDEX_END]
+								case OP_DEL: {//erase REF_ARR REF_INDEX [REF_INDEX_END]
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
 									ByteCode idx2 = nextCode();
 									if (!IsArray(arr)) throw RuntimeError("Not an array");
 									if (!IsNumeric(idx)) throw RuntimeError("Invalid array index");
 									int32_t arr_index = (int)std::round(MemGetNumeric(idx));
-									int32_t index2 = idx2.type != VOID? (int)std::round(MemGetNumeric(idx2)) : arr_index;
+									int32_t index2 = idx2.type != CODE_VOID? (int)std::round(MemGetNumeric(idx2)) : arr_index;
 									if (arr_index < 0 || index2 < 0) throw RuntimeError("Invalid array index");
 									++index2;
 									if (index2 <= arr_index) throw RuntimeError("Invalid array index");
@@ -8562,7 +8319,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case FLL: {//fill REF_ARR REF_QTY REF_VAL
+								case OP_FLL: {//fill REF_ARR REF_QTY REF_VAL
 									ByteCode arr = nextCode();
 									ByteCode qty = nextCode();
 									ByteCode val = nextCode();
@@ -8598,11 +8355,11 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case FRM: {//from REF_DST REF_VAL [REF_SEPARATOR]
+								case OP_FRM: {//from REF_DST REF_VAL [REF_SEPARATOR]
 									ByteCode arr = nextCode();
 									ByteCode val = nextCode();
 									ByteCode sep = nextCode();
-									const std::string& separator = sep.type != VOID? MemGetText(sep) : "";
+									const std::string& separator = sep.type != CODE_VOID? MemGetText(sep) : "";
 									if (!IsArray(arr) && !IsText(arr)) throw RuntimeError("Not an array or text");
 									auto fillArray = [&](auto& dst){
 										dst.clear();
@@ -8744,7 +8501,7 @@ const int VERSION_PATCH = 0;
 										}break;
 									}
 								}break;
-								case SIZ: {//size REF_DST (REF_ARR | REF_TXT)
+								case OP_SIZ: {//size REF_DST (REF_ARR | REF_TXT)
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									// Fast path for RAM_ARRAY_NUMERIC -> RAM_VAR_NUMERIC
@@ -8779,7 +8536,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
-								case LAS: {
+								case OP_LAS: {
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									if (!IsArray(ref) && !IsText(ref)) throw RuntimeError("Not an array or text");
@@ -8813,7 +8570,7 @@ const int VERSION_PATCH = 0;
 										MemSet(utf8substr(text, len-1, 1), dst);
 									}
 								}break;
-								case FND: {//find REF_DST (REF_ARR | REF_TXT) REF_VAL
+								case OP_FND: {//find REF_DST (REF_ARR | REF_TXT) REF_VAL
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									ByteCode val = nextCode();
@@ -8854,7 +8611,7 @@ const int VERSION_PATCH = 0;
 										MemSet(pos != std::string::npos? int(utf8length(MemGetText(ref).substr(0, pos))) : -1, dst);
 									}
 								}break;
-								case CON: {//contains REF_DST (REF_ARR | REF_TXT) REF_VAL
+								case OP_CON: {//contains REF_DST (REF_ARR | REF_TXT) REF_VAL
 									ByteCode dst = nextCode();
 									ByteCode ref = nextCode();
 									ByteCode val = nextCode();
@@ -8892,13 +8649,13 @@ const int VERSION_PATCH = 0;
 										MemSet(pos != std::string::npos? 1 : 0, dst);
 									}
 								}break;
-								case MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
+								case OP_MIN: {// REF_DST (REF_ARR | (REF_NUM [REF_NUM ...]))
 									ByteCode dst = nextCode();
 									ByteCode firstArg = nextCode();
-									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									if (__builtin_expect(firstArg.type == CODE_VOID, 0)) throw RuntimeError("Not enough arguments");
 									ByteCode secondArg = nextCode();
 									// Fast path: min of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
-									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+									if (__builtin_expect(secondArg.type == CODE_VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
 										auto& array = ram_numeric_arrays[firstArg.value];
 										ipcCheck(array.size());
 										double min = array.empty() ? 0.0 : std::numeric_limits<double>::max();
@@ -8912,9 +8669,9 @@ const int VERSION_PATCH = 0;
 									std::vector<ByteCode> args {};
 									args.reserve(8);
 									args.emplace_back(firstArg);
-									if (secondArg.type != VOID) {
+									if (secondArg.type != CODE_VOID) {
 										args.emplace_back(secondArg);
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											args.emplace_back(c);
 										}
 									}
@@ -8954,13 +8711,13 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(min, dst);
 								}break;
-								case MAX: {
+								case OP_MAX: {
 									ByteCode dst = nextCode();
 									ByteCode firstArg = nextCode();
-									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									if (__builtin_expect(firstArg.type == CODE_VOID, 0)) throw RuntimeError("Not enough arguments");
 									ByteCode secondArg = nextCode();
 									// Fast path: max of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
-									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+									if (__builtin_expect(secondArg.type == CODE_VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
 										auto& array = ram_numeric_arrays[firstArg.value];
 										ipcCheck(array.size());
 										double max = array.empty() ? 0.0 : std::numeric_limits<double>::lowest();
@@ -8974,9 +8731,9 @@ const int VERSION_PATCH = 0;
 									std::vector<ByteCode> args {};
 									args.reserve(8);
 									args.emplace_back(firstArg);
-									if (secondArg.type != VOID) {
+									if (secondArg.type != CODE_VOID) {
 										args.emplace_back(secondArg);
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											args.emplace_back(c);
 										}
 									}
@@ -9016,13 +8773,13 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(max, dst);
 								}break;
-								case AVG: {
+								case OP_AVG: {
 									ByteCode dst = nextCode();
 									ByteCode firstArg = nextCode();
-									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									if (__builtin_expect(firstArg.type == CODE_VOID, 0)) throw RuntimeError("Not enough arguments");
 									ByteCode secondArg = nextCode();
 									// Fast path: avg of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
-									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+									if (__builtin_expect(secondArg.type == CODE_VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
 										auto& array = ram_numeric_arrays[firstArg.value];
 										ipcCheck(array.size());
 										double total = 0;
@@ -9038,9 +8795,9 @@ const int VERSION_PATCH = 0;
 									std::vector<ByteCode> args {};
 									args.reserve(8);
 									args.emplace_back(firstArg);
-									if (secondArg.type != VOID) {
+									if (secondArg.type != CODE_VOID) {
 										args.emplace_back(secondArg);
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											args.emplace_back(c);
 										}
 									}
@@ -9083,13 +8840,13 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(total / size, dst);
 								}break;
-								case SUM: {
+								case OP_SUM: {
 									ByteCode dst = nextCode();
 									ByteCode firstArg = nextCode();
-									if (__builtin_expect(firstArg.type == VOID, 0)) throw RuntimeError("Not enough arguments");
+									if (__builtin_expect(firstArg.type == CODE_VOID, 0)) throw RuntimeError("Not enough arguments");
 									ByteCode secondArg = nextCode();
 									// Fast path: sum of RAM_ARRAY_NUMERIC to RAM_VAR_NUMERIC
-									if (__builtin_expect(secondArg.type == VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
+									if (__builtin_expect(secondArg.type == CODE_VOID && dst.type == RAM_VAR_NUMERIC && firstArg.type == RAM_ARRAY_NUMERIC, 1)) {
 										auto& array = ram_numeric_arrays[firstArg.value];
 										ipcCheck(array.size());
 										double total = 0;
@@ -9103,9 +8860,9 @@ const int VERSION_PATCH = 0;
 									std::vector<ByteCode> args {};
 									args.reserve(8);
 									args.emplace_back(firstArg);
-									if (secondArg.type != VOID) {
+									if (secondArg.type != CODE_VOID) {
 										args.emplace_back(secondArg);
-										for (ByteCode c; (c = nextCode()).type != VOID;) {
+										for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 											args.emplace_back(c);
 										}
 									}
@@ -9142,10 +8899,10 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(total, dst);
 								}break;
-								case MED: {
+								case OP_MED: {
 									ByteCode dst = nextCode();
 									std::vector<ByteCode> args {};
-									for (ByteCode c; (c = nextCode()).type != VOID;) {
+									for (ByteCode c; (c = nextCode()).type != CODE_VOID;) {
 										args.emplace_back(c);
 									}
 									if (!IsVar(dst)) throw RuntimeError("Invalid operation");
@@ -9179,18 +8936,18 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(med, dst);
 								}break;
-								case SBS: {// REF_DST REF_SRC REF_START REF_LENGTH
+								case OP_SBS: {// REF_DST REF_SRC REF_START REF_LENGTH
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									const std::string& text = MemGetText(src);
 									int start = (int)std::round(MemGetNumeric(a));
-									int len = b.type != VOID? (int)std::round(MemGetNumeric(b)) : int(utf8length(text)-start);
+									int len = b.type != CODE_VOID? (int)std::round(MemGetNumeric(b)) : int(utf8length(text)-start);
 									// if (!IsText(dst)) throw RuntimeError("Invalid operation");
 									MemSet(utf8substr(text, start, len), dst);
 								}break;
-								case IDX: {// REF_DST REF_ARR|REF_TEXT ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY
+								case OP_IDX: {// REF_DST REF_ARR|REF_TEXT ARRAY_INDEX|OBJ_KEY ifindexnone[REF_NUM]|REF_KEY
 									ByteCode dst = nextCode();
 									ByteCode arr = nextCode();
 									ByteCode idx = nextCode();
@@ -9309,9 +9066,9 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
-								case JMP: {// ADDR
+								case OP_JMP: {// CODE_ADDR
 									ByteCode addr = nextCode();
-									if (__builtin_expect(addr.type != ADDR, 0)) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addr.type != CODE_ADDR, 0)) throw RuntimeError("Invalid address");
 									recursion_depth++;
 									ipcCheck(recursion_depth * 2);
 									if (__builtin_expect(recursion_depth > XC_MAX_CALL_DEPTH, 0)) {
@@ -9321,17 +9078,17 @@ const int VERSION_PATCH = 0;
 									assert(recursion_depth > 0);
 									recursion_depth--;
 								}break;
-								case GTO: {
+								case OP_GTO: {
 									ByteCode addr = nextCode();
-									if (__builtin_expect(addr.type != ADDR, 0)) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addr.type != CODE_ADDR, 0)) throw RuntimeError("Invalid address");
 									index = addr.value;
 									continue;
 								}break;
-								case CND: {// ADDR_TRUE ADDR_FALSE REF_BOOL
+								case OP_CND: {// ADDR_TRUE ADDR_FALSE REF_BOOL
 									ByteCode addrTrue = nextCode();
 									ByteCode addrFalse = nextCode();
 									ByteCode ref = nextCode();
-									if (__builtin_expect(addrTrue.type != ADDR || addrFalse.type != ADDR, 0)) throw RuntimeError("Invalid address");
+									if (__builtin_expect(addrTrue.type != CODE_ADDR || addrFalse.type != CODE_ADDR, 0)) throw RuntimeError("Invalid address");
 									bool val;
 									// Fast path for numeric comparison (most common)
 									if (__builtin_expect(ref.type == RAM_VAR_NUMERIC, 1)) {
@@ -9347,7 +9104,7 @@ const int VERSION_PATCH = 0;
 									index = val? addrTrue.value : addrFalse.value;
 									continue;
 								}break;
-								case KEY: {// REF_DST REF_OBJ REF_OFFSET
+								case OP_KEY: {// REF_DST REF_OBJ REF_OFFSET
 									ByteCode dst = nextCode();
 									const std::string& obj = MemGetText(nextCode());
 									ByteCode offset = nextCode();
@@ -9379,7 +9136,7 @@ const int VERSION_PATCH = 0;
 										}
 									}
 								}break;
-								case STR: {
+								case OP_STR: {
 									uint32_t addr = nextCode().rawValue;
 									uint32_t len = nextCode().rawValue;
 									uint32_t type = nextCode().type;
@@ -9430,7 +9187,7 @@ const int VERSION_PATCH = 0;
 										 throw RuntimeError("TODO this type for self recursion");
 									}
 								}break;
-								case RST: {
+								case OP_RST: {
 									uint32_t addr = nextCode().rawValue;
 									uint32_t len = nextCode().rawValue;
 									uint32_t type = nextCode().type;
@@ -9469,7 +9226,7 @@ const int VERSION_PATCH = 0;
 										 throw RuntimeError("TODO this type for self recursion");
 									}
 								} break;
-								case HSH: {// REF_DST REF_SRC
+								case OP_HSH: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsNumeric(dst) && IsText(val)) {
@@ -9477,7 +9234,7 @@ const int VERSION_PATCH = 0;
 										MemSet((double)((int64_t)(std::hash<std::string>{}(str)) & ((1ll<<53)-1)), dst);
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
-								case UPP: {// REF_DST REF_SRC
+								case OP_UPP: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(dst) && IsText(val)) {
@@ -9497,7 +9254,7 @@ const int VERSION_PATCH = 0;
 										}
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
-								case LCC: {// REF_DST REF_SRC
+								case OP_LCC: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(dst) && IsText(val)) {
@@ -9517,7 +9274,7 @@ const int VERSION_PATCH = 0;
 										}
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
-								case ISN: {// REF_DST REF_SRC
+								case OP_ISN: {// REF_DST REF_SRC
 									ByteCode dst = nextCode();
 									ByteCode val = nextCode();
 									if (IsText(val)) {
@@ -9531,7 +9288,7 @@ const int VERSION_PATCH = 0;
 										MemSet(isNum, dst);
 									} else throw RuntimeError("Invalid text operation on non-text values");
 								}break;
-								case IFF: { // REF_DST REF_BOOL REF_TRUE REF_FALSE
+								case OP_IFF: { // REF_DST REF_BOOL REF_TRUE REF_FALSE
 									ByteCode dst = nextCode();
 									ByteCode cond = nextCode();
 									ByteCode valTrue = nextCode();
@@ -9547,65 +9304,65 @@ const int VERSION_PATCH = 0;
 									}
 								}break;
 								// Matrix operations
-								case MAS: { // Matrix assign (bulk copy)
+								case OP_MAS: { // Matrix assign (bulk copy)
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* s = &ram_numeric[src.value];
 									std::memmove(d, s, count * sizeof(double));
 								} break;
-								case MAD: { // Matrix add (element-wise)
+								case OP_MAD: { // Matrix add (element-wise)
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] + bp[i];
 								} break;
-								case MSB: { // Matrix sub (element-wise)
+								case OP_MSB: { // Matrix sub (element-wise)
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] - bp[i];
 								} break;
-								case MEW: { // Matrix element-wise multiply
+								case OP_MEW: { // Matrix element-wise multiply
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * bp[i];
 								} break;
-								case MMS: { // Matrix * scalar
+								case OP_MMS: { // Matrix * scalar
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode scalarRef = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									double s = MemGetNumeric(scalarRef);
 									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * s;
 								} break;
-								case MDS: { // Matrix / scalar
+								case OP_MDS: { // Matrix / scalar
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode scalarRef = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									double s = MemGetNumeric(scalarRef);
@@ -9613,14 +9370,14 @@ const int VERSION_PATCH = 0;
 									double inv = 1.0 / s;
 									for (uint32_t i = 0; i < count; i++) d[i] = ap[i] * inv;
 								} break;
-								case MMM: { // Matrix multiply
+								case OP_MMM: { // Matrix multiply
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									uint32_t aRows = nextCode().value;
 									uint32_t aCols = nextCode().value;
 									ByteCode b = nextCode();
 									uint32_t bCols = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
@@ -9632,43 +9389,43 @@ const int VERSION_PATCH = 0;
 											d[i * bCols + j] = sum;
 										}
 								} break;
-								case MNM: { // Normalize in-place
+								case OP_MNM: { // Normalize in-place
 									ByteCode base = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* p = &ram_numeric[base.value];
 									double len = 0;
 									for (uint32_t i = 0; i < count; i++) len += p[i] * p[i];
 									len = std::sqrt(len);
 									if (len > 0) { double inv = 1.0 / len; for (uint32_t i = 0; i < count; i++) p[i] *= inv; }
 								} break;
-								case MLN: { // Length -> scalar
+								case OP_MLN: { // Length -> scalar
 									ByteCode dst = nextCode();
 									ByteCode base = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* p = &ram_numeric[base.value];
 									double len = 0;
 									for (uint32_t i = 0; i < count; i++) len += p[i] * p[i];
 									MemSet(std::sqrt(len), dst);
 								} break;
-								case MDT: { // Dot product -> scalar
+								case OP_MDT: { // Dot product -> scalar
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									double dot = 0;
 									for (uint32_t i = 0; i < count; i++) dot += ap[i] * bp[i];
 									MemSet(dot, dst);
 								} break;
-								case MCR: { // Cross product (3-element)
+								case OP_MCR: { // Cross product (3-element)
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									double r[3];
@@ -9678,20 +9435,20 @@ const int VERSION_PATCH = 0;
 									double* d = &ram_numeric[dst.value];
 									d[0] = r[0]; d[1] = r[1]; d[2] = r[2];
 								} break;
-								case MTR: { // Transpose in-place (square)
+								case OP_MTR: { // Transpose in-place (square)
 									ByteCode base = nextCode();
 									uint32_t size = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* p = &ram_numeric[base.value];
 									for (uint32_t i = 0; i < size; i++)
 										for (uint32_t j = i+1; j < size; j++)
 											std::swap(p[i*size+j], p[j*size+i]);
 								} break;
-								case MDE: { // Determinant -> scalar
+								case OP_MDE: { // Determinant -> scalar
 									ByteCode dst = nextCode();
 									ByteCode base = nextCode();
 									uint32_t size = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* m = &ram_numeric[base.value];
 									double det = 0;
 									switch(size) {
@@ -9717,10 +9474,10 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(det, dst);
 								} break;
-								case MIV: { // Inverse in-place (square)
+								case OP_MIV: { // Inverse in-place (square)
 									ByteCode base = nextCode();
 									uint32_t size = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* m = &ram_numeric[base.value];
 									if (size == 2) {
 										double det = m[0]*m[3] - m[1]*m[2];
@@ -9776,21 +9533,21 @@ const int VERSION_PATCH = 0;
 									}
 								} break;
 
-								case MID: { // Identity in-place (square)
+								case OP_MID: { // Identity in-place (square)
 									ByteCode base = nextCode();
 									uint32_t size = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* m = &ram_numeric[base.value];
 									std::memset(m, 0, size * size * sizeof(double));
 									for (uint32_t i = 0; i < size; i++)
 										m[i * size + i] = 1.0;
 								} break;
-								case MDI: { // Distance -> scalar
+								case OP_MDI: { // Distance -> scalar
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									double sum = 0;
@@ -9800,12 +9557,12 @@ const int VERSION_PATCH = 0;
 									}
 									MemSet(std::sqrt(sum), dst);
 								} break;
-								case MAN: { // Angle -> scalar (radians)
+								case OP_MAN: { // Angle -> scalar (radians)
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
 									double dotProd = 0, lenA = 0, lenB = 0;
@@ -9820,13 +9577,13 @@ const int VERSION_PATCH = 0;
 									cosAngle = std::max(-1.0, std::min(1.0, cosAngle)); // clamp for numerical stability
 									MemSet(std::acos(cosAngle), dst);
 								} break;
-								case MLP: { // Lerp (element-wise)
+								case OP_MLP: { // Lerp (element-wise)
 									ByteCode dst = nextCode();
 									ByteCode a = nextCode();
 									ByteCode b = nextCode();
 									ByteCode tRef = nextCode();
 									uint32_t count = nextCode().value;
-									nextCode(); // VOID
+									nextCode(); // CODE_VOID
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
@@ -9835,7 +9592,7 @@ const int VERSION_PATCH = 0;
 										d[i] = ap[i] + (bp[i] - ap[i]) * t;
 								} break;
 
-								case RPL: { // REF_DST REF_SRC REF_OLD REF_NEW [REF_COUNT]
+								case OP_RPL: { // REF_DST REF_SRC REF_OLD REF_NEW [REF_COUNT]
 									ByteCode dst = nextCode();
 									ByteCode src = nextCode();
 									ByteCode oldVal = nextCode();
@@ -9849,7 +9606,7 @@ const int VERSION_PATCH = 0;
 									if (!IsText(dst)) throw RuntimeError("Invalid operation");
 
 									int count = -1;
-									if (countVal.type != VOID) {
+									if (countVal.type != CODE_VOID) {
 										count = int(std::round(MemGetNumeric(countVal)));
 										if (count == 0) {
 											MemSet(text, dst);
@@ -9898,3 +9655,8 @@ const int VERSION_PATCH = 0;
 	}
 
 #endif
+
+// Clean up macros to avoid polluting the global namespace
+#undef DEF_OP
+#undef ARRAY_INDEX_NONE
+#undef EPSILON_DOUBLE
