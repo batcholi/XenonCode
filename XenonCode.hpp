@@ -2702,6 +2702,7 @@ const int VERSION_PATCH = 0;
 		uint32_t programSize = 0; // number of byte codes in the program code (uint32_t)
 		std::vector<std::string> storageRefs {}; // storage references (addr)
 		std::unordered_map<std::string, uint32_t> functionRefs {}; // function references (addr)
+		std::unordered_map<std::string, ByteCode> debugSymbols {}; // variable name → RAM location (for IDE debug tooltips)
 		std::vector<TimerFunction> timers {};
 		std::map<uint32_t, InputFunction> inputs {};
 		std::vector<EntryPoint> entryPoints {};
@@ -2897,6 +2898,8 @@ const int VERSION_PATCH = 0;
 				ByteCode byteCode{uint8_t(type), index};
 				if (name != "") {
 					userVars[currentFunctionName][currentStackId].emplace(name, byteCode);
+					if (!debugSymbols.contains(name))
+						debugSymbols[name] = byteCode;
 				}
 				return byteCode;
 			};
@@ -6048,6 +6051,18 @@ const int VERSION_PATCH = 0;
 			// Write program bytecode
 			assert(rom_program.size() == programSize);
 			s.write((char*)rom_program.data(), programSize * sizeof(uint32_t));
+			
+			// Write debug symbols with magic marker
+			uint32_t debugMagic = 0xDB650000;
+			s.write((char*)&debugMagic, sizeof(debugMagic));
+			uint32_t numSymbols = (uint32_t)debugSymbols.size();
+			s.write((char*)&numSymbols, sizeof(numSymbols));
+			for (auto& [name, bc] : debugSymbols) {
+				uint32_t nameLen = (uint32_t)name.size();
+				s.write((char*)&nameLen, sizeof(nameLen));
+				s.write(name.data(), nameLen);
+				s.write((char*)&bc.rawValue, sizeof(bc.rawValue));
+			}
 		}
 
 	private:
@@ -6206,6 +6221,23 @@ const int VERSION_PATCH = 0;
 
 			// Read program bytecode
 			s.read((char*)rom_program.data(), programSize * sizeof(uint32_t));
+			
+			// Read debug symbols (optional, validated by magic marker)
+			uint32_t debugMagic = 0;
+			if (s.peek() != EOF && s.read((char*)&debugMagic, sizeof(debugMagic)) && debugMagic == 0xDB650000) {
+				uint32_t numSymbols = 0;
+				if (s.read((char*)&numSymbols, sizeof(numSymbols)) && numSymbols < 100000) {
+					for (uint32_t i = 0; i < numSymbols && s.good(); i++) {
+						uint32_t nameLen = 0;
+						if (!s.read((char*)&nameLen, sizeof(nameLen)) || nameLen > 1000) break;
+						std::string name(nameLen, 0);
+						if (!s.read(name.data(), nameLen)) break;
+						uint32_t rawValue = 0;
+						if (!s.read((char*)&rawValue, sizeof(rawValue))) break;
+						debugSymbols[name] = ByteCode(rawValue);
+					}
+				}
+			}
 		}
 	};
 
@@ -6263,7 +6295,36 @@ const int VERSION_PATCH = 0;
 		bool storageDirty = false;
 		
 		bool IsLoaded() const {return assembly;}
-		
+		const Assembly* GetAssembly() const {return assembly;}
+
+		// Debug: read a variable value by its ByteCode location
+		struct DebugVarValue {
+			uint8_t type = 0; // ByteCode type
+			double numericValue = 0;
+			std::string textValue;
+			std::vector<double> numericArray;
+			std::vector<std::string> textArray;
+			bool found = false;
+		};
+		DebugVarValue ReadDebugVar(const std::string& varName) const {
+			DebugVarValue result;
+			if (!assembly || !assembly->debugSymbols.contains(varName)) return result;
+			auto& bc = assembly->debugSymbols.at(varName);
+			result.type = bc.type;
+			result.found = true;
+			if (bc.type == RAM_VAR_NUMERIC && bc.value < ram_numeric.size())
+				result.numericValue = ram_numeric[bc.value];
+			else if (bc.type == RAM_VAR_TEXT && bc.value < ram_text.size())
+				result.textValue = ram_text[bc.value];
+			else if (bc.type == RAM_ARRAY_NUMERIC && bc.value < ram_numeric_arrays.size())
+				result.numericArray = ram_numeric_arrays[bc.value];
+			else if (bc.type == RAM_ARRAY_TEXT && bc.value < ram_text_arrays.size())
+				result.textArray = ram_text_arrays[bc.value];
+			else
+				result.found = false;
+			return result;
+		}
+
 		Computer() {}
 		virtual ~Computer() {
 			ClearAssemly();
