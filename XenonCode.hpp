@@ -2608,6 +2608,85 @@ const int VERSION_PATCH = 0;
 		return OP_DEV;
 	}
 
+	// Built-in functions that may be called as a trailing function on an array or text receiver inside an expression (e.g. var $i = $arr.find($value)).
+	// They are non-mutating: the receiver is only read, the result goes into a fresh temporary, so the usual "trailing call mutates the receiver" rule doesn't apply.
+	inline static bool IsNonMutatingTrailingBuiltin(const std::string& func) {
+		return func == "find" || func == "contains";
+	}
+
+	// Enumerable list of all built-in language functions with name, signature detail, return type, call form, and applicable receiver types.
+	enum CallForm : uint8_t {
+		CALL_STANDALONE          = 1 << 0, // Can be called as a top-level statement: func(args)
+		CALL_EXPRESSION          = 1 << 1, // Can be used inside an expression: ... = func(args) ...
+		CALL_TRAILING            = 1 << 2, // Can be called as a trailing function: $var.func(args) or no-parens accessor $var.func
+		CALL_TRAILING_ARRAY_ONLY = 1 << 3, // When set with CALL_TRAILING, the trailing form is meaningful only on an array; on a text variable the no-parens form is consumed by the key-value access syntax
+		CALL_ALL                 = CALL_STANDALONE | CALL_EXPRESSION | CALL_TRAILING,
+	};
+	// Receiver types this function can sensibly be called on, used by editors to filter autocomplete suggestions.
+	// For trailing forms ($var.func(args)), this describes the type of $var. For expression forms (func(args)), this describes the type of the first argument.
+	enum AppliesTo : uint8_t {
+		APPLIES_NUMBER = 1 << 0,
+		APPLIES_TEXT   = 1 << 1,
+		APPLIES_ARRAY  = 1 << 2,
+		APPLIES_VECTOR = 1 << 3,
+		APPLIES_MATRIX = 1 << 4,
+		APPLIES_ANY    = 0xFF,
+	};
+	struct BuiltInFunctionDef { const char* name; const char* detail; CODE_TYPE returnType; uint8_t callForm; uint8_t appliesTo; };
+	inline static const std::vector<BuiltInFunctionDef>& GetBuiltInFunctions() {
+		static const std::vector<BuiltInFunctionDef> functions = {
+			// Math (single arg)
+			{"floor", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"ceil", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"round", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"sin", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"cos", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"tan", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"asin", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"acos", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"atan", "($y:number [, $x:number]):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"abs", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"fract", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"sqrt", "($value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"sign", "($value:number [, $default:number]):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"pow", "($value:number, $exponent:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"log", "($value:number, $base:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"mod", "($value:number, $divisor:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"clamp", "($value:number, $min:number, $max:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"step", "($edge:number, $value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"smoothstep", "($edge1:number, $edge2:number, $value:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"lerp", "($a:number, $b:number, $t:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"lerp", "($a, $b, $t:number)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING, APPLIES_VECTOR | APPLIES_MATRIX}, // overload for vector/matrix receivers, dispatched at compile time via the OP_MLP path in compileFunctionCall
+			{"min", "($a:number, $b:number, ...):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER | APPLIES_ARRAY}, {"max", "($a:number, $b:number, ...):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER | APPLIES_ARRAY},
+			// Aggregation
+			{"avg", "($a:number, $b:number, ...):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER | APPLIES_ARRAY},
+			{"med", "($array):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_ARRAY}, // array-only at runtime, unlike its variadic siblings
+			{"sum", "($a:number, $b:number, ...):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER | APPLIES_ARRAY},
+			// Binary arithmetic
+			{"add", "($a:number, $b:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"sub", "($a:number, $b:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			{"mul", "($a:number, $b:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER}, {"div", "($a:number, $b:number):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_NUMBER},
+			// Array/text introspection. size and last carry CALL_TRAILING_ARRAY_ONLY because $text.size / $text.last would be eaten by the key-value accessor syntax.
+			{"size", "($value):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING | CALL_TRAILING_ARRAY_ONLY, APPLIES_ARRAY | APPLIES_TEXT},
+			{"last", "($value)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING | CALL_TRAILING_ARRAY_ONLY, APPLIES_ARRAY | APPLIES_TEXT},
+			{"find", "($haystack, $value):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_ARRAY | APPLIES_TEXT},
+			{"contains", "($haystack, $value):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_ARRAY | APPLIES_TEXT},
+			// Array mutations (trailing-only: void return forces $arr.func() form)
+			{"clear", "($array)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY}, {"append", "($array, $value, ...)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY}, {"pop", "($array)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY},
+			{"insert", "($array, $index:number, $value, ...)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY}, {"erase", "($array, $index:number [, $end:number])", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY},
+			{"fill", "($array, $quantity:number, $value)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY}, {"from", "($array, $source [, $separator:text])", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY},
+			{"sort", "($array)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY}, {"sortd", "($array)", CODE_VOID, CALL_TRAILING, APPLIES_ARRAY},
+			// Text
+			{"text", "($format:text, $vars...):text", RAM_VAR_TEXT, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT},
+			{"substring", "($text:text, $start:number, $length:number):text", RAM_VAR_TEXT, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT},
+			{"replace", "($text:text, $search:text, $replace:text [, $count:number]):text", RAM_VAR_TEXT, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT},
+			{"upper", "($text:text):text", RAM_VAR_TEXT, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT}, {"lower", "($text:text):text", RAM_VAR_TEXT, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT},
+			{"hash", "($text:text):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT}, {"isnumeric", "($text:text):number", RAM_VAR_NUMERIC, CALL_EXPRESSION | CALL_TRAILING, APPLIES_TEXT},
+			// Control (expression-only: forced by OP_IFF check in compileFunctionCall)
+			{"if", "($cond, $true, $false)", CODE_VOID, CALL_EXPRESSION, APPLIES_ANY},
+			// Vector/matrix returning a scalar (handled via special branches in compileFunctionCall, no trailing form)
+			{"length", "($v):number", RAM_VAR_NUMERIC, CALL_EXPRESSION, APPLIES_VECTOR | APPLIES_MATRIX}, {"distance", "($a, $b):number", RAM_VAR_NUMERIC, CALL_EXPRESSION, APPLIES_VECTOR | APPLIES_MATRIX},
+			{"dot", "($a, $b):number", RAM_VAR_NUMERIC, CALL_EXPRESSION, APPLIES_VECTOR | APPLIES_MATRIX}, {"angle", "($a, $b):number", RAM_VAR_NUMERIC, CALL_EXPRESSION, APPLIES_VECTOR | APPLIES_MATRIX},
+			{"determinant", "($m):number", RAM_VAR_NUMERIC, CALL_EXPRESSION, APPLIES_MATRIX},
+			// Vector/matrix mutators (special trailing path in compileFunctionCall)
+			{"cross", "($a, $b)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING, APPLIES_VECTOR},
+			{"normalize", "($v)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING, APPLIES_VECTOR | APPLIES_MATRIX}, {"transpose", "($m)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING, APPLIES_MATRIX}, {"inverse", "($m)", CODE_VOID, CALL_EXPRESSION | CALL_TRAILING, APPLIES_MATRIX},
+		};
+		return functions;
+	}
+
 	// Is non-const non-array assignable var
 	inline static bool IsVar(ByteCode v) {
 		switch (v.type) {
@@ -3368,6 +3447,12 @@ const int VERSION_PATCH = 0;
 					} else if (isTrailingFunction) {
 						if (retType != CODE_VOID) {
 							validate(args.size() > 0);
+							// Reject trailing-statement form when the receiver type cannot hold the function's return value.
+							// For example, $arr.sum() would compile as $arr = sum($arr), writing a number to an array slot, which crashes at runtime.
+							// The user should instead write `var $x = $arr.sum` (no-parens accessor) or assign the result explicitly.
+							if (IsArray(args[0]) && (retType == RAM_VAR_NUMERIC || retType == RAM_VAR_TEXT)) {
+								throw CompileError("Cannot use trailing-statement form of", funcName, "on an array; use the no-parens accessor (e.g. $arr.size) or assign the result (e.g. var $x = $arr." + funcName + ")");
+							}
 							write(args[0]);
 						}
 					} else if (retType != CODE_VOID) {
@@ -3870,8 +3955,11 @@ const int VERSION_PATCH = 0;
 								validate(IsArray(ref1) || IsText(ref1) || IsObject(ref1));
 								lastExprMatrixInfo = {};
 								return compileFunctionCall(operand, {ref1}, true, true);
-							} else if (IsObject(ref1)) { // trailing function call, in an expression, on an object
+							} else if (IsObject(ref1) || IsNonMutatingTrailingBuiltin(std::string(operand))) { // trailing function call, in an expression, on an object or on an array/text for non-mutating built-ins like find/contains
 								validate(words[opIndex+2] == Word::ExpressionBegin);
+								if (!IsObject(ref1)) {
+									validate(IsArray(ref1) || IsText(ref1));
+								}
 								std::vector<ByteCode> args {};
 								args.push_back(ref1);
 								int argBegin = opIndex+3;
