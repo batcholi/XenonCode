@@ -3485,6 +3485,10 @@ const int VERSION_PATCH = 0;
 					}
 					
 					write(CODE_VOID);
+					// Generic built-in functions never return a matrix (matrix-returning built-ins
+					// return earlier), so the result is scalar/text/object. Clear the matrix info so
+					// it stays authoritative for the surrounding expression.
+					lastExprMatrixInfo = {};
 					return ret;
 				} else {
 					throw CompileError("Invalid function name");
@@ -3755,8 +3759,12 @@ const int VERSION_PATCH = 0;
 					}break;
 					case Word::Varname:{
 						ref1 = getVar(word1);
+						// Set the matrix info for ref1 even when an operator follows, so that operand
+						// type detection can rely on lastExprMatrixInfo rather than a slot lookup. A
+						// scalar element of a matrix (e.g. $m.0.x) aliases the matrix's base slot, so
+						// getMatrixInfoBySlot() cannot distinguish it from the whole matrix.
+						lastExprMatrixInfo = getMatrixInfoBySlot(ref1);
 						if (startIndex == endIndex) {
-							lastExprMatrixInfo = getMatrixInfoBySlot(ref1);
 							return ref1;
 						}
 					}break;
@@ -4061,7 +4069,12 @@ const int VERSION_PATCH = 0;
 							validate(false);
 						}
 					} else {
+						// Capture ref1's matrix info before compiling ref2 (which overwrites
+						// lastExprMatrixInfo). lastExprMatrixInfo is authoritative here, unlike a slot
+						// lookup: a scalar matrix element (e.g. $m.0.x) aliases the matrix's base slot.
+						MatrixInfo mat1Info = lastExprMatrixInfo;
 						ByteCode ref2 = compileExpression(words, opIndex+1, endIndex);
+						MatrixInfo mat2Info = lastExprMatrixInfo;
 						
 						// Compile operation
 						if (op == Word::NotOperator) {
@@ -4090,8 +4103,8 @@ const int VERSION_PATCH = 0;
 							write(CODE_VOID);
 							return tmp;
 						} else if (op == Word::MulOperatorGroup) {
-							MatrixInfo mat1 = getMatrixInfoBySlot(ref1);
-							MatrixInfo mat2 = getMatrixInfoBySlot(ref2);
+							MatrixInfo mat1 = mat1Info;
+							MatrixInfo mat2 = mat2Info;
 							if (op == "*" && mat1 && mat2) {
 								// Matrix * Matrix: matmul if compatible, element-wise if same dims
 								if (mat1.cols == mat2.rows || (mat1.isVector() && mat2.isVector() && mat1.count() == mat2.count())) {
@@ -4169,8 +4182,8 @@ const int VERSION_PATCH = 0;
 								return tmp;
 							}
 						} else if (op == Word::AddOperatorGroup) {
-							MatrixInfo mat1 = getMatrixInfoBySlot(ref1);
-							MatrixInfo mat2 = getMatrixInfoBySlot(ref2);
+							MatrixInfo mat1 = mat1Info;
+							MatrixInfo mat2 = mat2Info;
 							if (mat1 && mat2 && mat1.count() == mat2.count()) {
 								ByteCode tmp = declareTmpMatrix(mat1.rows, mat1.cols);
 								lastExprMatrixInfo = getMatrixInfoBySlot(tmp);

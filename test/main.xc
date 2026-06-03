@@ -830,6 +830,30 @@ function @RunUnitTests()
 	$results.append($l0r.x)
 	$results.append($l0r.y)
 
+	; test 76 - scalar matrix/vector elements inside arithmetic expressions
+	; (element [r][0] aliases the matrix's base slot; must be treated as scalar, not as a matrix)
+	var $em : mat3x3
+	$em.0.x = 5
+	$em.0.y = 3
+	$em.1.x = 10
+	$em.1.y = 4
+	var $ed : number
+	$ed = $em.0.x - $em.0.y
+	$results.append($ed)
+	$ed = $em.0.x + $em.0.y
+	$results.append($ed)
+	$ed = $em.1.x - $em.1.y
+	$results.append($ed)
+	$ed = $em.0.x * $em.0.y
+	$results.append($ed)
+	$ed = $em.0.x - $em.1.y
+	$results.append($ed)
+	var $ev : vec3
+	$ev.x = 7
+	$ev.y = 2
+	$ed = $ev.x - $ev.y
+	$results.append($ed)
+
 init
 	output.0 ("Hello, World!")
 	
