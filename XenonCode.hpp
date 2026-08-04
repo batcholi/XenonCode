@@ -999,10 +999,12 @@ const int VERSION_PATCH = 0;
 										--opIndex;
 										if (endIndex != -1) --endIndex;
 									} else {
-										words.insert(words.begin() + nextPos + 1, Word::ExpressionEnd);
-										words.insert(words.begin() + opIndex, Word::Numeric);
+										// Negation is rewritten as a multiplication by -1 so that it also works on vectors and matrices
+										words.erase(words.begin() + opIndex);
+										words.insert(words.begin() + nextPos, Word{Word::MulOperatorGroup, "*"});
+										words.insert(words.begin() + nextPos + 1, Word{Word::Numeric, "-1"});
+										words.insert(words.begin() + nextPos + 2, Word::ExpressionEnd);
 										words.insert(words.begin() + opIndex, Word::ExpressionBegin);
-										opIndex += 2;
 										if (endIndex != -1) endIndex += 3;
 									}
 								} else if (word == "+") {
@@ -4196,8 +4198,10 @@ const int VERSION_PATCH = 0;
 								write({CODE_INTEGER, mat1.count()});
 								write(CODE_VOID);
 								return tmp;
-							} else if (mat1 || mat2) {
+							} else if (mat1 && mat2) {
 								throw CompileError("Cannot add/subtract matrices of different dimensions");
+							} else if (mat1 || mat2) {
+								throw CompileError("Cannot add/subtract a matrix and a scalar");
 							}
 							if (op == "+") {
 								write(OP_ADD);
