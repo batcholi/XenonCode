@@ -854,6 +854,85 @@ function @RunUnitTests()
 	$ed = $ev.x - $ev.y
 	$results.append($ed)
 
+	; test 77 - unary minus on vectors
+	var $um : vec3
+	$um.x = 1
+	$um.y = -2
+	$um.z = 3
+	var $umn : vec3
+	$umn = -$um
+	$results.append($umn.x)
+	$results.append($umn.y)
+	$results.append($umn.z)
+	; the operand must not be modified
+	$results.append($um.x)
+	$results.append($um.y)
+	$results.append($um.z)
+
+	; test 78 - unary minus on matrices
+	var $umm : mat2x2
+	$umm.0.x = 1
+	$umm.0.y = 2
+	$umm.1.x = 3
+	$umm.1.y = 4
+	var $ummn : mat2x2
+	$ummn = -$umm
+	$results.append($ummn.0.x)
+	$results.append($ummn.0.y)
+	$results.append($ummn.1.x)
+	$results.append($ummn.1.y)
+
+	; test 79 - unary minus on vectors within larger expressions
+	var $ua : vec3
+	$ua.x = 1
+	$ua.y = 2
+	$ua.z = 3
+	var $ub : vec3
+	$ub.x = 10
+	$ub.y = 20
+	$ub.z = 30
+	var $ur : vec3
+	; addition with a negated operand
+	$ur = $ub + -$ua
+	$results.append($ur.x)
+	$results.append($ur.y)
+	$results.append($ur.z)
+	; negation followed by a scalar multiply
+	$ur = -$ua * 2
+	$results.append($ur.x)
+	$results.append($ur.y)
+	$results.append($ur.z)
+	; negation of a parenthesized vector expression
+	$ur = -($ua + $ub)
+	$results.append($ur.x)
+	$results.append($ur.y)
+	$results.append($ur.z)
+	; negation of a swizzle
+	var $un2 : vec2
+	$un2 = -$ub.xy
+	$results.append($un2.x)
+	$results.append($un2.y)
+	; negation of a function call returning a vector
+	var $ca : vec3
+	$ca.x = 1
+	$ca.y = 2
+	$ca.z = 3
+	var $cb : vec3
+	$cb.x = 4
+	$cb.y = 5
+	$cb.z = 6
+	$ur = -cross($ca, $cb)
+	$results.append($ur.x)
+	$results.append($ur.y)
+	$results.append($ur.z)
+
+	; test 80 - unary minus on a scalar matrix element, and on a negated matrix's element
+	var $un : number
+	$un = -$um.x
+	$results.append($un)
+	$un = -$umm.1.y
+	$results.append($un)
+
 init
 	output.0 ("Hello, World!")
 	
