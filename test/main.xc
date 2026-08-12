@@ -3,6 +3,7 @@ var $someVar = 16
 var $constVar = number_one
 array $someArray:number
 array $mem: number
+array $splitArray:text
 
 const $smallconst = 10^-10
 const $pi_const = pi
@@ -979,6 +980,20 @@ function @RunUnitTests()
 	$results.append($mm.y.x)
 	$mm.1.1 += 10
 	$results.append($mm.1.1)
+
+	; test 84 - text to array split must not split within KV objects
+	$splitArray.from(".s{IDLE}.c{.n{2},.m{3}},.s{BUSY}", ",")
+	$results.append($splitArray.size)
+	$results.append($splitArray.0)
+	$results.append($splitArray.1)
+	; plain splitting is unchanged
+	$splitArray.from("a,,b", ",")
+	$results.append($splitArray.size)
+	; splitting on a brace separator remains as before
+	$splitArray.from(".k{v}", "{")
+	$results.append($splitArray.size)
+	$results.append($splitArray.0)
+	$results.append($splitArray.1)
 
 init
 	output.0 ("Hello, World!")

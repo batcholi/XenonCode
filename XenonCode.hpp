@@ -8542,6 +8542,37 @@ const int VERSION_PATCH = 0;
 									if (!IsArray(arr) && !IsText(arr)) throw RuntimeError("Not an array or text");
 									auto fillArray = [&](auto& dst){
 										dst.clear();
+										// Split on separator, skipping separators found within KV objects so that nested {} blocks are kept intact
+										auto splitText = [&](auto& out, std::string str){
+											if (separator.find_first_of("{}") == std::string::npos && str.find('{') != std::string::npos) {
+												size_t start = 0;
+												int exprStack = 0;
+												for (size_t i = 0; i < str.length(); ++i) {
+													if (str[i] == '{') ++exprStack;
+													else if (str[i] == '}') {
+														if (exprStack > 0) --exprStack;
+													} else if (exprStack == 0 && str.compare(i, separator.length(), separator) == 0) {
+														ArrayInsertAuto(out, str.substr(start, i - start));
+														i += separator.length() - 1;
+														start = i + 1;
+													}
+												}
+												if (start < str.length()) {
+													ArrayInsertAuto(out, str.substr(start));
+												}
+											} else {
+												while (str != "") {
+													auto pos = str.find(separator);
+													if (pos == std::string::npos) {
+														ArrayInsertAuto(out, str);
+														break;
+													} else {
+														ArrayInsertAuto(out, str.substr(0, pos));
+														str = str.substr(pos + separator.length());
+													}
+												}
+											}
+										};
 										if (IsStorage(val)) {
 											auto& otherArray = GetStorage(val);
 											if (IsArray(val)) {
@@ -8555,17 +8586,7 @@ const int VERSION_PATCH = 0;
 													ArrayInsertAuto(dst, utf8substr(otherArray[0], i, 1));
 												}
 											} else {
-												std::string str = otherArray[0];
-												while (str != "") {
-													auto pos = str.find(separator);
-													if (pos == std::string::npos) {
-														ArrayInsertAuto(dst, str);
-														break;
-													} else {
-														ArrayInsertAuto(dst, str.substr(0, pos));
-														str = str.substr(pos + separator.length());
-													}
-												}
+												splitText(dst, otherArray[0]);
 											}
 										}
 										else if (IsArray(val)) {
@@ -8600,16 +8621,7 @@ const int VERSION_PATCH = 0;
 													ArrayInsertAuto(dst, utf8substr(str, i, 1));
 												}
 											} else {
-												while (str != "") {
-													auto pos = str.find(separator);
-													if (pos == std::string::npos) {
-														ArrayInsertAuto(dst, str);
-														break;
-													} else {
-														ArrayInsertAuto(dst, str.substr(0, pos));
-														str = str.substr(pos + separator.length());
-													}
-												}
+												splitText(dst, std::move(str));
 											}
 										}
 										else throw RuntimeError("Invalid operation");
