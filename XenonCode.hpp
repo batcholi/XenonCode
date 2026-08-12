@@ -5057,6 +5057,7 @@ const int VERSION_PATCH = 0;
 											enum class Kind {
 												ArrayIndexLiteral,
 												ArrayIndexVar,
+												ArrayIndexLast,
 												KeyConst,
 												KeyVar
 											} kind;
@@ -5073,13 +5074,21 @@ const int VERSION_PATCH = 0;
 												Word word = line.words[i];
 												if (expectOperand) {
 													if (word == Word::Name) {
-														if (!IsText(current)) break;
 														if (i+1 < (int)line.words.size() && line.words[i+1] == Word::ExpressionBegin) break;
-														Accessor acc;
-														acc.kind = Accessor::Kind::KeyConst;
-														acc.ref = declareVar("", ROM_CONST_TEXT, word);
-														chain.emplace_back(acc);
-														current = ByteCode(RAM_VAR_TEXT);
+														if (word == "last" && IsArray(current)) {
+															Accessor acc;
+															acc.kind = Accessor::Kind::ArrayIndexLast;
+															chain.emplace_back(acc);
+															current = ByteCode(GetRamVarType(current.type));
+														} else if (IsText(current)) {
+															Accessor acc;
+															acc.kind = Accessor::Kind::KeyConst;
+															acc.ref = declareVar("", ROM_CONST_TEXT, word);
+															chain.emplace_back(acc);
+															current = ByteCode(RAM_VAR_TEXT);
+														} else {
+															break;
+														}
 														++i;
 														expectOperand = false;
 														lastProcessed = i;
@@ -5165,6 +5174,17 @@ const int VERSION_PATCH = 0;
 											ByteCode container = base;
 											for (const auto& seg : chain) {
 												validate(IsArray(container) || IsText(container));
+												ByteCode lastIndex {};
+												if (seg.kind == Accessor::Kind::ArrayIndexLast) {
+													lastIndex = declareTmpNumeric();
+													write(OP_SIZ);
+													write(lastIndex);
+													write(container);
+													write(CODE_VOID);
+													write(OP_DEC);
+													write(lastIndex);
+													write(CODE_VOID);
+												}
 												ByteCode tmp = declareVar("", GetRamVarType(container.type));
 												write(OP_IDX);
 												write(tmp);
@@ -5176,6 +5196,10 @@ const int VERSION_PATCH = 0;
 													case Accessor::Kind::ArrayIndexVar:
 														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 														write(seg.ref);
+													break;
+													case Accessor::Kind::ArrayIndexLast:
+														write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+														write(lastIndex);
 													break;
 													case Accessor::Kind::KeyConst:
 													case Accessor::Kind::KeyVar:
@@ -5191,6 +5215,17 @@ const int VERSION_PATCH = 0;
 										};
 										
 										auto assignSegment = [&](ByteCode parent, const Accessor& seg, ByteCode value){
+											ByteCode lastIndex {};
+											if (seg.kind == Accessor::Kind::ArrayIndexLast) {
+												lastIndex = declareTmpNumeric();
+												write(OP_SIZ);
+												write(lastIndex);
+												write(parent);
+												write(CODE_VOID);
+												write(OP_DEC);
+												write(lastIndex);
+												write(CODE_VOID);
+											}
 											write(OP_SET);
 											switch (seg.kind) {
 												case Accessor::Kind::ArrayIndexLiteral:
@@ -5199,6 +5234,10 @@ const int VERSION_PATCH = 0;
 												case Accessor::Kind::ArrayIndexVar:
 													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
 													write(seg.ref);
+												break;
+												case Accessor::Kind::ArrayIndexLast:
+													write({ARRAY_INDEX, ARRAY_INDEX_NONE});
+													write(lastIndex);
 												break;
 												case Accessor::Kind::KeyConst:
 												case Accessor::Kind::KeyVar:
