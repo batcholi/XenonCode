@@ -964,6 +964,22 @@ function @RunUnitTests()
 	; the other items must not be modified
 	$results.append($someArray.0)
 
+	; test 83 - matrix numeric.numeric accessors
+	var $mm : mat2x2
+	$mm.0.0 = 1
+	$mm.0.1 = 2
+	$mm.1.0 = 3
+	$mm.1.1 = 4
+	$results.append($mm.0.0)
+	$results.append($mm.0.1)
+	$results.append($mm.1.0)
+	$results.append($mm.1.1)
+	; mixed letter/number accessors must read the same elements
+	$results.append($mm.x.y)
+	$results.append($mm.y.x)
+	$mm.1.1 += 10
+	$results.append($mm.1.1)
+
 init
 	output.0 ("Hello, World!")
 	

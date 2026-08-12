@@ -689,6 +689,15 @@ const int VERSION_PATCH = 0;
 				} else if (word == Word::HashTag) {
 					return; // ignore the remaining of the line
 				} else {
+					if (word == Word::Numeric && !words.empty() && words.back() == Word::TrailOperator) {
+						// A numeric accessor is always an integer: split a decimal literal into two accessors for e.g. $m.0.0
+						auto dot = word.word.find('.');
+						if (dot != std::string::npos) {
+							words.push_back({Word::Numeric, word.word.substr(0, dot)});
+							words.push_back(Word::TrailOperator);
+							word.word = word.word.substr(dot + 1);
+						}
+					}
 					words.push_back(word);
 				}
 			}
