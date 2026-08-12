@@ -951,6 +951,19 @@ function @RunUnitTests()
 	$results.append($tf.y)
 	$results.append($tf.z)
 
+	; test 82 - assigning to array.last
+	$someArray.clear()
+	$someArray.append(7)
+	$someArray.append(9)
+	$someArray.last = 5
+	$results.append($someArray.1)
+	$someArray.last += 4
+	$results.append($someArray.1)
+	$someArray.last++
+	$results.append($someArray.1)
+	; the other items must not be modified
+	$results.append($someArray.0)
+
 init
 	output.0 ("Hello, World!")
 	
