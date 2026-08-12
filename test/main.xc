@@ -36,6 +36,9 @@ function @scaleVec($vec:vec3, $s:number):vec3
 function @doubleMat($m:mat2x2):mat2x2
 	return $m * 2
 
+function @addVec($a:vec3, $b:vec3):vec3
+	return $a + $b
+
 function @RunUnitTests()
 	
 	; Test 1
@@ -932,6 +935,21 @@ function @RunUnitTests()
 	$results.append($un)
 	$un = -$umm.1.y
 	$results.append($un)
+
+	; test 81 - trailing user functions on vectors
+	var $tf : vec3
+	$tf.x = 1
+	$tf.y = 3
+	$tf.z = -2
+	$tf.@scaleVec(2)
+	$results.append($tf.x)
+	$results.append($tf.y)
+	$results.append($tf.z)
+	; the receiver may also be passed as an argument
+	$tf.@addVec($tf)
+	$results.append($tf.x)
+	$results.append($tf.y)
+	$results.append($tf.z)
 
 init
 	output.0 ("Hello, World!")

@@ -3220,7 +3220,8 @@ const int VERSION_PATCH = 0;
 							// Check if matrix trailing function
 							MatrixInfo retMatrix = getMatrixInfoBySlot(getReturnVar(funcName));
 							MatrixInfo arg0Matrix = getMatrixInfoBySlot(args[0]);
-							if (retMatrix && arg0Matrix) {
+							if (arg0Matrix) {
+								validate(retMatrix && retMatrix.count() == arg0Matrix.count());
 								write(OP_MAS);
 								write(args[0]);
 								write(getReturnVar(funcName));
@@ -4969,7 +4970,7 @@ const int VERSION_PATCH = 0;
 												if (nextOp == "!!") write(resolved);
 												write(resolved);
 												write(CODE_VOID);
-											} else if (nextOp == Word::TrailOperator || (nextOp == Word::Name && curMatrix)) {
+											} else if (nextOp == Word::TrailOperator || ((nextOp == Word::Name || nextOp == Word::Funcname) && curMatrix)) {
 												// Trailing function on matrix or component
 												Word funcName = (nextOp == Word::TrailOperator) ? readWord() : nextOp;
 												// Collect args
@@ -4992,7 +4993,11 @@ const int VERSION_PATCH = 0;
 												}
 												// Handle matrix trailing functions
 												MatrixInfo resolvedMatrix = curMatrix ? curMatrix : getMatrixInfoBySlot(resolved);
-												if (resolvedMatrix && funcName == "normalize") {
+												if (funcName == Word::Funcname) {
+													// User-defined trailing function, assigns its return value to the receiver
+													validate(getMatrixInfoBySlot(resolved).count() == resolvedMatrix.count()); // matrix row views not supported here
+													compileFunctionCall(funcName, args, false, true);
+												} else if (resolvedMatrix && funcName == "normalize") {
 													write(OP_MNM);
 													write(resolved);
 													write({CODE_INTEGER, resolvedMatrix.count()});
