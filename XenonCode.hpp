@@ -17,6 +17,8 @@
 #include <functional>
 #include <cstring>
 #include <utility>
+#include <type_traits>
+#include <optional>
 
 #ifndef XC_NAMESPACE
 	#define XC_NAMESPACE XenonCode
@@ -1373,17 +1375,36 @@ const int VERSION_PATCH = 0;
 		"return",
 	};
 
-	// Matrix compile-time metadata - packed into 32 bits
+	// Matrix compile-time metadata
 	struct MatrixInfo {
-		uint32_t rows : 4;       // 1-4
-		uint32_t cols : 4;       // 1-4
-		uint32_t baseIndex : 24; // index into ram_numeric (up to 16M slots)
+		uint8_t rows;           // 1-255
+		uint8_t cols;           // 1-255
+		uint32_t baseIndex;     // index into ram_numeric
 
 		uint32_t count() const { return rows * cols; }
 		bool isVector() const { return cols == 1; }
 		bool isSquare() const { return rows == cols; }
 		operator bool() const { return rows > 0; }
 	};
+
+	// Matrix multiplication always writes a separate result; inputs may alias each other.
+	inline static void MultiplyMatrixRows(double* __restrict dst, const double* a, const double* b,
+		uint32_t rows, uint32_t inner, uint32_t cols) {
+		std::fill_n(dst, rows * cols, 0.0);
+		for (uint32_t i = 0; i < rows; i++) {
+			double* row = dst + i * cols;
+			for (uint32_t k = 0; k < inner; k++) {
+				double factor = a[i * inner + k];
+				const double* source = b + k * cols;
+				for (uint32_t j = 0; j < cols; j++) row[j] += factor * source[j];
+			}
+		}
+	}
+
+	// Elimination updates distinct rows; no overlap checks are needed in the inner loop.
+	inline static void SubtractMatrixRow(double* __restrict dst, const double* src, double factor, uint32_t count) {
+		for (uint32_t i = 0; i < count; i++) dst[i] -= factor * src[i];
+	}
 
 	// Helper to map xyzw/0123 to offset 0-3, returns -1 if not a valid accessor
 	inline static int MatrixComponentOffset(const std::string& name) {
@@ -1409,36 +1430,28 @@ const int VERSION_PATCH = 0;
 
 	// Helper to check if a type string is a matrix type (vecN or matNxM)
 	inline static bool IsMatrixType(const std::string& typeStr) {
-		return (typeStr.size() == 4 && typeStr.starts_with("vec") && isdigit(typeStr[3]))
-			|| (typeStr.starts_with("mat") && typeStr.size() >= 4 && isdigit(typeStr[3]));
+		return typeStr.size() >= 4 && (typeStr.starts_with("vec") || typeStr.starts_with("mat")) && isdigit(typeStr[3]);
 	}
 
 	// Helper to parse vecN or matNxM type string
 	inline static MatrixInfo ParseMatrixType(const std::string& typeStr) {
-		MatrixInfo info{0, 0, 0};
-		if (typeStr.size() == 4 && typeStr.starts_with("vec") && isdigit(typeStr[3])) {
-			// vecN format
-			info.rows = typeStr[3] - '0';
-			info.cols = 1;
-		} else if (typeStr.starts_with("mat") && typeStr.size() >= 4 && isdigit(typeStr[3])) {
-			// matNxM or matN format
-			auto xPos = typeStr.find('x', 3);
-			if (xPos != std::string::npos && xPos + 1 < typeStr.size()) {
-				info.rows = std::stoi(typeStr.substr(3, xPos - 3));
-				info.cols = std::stoi(typeStr.substr(xPos + 1));
-			} else {
-				// matN shorthand for matNxN
-				int n = std::stoi(typeStr.substr(3));
-				info.rows = n;
-				info.cols = n;
+		if (!IsMatrixType(typeStr)) return {0, 0, 0};
+		auto dimension = [](const std::string& str) -> uint8_t {
+			unsigned n = 0;
+			for (char c : str) {
+				if (c < '0' || c > '9') throw CompileError("Invalid matrix dimension");
+				n = n * 10 + c - '0';
+				if (n > 255)
+					throw CompileError("Matrix dimensions must be between 1 and 255");
 			}
-		} else {
-			return {0, 0, 0};
-		}
-		if (info.rows < 1 || info.rows > 4 || info.cols < 1 || info.cols > 4) {
-			throw CompileError("Matrix dimensions must be between 1 and 4");
-		}
-		return info;
+			if (!n) throw CompileError("Matrix dimensions must be between 1 and 255");
+			return n;
+		};
+		if (typeStr.starts_with("vec")) return {dimension(typeStr.substr(3)), 1, 0};
+		auto xPos = typeStr.find('x', 3);
+		uint8_t rows = dimension(typeStr.substr(3, xPos == std::string::npos ? xPos : xPos - 3));
+		uint8_t cols = xPos != std::string::npos ? dimension(typeStr.substr(xPos + 1)) : rows;
+		return {rows, cols, 0};
 	}
 
 	// Upon construction, it will parse the entire line from the given string, including expressions, and may throw ParseError
@@ -3018,9 +3031,7 @@ const int VERSION_PATCH = 0;
 			auto declareMatrix = [&](const std::string& name, uint8_t rows, uint8_t cols) -> ByteCode {
 				uint32_t baseIndex = ram_numericVariables;
 				ByteCode base = declareVar(name, RAM_VAR_NUMERIC); // slot 0
-				for (int i = 1; i < rows * cols; i++) {
-					declareVar("", RAM_VAR_NUMERIC); // consecutive slots
-				}
+				ram_numericVariables += rows * cols - 1; // consecutive slots
 				MatrixInfo info{rows, cols, baseIndex};
 				std::string key = currentFunctionName + "." + std::to_string(currentStackId) + "." + name;
 				matrixVars[key] = info;
@@ -3030,9 +3041,7 @@ const int VERSION_PATCH = 0;
 			auto declareTmpMatrix = [&](uint8_t rows, uint8_t cols) -> ByteCode {
 				uint32_t baseIndex = ram_numericVariables;
 				ByteCode base = declareVar("", RAM_VAR_NUMERIC);
-				for (int i = 1; i < rows * cols; i++) {
-					declareVar("", RAM_VAR_NUMERIC);
-				}
+				ram_numericVariables += rows * cols - 1;
 				MatrixInfo info{rows, cols, baseIndex};
 				matrixSlotInfo[baseIndex] = info;
 				return base;
@@ -3048,7 +3057,16 @@ const int VERSION_PATCH = 0;
 				}
 				return {};
 			};
-			auto getMatrixInfoBySlot = [&](ByteCode ref) -> MatrixInfo {
+			// Call arguments retain expression shape, including scalar and row views of a matrix slot.
+			struct CallArgument : ByteCode {
+				std::optional<MatrixInfo> matrix;
+				CallArgument(ByteCode ref) : ByteCode(ref) {}
+				CallArgument(ByteCode ref, MatrixInfo info) : ByteCode(ref), matrix(info) {}
+			};
+			auto getMatrixInfoBySlot = [&](auto ref) -> MatrixInfo {
+				if constexpr (std::is_same_v<decltype(ref), CallArgument>) {
+					if (ref.matrix) return *ref.matrix;
+				}
 				if (ref.type == RAM_VAR_NUMERIC && matrixSlotInfo.contains(ref.value)) {
 					return matrixSlotInfo.at(ref.value);
 				}
@@ -3150,7 +3168,7 @@ const int VERSION_PATCH = 0;
 				currentStackId = 0;
 			};
 			// If it's a user-declared function and it has a return type defined, returns the return var ref of that function, otherwise returns CODE_VOID
-			auto compileFunctionCall = [&](Word func, const std::vector<ByteCode>& args, bool getReturn, bool isTrailingFunction = false, bool recursive = false) -> ByteCode {
+			auto compileFunctionCall = [&](Word func, const std::vector<CallArgument>& args, bool getReturn, bool isTrailingFunction = false, bool recursive = false) -> ByteCode {
 				std::string funcName = func;
 				if (func == Word::Funcname) {
 					if (!functionRefs.contains(funcName)) {
@@ -3507,7 +3525,7 @@ const int VERSION_PATCH = 0;
 				}
 			};
 
-			auto compileSelfCall = [&](const std::vector<ByteCode>& args, bool getReturn) -> ByteCode {
+			auto compileSelfCall = [&](const std::vector<CallArgument>& args, bool getReturn) -> ByteCode {
 				if (!currentFunctionRecursive) {
 					throw CompileError("Cannot call recurse in non-recursive function or global scope");
 				}
@@ -3790,7 +3808,7 @@ const int VERSION_PATCH = 0;
 					}break;
 					case Word::Funcname:
 					case Word::Name:{
-						std::vector<ByteCode> args {};
+						std::vector<CallArgument> args {};
 						if (size_t(startIndex+1) < words.size() && words[startIndex+1] == Word::ExpressionBegin) {
 							int argIndex = startIndex+2;
 							while (argIndex <= endIndex) {
@@ -3799,7 +3817,8 @@ const int VERSION_PATCH = 0;
 									++argIndex;
 									break;
 								}
-								args.push_back(compileExpression(words, argIndex, argEnd));
+								ByteCode arg = compileExpression(words, argIndex, argEnd);
+								args.emplace_back(arg, lastExprMatrixInfo);
 								argIndex = argEnd + 2;
 								if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
 									break;
@@ -4001,7 +4020,7 @@ const int VERSION_PATCH = 0;
 								if (!IsObject(ref1)) {
 									validate(IsArray(ref1) || IsText(ref1));
 								}
-								std::vector<ByteCode> args {};
+								std::vector<CallArgument> args {};
 								args.push_back(ref1);
 								int argBegin = opIndex+3;
 								while (argBegin <= endIndex) {
@@ -4010,7 +4029,8 @@ const int VERSION_PATCH = 0;
 										++argBegin;
 										break;
 									}
-									args.push_back(compileExpression(words, argBegin, argEnd));
+									ByteCode arg = compileExpression(words, argBegin, argEnd);
+									args.emplace_back(arg, lastExprMatrixInfo);
 									argBegin = argEnd + 2;
 									if (argEnd+1 > endIndex || words[argEnd+1] != Word::CommaOperator) {
 										break;
@@ -4851,6 +4871,16 @@ const int VERSION_PATCH = 0;
 													// Scalar to all elements? No - error
 													throw CompileError("Cannot assign a scalar to a matrix without accessor");
 												}
+											} else if (srcMatrix && op == OP_MUL && !(dstMatrix.isVector() && srcMatrix.isVector())) {
+												validate(dstMatrix.cols == srcMatrix.rows && dstMatrix.cols == srcMatrix.cols);
+												ByteCode tmp = declareTmpMatrix(dstMatrix.rows, dstMatrix.cols);
+												write(OP_MMM);
+												write(tmp); write(dst);
+												write({CODE_INTEGER, dstMatrix.rows}); write({CODE_INTEGER, dstMatrix.cols});
+												write(ref); write({CODE_INTEGER, srcMatrix.cols}); write(CODE_VOID);
+												// A temporary protects both operands when the destination aliases either one.
+												write(OP_MAS);
+												write(dst); write(tmp); write({CODE_INTEGER, dstMatrix.count()}); write(CODE_VOID);
 											} else if (srcMatrix) {
 												validate(srcMatrix.count() == dstMatrix.count());
 												// Compound assignment: += -= *=
@@ -4864,6 +4894,10 @@ const int VERSION_PATCH = 0;
 													write(dst); write(dst); write(ref);
 													write({CODE_INTEGER, dstMatrix.count()});
 													write(CODE_VOID);
+												} else if (op == OP_MUL) {
+													write(OP_MEW);
+													write(dst); write(dst); write(ref);
+													write({CODE_INTEGER, dstMatrix.count()}); write(CODE_VOID);
 												} else {
 													throw CompileError("Invalid compound assignment operator for matrices");
 												}
@@ -4983,14 +5017,15 @@ const int VERSION_PATCH = 0;
 												// Trailing function on matrix or component
 												Word funcName = (nextOp == Word::TrailOperator) ? readWord() : nextOp;
 												// Collect args
-												std::vector<ByteCode> args;
-												args.push_back(resolved);
+												std::vector<CallArgument> args;
+												args.emplace_back(resolved, curMatrix);
 												if (nextWordIndex < (int)line.words.size() && line.words[nextWordIndex] == Word::ExpressionBegin) {
 													++nextWordIndex; // skip (
 													while (nextWordIndex < (int)line.words.size()) {
 														int argEnd = GetArgEnd(line.words, nextWordIndex);
 														if (argEnd == -1) break;
-														args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+														ByteCode arg = compileExpression(line.words, nextWordIndex, argEnd);
+														args.emplace_back(arg, lastExprMatrixInfo);
 														nextWordIndex = argEnd + 1;
 														if (nextWordIndex < (int)line.words.size() && line.words[nextWordIndex] == Word::CommaOperator) {
 															++nextWordIndex;
@@ -5003,9 +5038,9 @@ const int VERSION_PATCH = 0;
 												// Handle matrix trailing functions
 												MatrixInfo resolvedMatrix = curMatrix ? curMatrix : getMatrixInfoBySlot(resolved);
 												if (funcName == Word::Funcname) {
-													// User-defined trailing function, assigns its return value to the receiver
-													validate(getMatrixInfoBySlot(resolved).count() == resolvedMatrix.count()); // matrix row views not supported here
-													compileFunctionCall(funcName, args, false, true);
+														// User-defined trailing function, assigns its return value to the receiver
+														validate(getMatrixInfoBySlot(resolved).count() == resolvedMatrix.count()); // matrix row views not supported here
+														compileFunctionCall(funcName, args, false, true);
 												} else if (resolvedMatrix && funcName == "normalize") {
 													write(OP_MNM);
 													write(resolved);
@@ -5013,7 +5048,7 @@ const int VERSION_PATCH = 0;
 													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "cross" && args.size() == 2) {
 													validate(resolvedMatrix.count() == 3);
-													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
+														MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
 													validate(otherMatrix && otherMatrix.count() == 3);
 													// Cross modifies self: need temp to avoid aliasing
 													ByteCode tmp = declareTmpMatrix(3, 1);
@@ -5046,7 +5081,7 @@ const int VERSION_PATCH = 0;
 													write({CODE_INTEGER, resolvedMatrix.rows});
 													write(CODE_VOID);
 												} else if (resolvedMatrix && funcName == "lerp" && args.size() == 3) {
-													MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
+														MatrixInfo otherMatrix = getMatrixInfoBySlot(args[1]);
 													validate(otherMatrix && otherMatrix.count() == resolvedMatrix.count());
 													write(OP_MLP);
 													write(resolved); write(resolved); write(args[1]); write(args[2]);
@@ -5054,7 +5089,7 @@ const int VERSION_PATCH = 0;
 													write(CODE_VOID);
 												} else {
 													// Fall through to regular trailing function
-													compileFunctionCall(funcName, args, false, true);
+														compileFunctionCall(funcName, args, false, true);
 												}
 											} else {
 												validate(false);
@@ -5431,14 +5466,15 @@ const int VERSION_PATCH = 0;
 												validate(next);
 												if (next == Word::ExpressionBegin) {
 													// Trailing function call
-													std::vector<ByteCode> args {};
+													std::vector<CallArgument> args {};
 													args.push_back(dst);
 													while (nextWordIndex < (int)line.words.size()) {
 														int argEnd = GetArgEnd(line.words, nextWordIndex);
 														if (argEnd == -1) {
 															break;
 														}
-														args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+														ByteCode arg = compileExpression(line.words, nextWordIndex, argEnd);
+														args.emplace_back(arg, lastExprMatrixInfo);
 														nextWordIndex = argEnd+1;
 														if (readWord() != Word::CommaOperator) {
 															break;
@@ -5519,14 +5555,15 @@ const int VERSION_PATCH = 0;
 							}break;
 							case Word::Funcname: {
 								// Function call
-								std::vector<ByteCode> args {};
+								std::vector<CallArgument> args {};
 								validate(readWord() == Word::ExpressionBegin);
 								while (nextWordIndex < (int)line.words.size()) {
 									int argEnd = GetArgEnd(line.words, nextWordIndex);
 									if (argEnd == -1) {
 										break;
 									}
-									args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+									ByteCode arg = compileExpression(line.words, nextWordIndex, argEnd);
+									args.emplace_back(arg, lastExprMatrixInfo);
 									nextWordIndex = argEnd+1;
 									if (readWord() != Word::CommaOperator) {
 										break;
@@ -5608,7 +5645,7 @@ const int VERSION_PATCH = 0;
 								}
 								// output
 								else if (firstWord == "output") {
-									std::vector<ByteCode> args {};
+									std::vector<CallArgument> args {};
 									validate(readWord() == Word::TrailOperator);
 									Word idx = readWord();
 									if (idx == Word::Numeric) {
@@ -5622,7 +5659,8 @@ const int VERSION_PATCH = 0;
 										if (argEnd == -1) {
 											break;
 										}
-										args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+										ByteCode arg = compileExpression(line.words, nextWordIndex, argEnd);
+										args.emplace_back(arg, lastExprMatrixInfo);
 										nextWordIndex = argEnd+1;
 										if (readWord() != Word::CommaOperator) {
 											break;
@@ -5987,14 +6025,15 @@ const int VERSION_PATCH = 0;
 								}
 								else if (Device::deviceFunctionsByName.contains(firstWord.word) || firstWord == "recurse") {
 									// Device Function call
-									std::vector<ByteCode> args {};
+									std::vector<CallArgument> args {};
 									validate(readWord() == Word::ExpressionBegin);
 									while (nextWordIndex < (int)line.words.size()) {
 										int argEnd = GetArgEnd(line.words, nextWordIndex);
 										if (argEnd == -1) {
 											break;
 										}
-										args.push_back(compileExpression(line.words, nextWordIndex, argEnd));
+										ByteCode arg = compileExpression(line.words, nextWordIndex, argEnd);
+										args.emplace_back(arg, lastExprMatrixInfo);
 										nextWordIndex = argEnd+1;
 										if (readWord() != Word::CommaOperator) {
 											break;
@@ -9572,13 +9611,17 @@ const int VERSION_PATCH = 0;
 									double* d = &ram_numeric[dst.value];
 									const double* ap = &ram_numeric[a.value];
 									const double* bp = &ram_numeric[b.value];
-									for (uint32_t i = 0; i < aRows; i++)
-										for (uint32_t j = 0; j < bCols; j++) {
-											double sum = 0;
-											for (uint32_t k = 0; k < aCols; k++)
-												sum += ap[i * aCols + k] * bp[k * bCols + j];
-											d[i * bCols + j] = sum;
-										}
+									if (bCols > 4) {
+										MultiplyMatrixRows(d, ap, bp, aRows, aCols, bCols);
+									} else {
+										for (uint32_t i = 0; i < aRows; i++)
+											for (uint32_t j = 0; j < bCols; j++) {
+												double sum = 0;
+												for (uint32_t k = 0; k < aCols; k++)
+													sum += ap[i * aCols + k] * bp[k * bCols + j];
+												d[i * bCols + j] = sum;
+											}
+									}
 								} break;
 								case OP_MNM: { // Normalize in-place
 									ByteCode base = nextCode();
@@ -9662,6 +9705,27 @@ const int VERSION_PATCH = 0;
 												+ m[2]*sub3(1,2,3,0,1,3)
 												- m[3]*sub3(1,2,3,0,1,2);
 										} break;
+										default: {
+											// Gaussian elimination with partial pivoting: O(size^3).
+											std::vector<double> tmp(m, m + size * size);
+											det = 1;
+											for (uint32_t col = 0; col < size; col++) {
+												uint32_t pivot = col;
+												for (uint32_t row = col + 1; row < size; row++)
+													if (std::abs(tmp[row*size+col]) > std::abs(tmp[pivot*size+col])) pivot = row;
+												if (tmp[pivot*size+col] == 0) { det = 0; break; }
+												if (pivot != col) {
+													for (uint32_t j = col; j < size; j++) std::swap(tmp[col*size+j], tmp[pivot*size+j]);
+													det = -det;
+												}
+												double div = tmp[col*size+col];
+												det *= div;
+												for (uint32_t row = col + 1; row < size; row++) {
+													double factor = tmp[row*size+col] / div;
+													SubtractMatrixRow(tmp.data() + row*size + col + 1, tmp.data() + col*size + col + 1, factor, size - col - 1);
+												}
+											}
+										} break;
 									}
 									MemSet(det, dst);
 								} break;
@@ -9692,35 +9756,45 @@ const int VERSION_PATCH = 0;
 										tmp[7] = (m[1]*m[6]-m[0]*m[7])*inv;
 										tmp[8] = (m[0]*m[4]-m[1]*m[3])*inv;
 										std::memcpy(m, tmp, 9*sizeof(double));
-									} else if (size == 4) {
+									} else {
 										// Gauss-Jordan elimination
-										double aug[4][8];
-										for (uint32_t i = 0; i < 4; i++) {
-											for (uint32_t j = 0; j < 4; j++) {
-												aug[i][j] = m[i*4+j];
-												aug[i][j+4] = (i == j) ? 1.0 : 0.0;
-											}
-										}
-										for (uint32_t col = 0; col < 4; col++) {
-											// Find pivot
-											uint32_t pivot = col;
-											for (uint32_t row = col+1; row < 4; row++) {
-												if (std::abs(aug[row][col]) > std::abs(aug[pivot][col])) pivot = row;
-											}
-											if (std::abs(aug[pivot][col]) < 1e-15) throw RuntimeError("Matrix is singular");
-											if (pivot != col) std::swap(aug[col], aug[pivot]);
-											double div = aug[col][col];
-											for (uint32_t j = 0; j < 8; j++) aug[col][j] /= div;
-											for (uint32_t row = 0; row < 4; row++) {
-												if (row != col) {
-													double factor = aug[row][col];
-													for (uint32_t j = 0; j < 8; j++) aug[row][j] -= factor * aug[col][j];
+										auto eliminate = [&](auto& aug, auto dimension) {
+											uint32_t n = dimension;
+											for (uint32_t i = 0; i < n; i++) {
+												for (uint32_t j = 0; j < n; j++) {
+													aug[i][j] = m[i*n+j];
+													aug[i][j+n] = (i == j) ? 1.0 : 0.0;
 												}
 											}
+											for (uint32_t col = 0; col < n; col++) {
+												uint32_t pivot = col;
+												for (uint32_t row = col+1; row < n; row++) {
+													if (std::abs(aug[row][col]) > std::abs(aug[pivot][col])) pivot = row;
+												}
+												if (std::abs(aug[pivot][col]) < 1e-15) throw RuntimeError("Matrix is singular");
+												if (pivot != col) std::swap(aug[col], aug[pivot]);
+												double div = aug[col][col];
+												for (uint32_t j = 0; j < n*2; j++) aug[col][j] /= div;
+												for (uint32_t row = 0; row < n; row++) {
+													if (row != col) {
+														double factor = aug[row][col];
+														if (n > 4 && factor == 0) continue;
+														SubtractMatrixRow(aug[row], aug[col], factor, n*2);
+													}
+												}
+											}
+											for (uint32_t i = 0; i < n; i++)
+												for (uint32_t j = 0; j < n; j++) m[i*n+j] = aug[i][j+n];
+										};
+										if (size == 4) {
+											double aug[4][8];
+											eliminate(aug, std::integral_constant<uint32_t, 4>{}); // Compile-time size preserves the fast path.
+										} else {
+											std::vector<double> storage(size * size * 2);
+											double* aug[255]; // Row pointers make pivot swaps cheap.
+											for (uint32_t i = 0; i < size; i++) aug[i] = storage.data() + i*size*2;
+											eliminate(aug, size);
 										}
-										for (uint32_t i = 0; i < 4; i++)
-											for (uint32_t j = 0; j < 4; j++)
-												m[i*4+j] = aug[i][j+4];
 									}
 								} break;
 

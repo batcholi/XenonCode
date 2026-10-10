@@ -995,6 +995,106 @@ function @RunUnitTests()
 	$results.append($splitArray.0)
 	$results.append($splitArray.1)
 
+	; test 85 - large vector assignment, scaling, and element access
+	var $wideVec : vec255
+	$wideVec.254 = 3
+	var $scaledVec : vec255
+	$scaledVec = $wideVec
+	$scaledVec *= 2
+	$results.append($scaledVec.254)
+
+	; test 86 - large matrix identity and determinant
+	var $largeMat : mat17
+	$largeMat.identity()
+	$largeMat.16.16 = 2
+	$largeMat.0.16 = 3
+	$results.append(determinant($largeMat))
+
+	; test 87 - large matrix transpose
+	var $transposeMat : mat17
+	$transposeMat.0.16 = 3
+	$transposeMat.transpose()
+	$results.append($transposeMat.16.0)
+
+	; test 88 - large matrix in-place inverse
+	var $inverseMat : mat17
+	$inverseMat.identity()
+	$inverseMat.16.16 = 2
+	$inverseMat.16.0 = 3
+	$inverseMat.inverse()
+	$results.append($inverseMat.16.0, $inverseMat.16.16)
+
+	; test 89 - large matrix multiplication and returned inverse
+	var $multiplyMat : mat17
+	$multiplyMat.identity()
+	$multiplyMat.16.16 = 0.5
+	$multiplyMat.16.0 = -1.5
+	var $largeProduct : mat17
+	$largeProduct = $multiplyMat * inverse($multiplyMat)
+	$results.append($largeProduct.0.0, $largeProduct.16.16, $largeProduct.16.0)
+
+	; test 90 - row-zero views must not inherit the parent matrix's shape
+	var $rows : mat5x3
+	var $rowVector : vec3
+	$rowVector.2 = 3
+	$rows.0 = $rowVector
+	$rows.1 = $rowVector
+	$rows.4.2 = 4
+	$results.append(length($rows.1), length($rows.0))
+	$results.append(dot($rows.0, $rows.0), dot($rows.0, $rows.1))
+	$results.append(length($rows))
+
+	; test 91 - row views in expression and statement function calls
+	var $functionRows : mat2x3
+	var $rowCopy : vec3
+	$functionRows.0.2 = 3
+	$functionRows.1.2 = 3
+	$rowCopy = @scaleVec($functionRows.1, 1)
+	$results.append($rowCopy.2)
+	$rowCopy = @scaleVec($functionRows.0, 1)
+	$results.append($rowCopy.2)
+	@scaleVec($functionRows.0, 2)
+	$results.append($functionRows.0.2)
+
+	; test 92 - returned normalization copies only the selected row
+	var $normalizeRows : mat2x3
+	var $normalizedRow : vec3
+	$normalizeRows.0.2 = 3
+	$normalizeRows.1.2 = 4
+	$normalizedRow = normalize($normalizeRows.0)
+	$results.append($normalizedRow.2, $normalizeRows.0.2)
+
+	; test 93 - compound multiplication: vector *= vector
+	var $compoundA : vec3
+	var $compoundB : vec3
+	$compoundA.x = 2
+	$compoundB.x = 3
+	$compoundA *= $compoundB
+	$results.append($compoundA.x)
+	$compoundA *= $compoundA
+	$results.append($compoundA.x)
+
+	; test 94 - compound multiplication: matrix *= matrix
+	var $compoundMatA : mat5
+	var $compoundMatB : mat5
+	$compoundMatA.identity()
+	$compoundMatB.identity()
+	$compoundMatA.0.1 = 2
+	$compoundMatB.1.4 = 3
+	$compoundMatA *= $compoundMatB
+	$results.append($compoundMatA.4.4, $compoundMatA.0.4)
+	$compoundMatA *= $compoundMatA
+	$results.append($compoundMatA.0.4)
+
+	; test 95 - rectangular compound multiplication preserves the destination shape
+	var $compoundRect : mat2x5
+	var $rectFactor : mat5
+	$rectFactor.identity()
+	$rectFactor.1.4 = 3
+	$compoundRect.1.1 = 7
+	$compoundRect *= $rectFactor
+	$results.append($compoundRect.1.4)
+
 init
 	output.0 ("Hello, World!")
 	

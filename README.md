@@ -7,7 +7,7 @@
 - Typed Variables
 - Constants
 - Dynamic Arrays
-- Vectors and Matrices (up to 4x4) with swizzling
+- Vectors and Matrices (up to 255x255) with swizzling (up to 4x4)
 - Standard arithmetic operations on numeric values
 - Easy string concatenation and formatting
 - User-defined functions
@@ -269,7 +269,7 @@ Vectors and matrices are fixed-size containers of 64-bit floating point numbers,
 
 ### Declaration
 
-Use `vecN` for vectors (1D) and `matNxM` for 2D matrices, with dimensions up to 4.
+Use `vecN` for vectors (1D) and `matNxM` for 2D matrices, with dimensions up to 255.
 
 ```xc
 var $position : vec3       ; 3-element vector (vec2, vec3, vec4 available)
@@ -279,13 +279,13 @@ var $rotation : mat3       ; shorthand for mat3x3
 
 | Type | Shorthand | Description |
 |------|-----------|-------------|
-| `vec2`, `vec3`, `vec4` | -- | Vectors with 2, 3, or 4 elements |
+| `vecN` | -- | Vectors with up to 255 elements |
 | `matNxM` | -- | 2D matrix with N rows and M columns (e.g. `mat3x4`) |
 | `matN` | `matNxN` | Square matrix shorthand (e.g. `mat3` = `mat3x3`) |
 
 ### Component Access
 
-Access elements using `.x`, `.y`, `.z`, `.w` or equivalently `.0`, `.1`, `.2`, `.3`.
+Access elements using indices `.0` through `.254` or `.x`, `.y`, `.z`, `.w` in place of `.0`, `.1`, `.2`, `.3`.
 
 **Vectors** -- each accessor refers to a single element:
 ```xc
